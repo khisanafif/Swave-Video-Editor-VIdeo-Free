@@ -1,0 +1,23 @@
+{
+  "packageId": "com.velocut.studio",
+  "host": "editor.domainanda.com",
+  "name": "VeloCut Studio",
+  "launcherName": "VeloCut",
+  "display": "standalone",
+  "themeColor": "#09090B",
+  "navigationColor": "#09090B",
+  "navigationColorDark": "#09090B",
+  "navigationDividerColor": "#18181B",
+  "navigationDividerColorDark": "#18181B",
+  "backgroundColor": "#09090B",
+  "enableNotifications": false,
+  "startUrl": "/",
+  "iconUrl": "https://editor.domainanda.com/icons/icon-512.png",
+  "maskableIconUrl": "https://editor.domainanda.com/icons/icon-maskable-512.png",
+  "webManifestUrl": "https://editor.domainanda.com/manifest.webmanifest",
+  "fallbackType": "customtabs",
+  "orientation": "default",
+  "appVersionName": "0.1.0",
+  "appVersionCode": 1
+}
+

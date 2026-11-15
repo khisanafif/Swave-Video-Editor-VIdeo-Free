@@ -1,0 +1,37 @@
+# VeloCut Hybrid-Edge Studio Architecture (V-HESA) — Caddy Alternative
+# Menyediakan HTTPS lokal otomatis (tls internal) untuk akses LAN/WiFi Split-Horizon DNS
+# sehingga WebCodecs, OPFS, dan SharedArrayBuffer aktif penuh di perangkat lokal.
+
+:8080 {
+	header {
+		Cross-Origin-Opener-Policy "same-origin"
+		Cross-Origin-Embedder-Policy "require-corp"
+	}
+
+	request_body {
+		max_size 50MB
+	}
+
+	handle /api/* {
+		reverse_proxy 127.0.0.1:3000
+	}
+
+	handle_path /media/* {
+		root * /mnt/storage/velocut_media
+		header Cross-Origin-Resource-Policy "same-origin"
+		file_server
+	}
+
+	handle {
+		root * /var/www/velocut/dist
+		try_files {path} /index.html
+		file_server
+	}
+}
+
+# Aktifkan blok ini untuk akses LAN HTTPS via Split-Horizon DNS (Pi-hole/AdGuard/MikroTik):
+# editor.domainanda.com {
+# 	tls internal
+# 	import :8080
+# }
+

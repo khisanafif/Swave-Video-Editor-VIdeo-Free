@@ -1,0 +1,28 @@
+{
+  "name": "velocut-monorepo",
+  "version": "0.1.0",
+  "private": true,
+  "description": "VeloCut Hybrid-Edge Studio Architecture (V-HESA) — Zero-Cloud-Cost Web Video Editor",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "dev": "concurrently -n WEB,API -c cyan,green \"npm run dev:web\" \"npm run dev:server\"",
+    "dev:web": "npm --workspace=@velocut/web run dev",
+    "dev:server": "npm --workspace=@velocut/server run dev",
+    "start": "npm run build && npm --workspace=@velocut/server run start",
+    "studio": "npm --workspace=@velocut/server run start",
+    "build": "npm --workspace=@velocut/shared run build && npm --workspace=@velocut/web run build && npm --workspace=@velocut/server run build",
+    "typecheck": "npm --workspace=@velocut/shared run typecheck && npm --workspace=@velocut/web run typecheck && npm --workspace=@velocut/server run typecheck",
+    "test": "npm --workspace=@velocut/web run test && npm --workspace=@velocut/server run test"
+  },
+  "engines": {
+    "node": ">=22.5.0"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2",
+    "typescript": "^5.8.2"
+  }
+}
+

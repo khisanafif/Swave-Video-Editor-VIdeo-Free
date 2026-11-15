@@ -1,0 +1,11 @@
+# ~/.cloudflared/config.yml
+# Cloudflare Tunnel Ingress untuk VeloCut V-HESA (Zero Open Ports)
+
+tunnel: <TUNNEL-UUID-ANDA>
+credentials-file: /root/.cloudflared/<TUNNEL-UUID-ANDA>.json
+
+ingress:
+  - hostname: editor.domainanda.com
+    service: http://127.0.0.1:8080
+  - service: http_status:404
+

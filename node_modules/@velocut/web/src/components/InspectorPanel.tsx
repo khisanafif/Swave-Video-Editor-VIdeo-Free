@@ -1,0 +1,1392 @@
+import { useEffect, useState } from 'react';
+import {
+  AlignCenter,
+  AlignLeft,
+  AlignRight,
+  Bold,
+  Cpu,
+  Download,
+  FlipHorizontal2,
+  FlipVertical2,
+  Gauge,
+  Globe,
+  Loader2,
+  Move,
+  Palette,
+  RotateCw,
+  Server,
+  SlidersHorizontal,
+  Snowflake,
+  Sparkles,
+  Volume2,
+  Wand2,
+} from 'lucide-react';
+import {
+  DEFAULT_CLIP_ANIMATION,
+  type RenderJobRecord,
+  type RenderMode,
+  type ServerCapabilities,
+} from '@velocut/shared';
+import {
+  ANIMATION_PRESETS,
+  CANVAS_BG_PRESETS,
+  FILTER_PRESETS,
+  TEXT_PRESETS,
+} from '../engine/capcutPresets';
+import {
+  type ClientExportProgress,
+  exportProjectClientSide,
+} from '../engine/clientExporter';
+import { mediaRuntime } from '../engine/mediaRuntime';
+import { mediaRegistry } from '../engine/opfsStorage';
+import {
+  fetchRenderJobStatus,
+  fetchServerCapabilities,
+  getServerBaseUrl,
+  saveProjectToServer,
+  setServerBaseUrl,
+  startServerRenderJob,
+  uploadBlobInChunks,
+} from '../engine/serverOffloadClient';
+import { usePlaybackStore } from '../stores/playbackStore';
+import { useTimelineStore } from '../stores/timelineStore';
+
+const CAPCUT_TEXT_SWATCHES = [
+  { label: 'Putih', color: '#ffffff' },
+  { label: 'Kuning CapCut', color: '#facc15' },
+  { label: 'Cyan Neon', color: '#22d3ee' },
+  { label: 'Merah', color: '#f43f5e' },
+  { label: 'Hijau', color: '#4ade80' },
+  { label: 'Oranye', color: '#fb923c' },
+  { label: 'Pink', color: '#ec4899' },
+  { label: 'Hitam', color: '#09090b' },
+];
+
+const CAPCUT_BG_SWATCHES = [
+  { label: 'Tanpa Latar', color: 'transparent' },
+  { label: 'Hitam Semi', color: 'rgba(9, 9, 11, 0.75)' },
+  { label: 'Merah News', color: 'rgba(220, 38, 38, 0.92)' },
+  { label: 'Biru Cyber', color: 'rgba(8, 51, 68, 0.88)' },
+  { label: 'Putih Solid', color: 'rgba(255, 255, 255, 0.92)' },
+];
+
+const CAPCUT_FONTS = [
+  { label: 'Modern Sans (Inter)', value: 'Inter, system-ui, sans-serif' },
+  { label: 'Impact Tebal', value: 'Impact, Arial Black, sans-serif' },
+  { label: 'Sinematik Serif', value: 'Georgia, serif' },
+  { label: 'Komik Casual', value: '"Comic Sans MS", cursive, sans-serif' },
+  { label: 'Monospace Kode', value: '"JetBrains Mono", monospace' },
+];
+
+interface SliderRowProps {
+  label: string;
+  value: number;
+  min: number;
+  max: number;
+  step: number;
+  suffix?: string;
+  onChange: (val: number) => void;
+}
+
+function SliderRow({
+  label,
+  value,
+  min,
+  max,
+  step,
+  suffix = '',
+  onChange,
+}: SliderRowProps) {
+  return (
+    <label className="block space-y-1">
+      <div className="flex items-center justify-between text-[11px]">
+        <span className="text-zinc-400">{label}</span>
+        <span className="font-mono text-zinc-200">
+          {Number(value).toFixed(step < 1 ? 2 : 0)}
+          {suffix}
+        </span>
+      </div>
+      <input
+        type="range"
+        min={min}
+        max={max}
+        step={step}
+        value={value}
+        onPointerDown={() => useTimelineStore.temporal.getState().pause()}
+        onPointerUp={() => useTimelineStore.temporal.getState().resume()}
+        onPointerCancel={() => useTimelineStore.temporal.getState().resume()}
+        onChange={(e) => onChange(Number(e.target.value))}
+        className="h-2 w-full accent-cyan-400"
+      />
+    </label>
+  );
+}
+
+interface InspectorPanelProps {
+  mode?: 'sidebar' | 'sheet';
+  initialTab?: 'inspector' | 'export';
+}
+
+export function InspectorPanel({
+  mode = 'sidebar',
+  initialTab = 'inspector',
+}: InspectorPanelProps) {
+  const [activeTab, setActiveTab] = useState<'inspector' | 'export'>(initialTab);
+  const [renderMode, setRenderMode] = useState<RenderMode>('client-webcodecs');
+  const [serverCaps, setServerCaps] = useState<ServerCapabilities | null>(null);
+  const [serverUrlInput, setServerUrlInput] = useState<string>(() =>
+    getServerBaseUrl()
+  );
+  const [clientProgress, setClientProgress] =
+    useState<ClientExportProgress | null>(null);
+  const [clientDownloadUrl, setClientDownloadUrl] = useState<string | null>(null);
+  const [exportError, setExportError] = useState<string | null>(null);
+  const [isExporting, setIsExporting] = useState(false);
+  const [serverJob, setServerJob] = useState<RenderJobRecord | null>(null);
+
+  const selectedClipIds = useTimelineStore((s) => s.selectedClipIds);
+  const clips = useTimelineStore((s) => s.clips);
+  const resolution = useTimelineStore((s) => s.resolution);
+  const canvasBackground = useTimelineStore((s) => s.canvasBackground);
+  const selectedClip =
+    selectedClipIds.length === 1 ? clips[selectedClipIds[0]] : undefined;
+
+  useEffect(() => {
+    setActiveTab(initialTab);
+  }, [initialTab]);
+
+  useEffect(() => {
+    void fetchServerCapabilities().then(setServerCaps);
+  }, []);
+
+  const handleSaveServerUrl = async () => {
+    setServerBaseUrl(serverUrlInput);
+    const caps = await fetchServerCapabilities();
+    setServerCaps(caps);
+  };
+
+  const getEffect = (type: string, fallback: number) => {
+    const found = selectedClip?.effects.find((e) => e.type === type);
+    return found ? found.value : fallback;
+  };
+
+  const refreshCanvasPreview = () => {
+    const pb = usePlaybackStore.getState();
+    mediaRuntime.renderFrameAt(pb.currentTime, pb.isPlaying);
+  };
+
+  // 9-Grid CapCut Quick Placement helper
+  const applyGridPosition = (col: -1 | 0 | 1, row: -1 | 0 | 1) => {
+    if (!selectedClip) return;
+    const cw = resolution.width || 1920;
+    const ch = resolution.height || 1080;
+    const x = Math.round(col * cw * 0.28);
+    const y = Math.round(row * ch * 0.32);
+    useTimelineStore.getState().updateClipTransform(selectedClip.id, { x, y });
+    refreshCanvasPreview();
+  };
+
+  const handleClientExport = async () => {
+    setExportError(null);
+    setClientDownloadUrl((prev) => {
+      if (prev) URL.revokeObjectURL(prev);
+      return null;
+    });
+    setIsExporting(true);
+    try {
+      const project = useTimelineStore.getState().exportProjectDocument();
+      const blob = await exportProjectClientSide({
+        project,
+        onProgress: setClientProgress,
+      });
+      const url = URL.createObjectURL(blob);
+      setClientDownloadUrl(url);
+    } catch (err) {
+      setExportError((err as Error).message);
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  const handleServerExport = async () => {
+    setExportError(null);
+    setIsExporting(true);
+    try {
+      const store = useTimelineStore.getState();
+      for (const clip of Object.values(store.clips)) {
+        if (clip.type === 'text') continue;
+        const asset = store.assets[clip.assetId];
+        if (!asset || asset.serverUrl) continue;
+        const blob = mediaRegistry.getBlob(asset.id);
+        if (!blob) continue;
+
+        const uploaded = await uploadBlobInChunks({
+          blob,
+          asset,
+          onProgress: (pct) =>
+            store.updateAsset(asset.id, { uploadProgress: pct }),
+        });
+        store.updateAsset(asset.id, {
+          source: 'hybrid',
+          serverAssetId: uploaded.assetId,
+          serverUrl: uploaded.mediaUrl,
+          uploadProgress: 100,
+        });
+      }
+
+      const project = useTimelineStore.getState().exportProjectDocument();
+      await saveProjectToServer(project);
+      const job = await startServerRenderJob({ project, quality: 'standard' });
+      setServerJob(job);
+
+      if (job.status === 'queued' || job.status === 'processing') {
+        const poll = async () => {
+          const latest = await fetchRenderJobStatus(job.id);
+          setServerJob(latest);
+          if (latest.status === 'queued' || latest.status === 'processing') {
+            setTimeout(() => void poll(), 900);
+          } else {
+            setIsExporting(false);
+          }
+        };
+        setTimeout(() => void poll(), 900);
+      } else {
+        setIsExporting(false);
+      }
+    } catch (err) {
+      setExportError((err as Error).message);
+      setIsExporting(false);
+    }
+  };
+
+  const containerClass =
+    mode === 'sheet'
+      ? 'flex h-full w-full flex-col bg-zinc-950'
+      : 'flex w-80 shrink-0 flex-col border-l border-zinc-800 bg-zinc-950';
+
+  const clipAnim = selectedClip?.animation || DEFAULT_CLIP_ANIMATION;
+  const clipSpeed = selectedClip?.speed || 1;
+  const clipVolume = selectedClip?.volume ?? 1;
+  const clipFadeIn = selectedClip?.fadeIn ?? 0;
+  const clipFadeOut = selectedClip?.fadeOut ?? 0;
+
+  return (
+    <aside className={containerClass}>
+      {/* Tab Header */}
+      <div className="grid grid-cols-2 border-b border-zinc-800">
+        <button
+          type="button"
+          onClick={() => setActiveTab('inspector')}
+          className={`flex items-center justify-center gap-1.5 py-2.5 text-xs font-semibold transition ${
+            activeTab === 'inspector'
+              ? 'border-b-2 border-cyan-400 bg-zinc-900/60 text-cyan-300'
+              : 'text-zinc-400 hover:text-zinc-200'
+          }`}
+        >
+          <SlidersHorizontal className="h-3.5 w-3.5" />
+          <span>Inspektor</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab('export')}
+          className={`flex items-center justify-center gap-1.5 py-2.5 text-xs font-semibold transition ${
+            activeTab === 'export'
+              ? 'border-b-2 border-cyan-400 bg-zinc-900/60 text-cyan-300'
+              : 'text-zinc-400 hover:text-zinc-200'
+          }`}
+        >
+          <Download className="h-3.5 w-3.5" />
+          <span>Hybrid Export</span>
+        </button>
+      </div>
+
+      {/* Tab Body */}
+      <div className="flex-1 overflow-y-auto p-3.5">
+        {activeTab === 'inspector' ? (
+          !selectedClip ? (
+            <div className="space-y-5 py-3">
+              <div className="flex flex-col items-center justify-center rounded-xl border border-zinc-800/80 bg-zinc-900/30 p-4 text-center text-xs text-zinc-400">
+                <SlidersHorizontal className="mb-2 h-6 w-6 text-cyan-400" />
+                <p>
+                  Ketuk langsung teks/video di kanvas atau di timeline untuk
+                  menggeser, memperbesar, memutar, atau mengedit gaya CapCut.
+                </p>
+              </div>
+
+              {/* Canvas Background Picker */}
+              <div className="space-y-2.5 rounded-xl border border-zinc-800 bg-zinc-900/50 p-3">
+                <div className="flex items-center gap-1.5">
+                  <Palette className="h-3.5 w-3.5 text-cyan-400" />
+                  <h3 className="text-[11px] font-semibold tracking-wider text-zinc-300 uppercase">
+                    Warna Latar Kanvas
+                  </h3>
+                </div>
+                <div className="grid grid-cols-3 gap-2">
+                  {CANVAS_BG_PRESETS.map((bg) => (
+                    <button
+                      key={bg.id}
+                      type="button"
+                      onClick={() =>
+                        useTimelineStore.getState().setCanvasBackground(bg.color)
+                      }
+                      className={`flex items-center gap-2 rounded-lg border px-2 py-1.5 text-[11px] font-medium transition ${
+                        canvasBackground === bg.color
+                          ? 'border-cyan-400 bg-cyan-950/30 text-cyan-200'
+                          : 'border-zinc-800 bg-zinc-950 text-zinc-400 hover:border-zinc-700'
+                      }`}
+                    >
+                      <span
+                        className="h-3.5 w-3.5 shrink-0 rounded-full border border-white/20"
+                        style={{ backgroundColor: bg.color }}
+                      />
+                      <span className="truncate">{bg.label}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {/* 1. IF TEXT / STICKER CLIP: Put CapCut Text Editor & 9-Grid Placement RIGHT AT THE TOP! */}
+              {selectedClip.type === 'text' && selectedClip.textStyle && (
+                <div className="space-y-3.5 rounded-xl border border-violet-500/30 bg-violet-950/15 p-3">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-[11px] font-bold tracking-wider text-violet-300 uppercase">
+                      Konten & Gaya Teks CapCut
+                    </h3>
+                    <span className="rounded bg-violet-500/20 px-1.5 py-0.5 text-[9px] font-semibold text-violet-200">
+                      Geser Langsung di Video
+                    </span>
+                  </div>
+
+                  {/* Direct Text Input */}
+                  <textarea
+                    rows={2}
+                    value={selectedClip.textStyle.content}
+                    onChange={(e) => {
+                      useTimelineStore
+                        .getState()
+                        .updateClipTextStyle(selectedClip.id, {
+                          content: e.target.value,
+                        });
+                      refreshCanvasPreview();
+                    }}
+                    placeholder="Ketik teks overlay atau subtitle..."
+                    className="w-full rounded-lg border border-zinc-700 bg-zinc-900 p-2.5 text-sm font-semibold text-white outline-none focus:border-violet-400"
+                  />
+
+                  {/* 1-Click CapCut Position Presets (9-Grid Penempatan Cepat) */}
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between text-[10px] text-zinc-300">
+                      <span className="flex items-center gap-1 font-semibold">
+                        <Move className="h-3 w-3 text-cyan-400" />
+                        Penempatan Cepat (Atau Geser di Layar Video)
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-3 gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => applyGridPosition(-1, -1)}
+                        className="rounded border border-zinc-800 bg-zinc-900 py-1.5 text-[10px] text-zinc-300 hover:border-cyan-400 hover:text-white"
+                      >
+                        ↖ Kiri Atas
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => applyGridPosition(0, -1)}
+                        className="rounded border border-zinc-800 bg-zinc-900 py-1.5 text-[10px] font-semibold text-cyan-300 hover:border-cyan-400"
+                      >
+                        ↑ Judul Atas
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => applyGridPosition(1, -1)}
+                        className="rounded border border-zinc-800 bg-zinc-900 py-1.5 text-[10px] text-zinc-300 hover:border-cyan-400 hover:text-white"
+                      >
+                        ↗ Kanan Atas
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => applyGridPosition(-1, 0)}
+                        className="rounded border border-zinc-800 bg-zinc-900 py-1.5 text-[10px] text-zinc-300 hover:border-cyan-400 hover:text-white"
+                      >
+                        ← Kiri Tengah
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => applyGridPosition(0, 0)}
+                        className="rounded border border-zinc-800 bg-zinc-900 py-1.5 text-[10px] font-semibold text-white hover:border-cyan-400"
+                      >
+                        ● Tengah Layar
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => applyGridPosition(1, 0)}
+                        className="rounded border border-zinc-800 bg-zinc-900 py-1.5 text-[10px] text-zinc-300 hover:border-cyan-400 hover:text-white"
+                      >
+                        → Kanan Tengah
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => applyGridPosition(-1, 1)}
+                        className="rounded border border-zinc-800 bg-zinc-900 py-1.5 text-[10px] text-zinc-300 hover:border-cyan-400 hover:text-white"
+                      >
+                        ↙ Kiri Bawah
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => applyGridPosition(0, 1)}
+                        className="rounded border border-yellow-500/40 bg-yellow-500/15 py-1.5 text-[10px] font-bold text-yellow-300 hover:border-yellow-400"
+                      >
+                        ↓ Subtitle Bawah
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => applyGridPosition(1, 1)}
+                        className="rounded border border-zinc-800 bg-zinc-900 py-1.5 text-[10px] text-zinc-300 hover:border-cyan-400 hover:text-white"
+                      >
+                        ↘ Kanan Bawah
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Font Family, Size Slider & Alignment */}
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-1.5">
+                      <select
+                        value={selectedClip.textStyle.fontFamily}
+                        onChange={(e) => {
+                          useTimelineStore
+                            .getState()
+                            .updateClipTextStyle(selectedClip.id, {
+                              fontFamily: e.target.value,
+                            });
+                          refreshCanvasPreview();
+                        }}
+                        className="min-w-0 flex-1 rounded border border-zinc-800 bg-zinc-900 px-2 py-1.5 text-[11px] text-zinc-200 outline-none focus:border-violet-400"
+                      >
+                        {CAPCUT_FONTS.map((f) => (
+                          <option key={f.value} value={f.value}>
+                            {f.label}
+                          </option>
+                        ))}
+                      </select>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          useTimelineStore
+                            .getState()
+                            .updateClipTextStyle(selectedClip.id, {
+                              bold: !selectedClip.textStyle?.bold,
+                            });
+                          refreshCanvasPreview();
+                        }}
+                        className={`rounded border p-1.5 ${
+                          selectedClip.textStyle.bold
+                            ? 'border-violet-400 bg-violet-500/25 text-violet-200'
+                            : 'border-zinc-800 bg-zinc-900 text-zinc-400'
+                        }`}
+                        title="Tebal (Bold)"
+                      >
+                        <Bold className="h-3.5 w-3.5" />
+                      </button>
+
+                      {(
+                        [
+                          { id: 'left', icon: AlignLeft },
+                          { id: 'center', icon: AlignCenter },
+                          { id: 'right', icon: AlignRight },
+                        ] as const
+                      ).map((al) => {
+                        const Icon = al.icon;
+                        return (
+                          <button
+                            key={al.id}
+                            type="button"
+                            onClick={() => {
+                              useTimelineStore
+                                .getState()
+                                .updateClipTextStyle(selectedClip.id, {
+                                  align: al.id,
+                                });
+                              refreshCanvasPreview();
+                            }}
+                            className={`rounded border p-1.5 ${
+                              selectedClip.textStyle?.align === al.id
+                                ? 'border-violet-400 bg-violet-500/25 text-violet-200'
+                                : 'border-zinc-800 bg-zinc-900 text-zinc-400'
+                            }`}
+                          >
+                            <Icon className="h-3.5 w-3.5" />
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    <SliderRow
+                      label="Ukuran Teks (Font Size)"
+                      value={selectedClip.textStyle.fontSize}
+                      min={18}
+                      max={160}
+                      step={2}
+                      suffix="px"
+                      onChange={(fontSize) => {
+                        useTimelineStore
+                          .getState()
+                          .updateClipTextStyle(selectedClip.id, { fontSize });
+                        refreshCanvasPreview();
+                      }}
+                    />
+                  </div>
+
+                  {/* 1-Click Color Swatches */}
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between text-[10px] text-zinc-400">
+                      <span>Warna Teks Cepat:</span>
+                      <input
+                        type="color"
+                        value={selectedClip.textStyle.color}
+                        onChange={(e) => {
+                          useTimelineStore
+                            .getState()
+                            .updateClipTextStyle(selectedClip.id, {
+                              color: e.target.value,
+                            });
+                          refreshCanvasPreview();
+                        }}
+                        className="h-5 w-8 cursor-pointer rounded border border-zinc-700 bg-zinc-900"
+                      />
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {CAPCUT_TEXT_SWATCHES.map((sw) => (
+                        <button
+                          key={sw.color}
+                          type="button"
+                          onClick={() => {
+                            useTimelineStore
+                              .getState()
+                              .updateClipTextStyle(selectedClip.id, {
+                                color: sw.color,
+                              });
+                            refreshCanvasPreview();
+                          }}
+                          style={{ backgroundColor: sw.color }}
+                          title={sw.label}
+                          className={`h-6 w-6 rounded-full border transition ${
+                            selectedClip.textStyle?.color === sw.color
+                              ? 'scale-110 border-white ring-2 ring-cyan-400'
+                              : 'border-white/30 hover:scale-105'
+                          }`}
+                        />
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Stroke Outline (Garis Tepi CapCut) */}
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between text-[10px] text-zinc-400">
+                      <span>Garis Tepi (Outline Stroke):</span>
+                      <input
+                        type="color"
+                        value={selectedClip.textStyle.strokeColor || '#000000'}
+                        onChange={(e) => {
+                          useTimelineStore
+                            .getState()
+                            .updateClipTextStyle(selectedClip.id, {
+                              strokeColor: e.target.value,
+                            });
+                          refreshCanvasPreview();
+                        }}
+                        className="h-5 w-8 cursor-pointer rounded border border-zinc-700 bg-zinc-900"
+                      />
+                    </div>
+                    <div className="grid grid-cols-4 gap-1.5">
+                      {[
+                        { label: 'Tanpa', val: 0 },
+                        { label: 'Tipis', val: 4 },
+                        { label: 'Sedang', val: 8 },
+                        { label: 'Tebal', val: 12 },
+                      ].map((st) => (
+                        <button
+                          key={st.label}
+                          type="button"
+                          onClick={() => {
+                            useTimelineStore
+                              .getState()
+                              .updateClipTextStyle(selectedClip.id, {
+                                strokeWidth: st.val,
+                              });
+                            refreshCanvasPreview();
+                          }}
+                          className={`rounded border py-1 text-[10px] font-medium ${
+                            (selectedClip.textStyle?.strokeWidth ?? 0) === st.val
+                              ? 'border-violet-400 bg-violet-500/20 text-violet-200'
+                              : 'border-zinc-800 bg-zinc-900 text-zinc-400'
+                          }`}
+                        >
+                          {st.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Background Box / Bubble (Kotak Latar Teks) */}
+                  <div className="space-y-1.5">
+                    <span className="text-[10px] text-zinc-400">
+                      Kotak Latar (Background Bubble):
+                    </span>
+                    <div className="flex flex-wrap gap-1.5">
+                      {CAPCUT_BG_SWATCHES.map((bg) => (
+                        <button
+                          key={bg.label}
+                          type="button"
+                          onClick={() => {
+                            useTimelineStore
+                              .getState()
+                              .updateClipTextStyle(selectedClip.id, {
+                                backgroundColor: bg.color,
+                              });
+                            refreshCanvasPreview();
+                          }}
+                          className={`rounded border px-2 py-1 text-[10px] font-medium ${
+                            selectedClip.textStyle?.backgroundColor === bg.color
+                              ? 'border-cyan-400 bg-cyan-500/20 text-cyan-200'
+                              : 'border-zinc-800 bg-zinc-900 text-zinc-300'
+                          }`}
+                        >
+                          {bg.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Quick CapCut Style Templates */}
+                  <div className="space-y-1.5">
+                    <span className="text-[10px] text-zinc-400">
+                      Ganti Template Gaya CapCut (1-Klik):
+                    </span>
+                    <div className="grid grid-cols-2 gap-1.5">
+                      {TEXT_PRESETS.map((tp) => (
+                        <button
+                          key={tp.id}
+                          type="button"
+                          onClick={() => {
+                            useTimelineStore
+                              .getState()
+                              .updateClipTextStyle(selectedClip.id, tp.style);
+                            refreshCanvasPreview();
+                          }}
+                          className="truncate rounded border border-zinc-800 bg-zinc-900 px-2 py-1.5 text-left text-[10px] font-semibold text-zinc-200 hover:border-violet-400"
+                        >
+                          {tp.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Clip Header + CapCut Quick Actions */}
+              <div className="space-y-2.5 rounded-lg border border-zinc-800 bg-zinc-900/60 p-2.5">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="truncate text-xs font-semibold text-zinc-100">
+                    {selectedClip.name}
+                  </p>
+                  <span className="rounded bg-cyan-500/15 px-1.5 py-0.5 font-mono text-[10px] font-semibold text-cyan-300">
+                    {clipSpeed}x
+                  </span>
+                </div>
+                <p className="font-mono text-[10px] text-zinc-400">
+                  Start {selectedClip.start.toFixed(2)}s · Dur{' '}
+                  {selectedClip.duration.toFixed(2)}s · Offset{' '}
+                  {selectedClip.offset.toFixed(2)}s
+                </p>
+
+                {selectedClip.type !== 'audio' && (
+                  <div className="grid grid-cols-4 gap-1.5 pt-1">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        useTimelineStore.getState().flipClip(selectedClip.id, 'h');
+                        refreshCanvasPreview();
+                      }}
+                      className={`flex flex-col items-center justify-center gap-0.5 rounded border py-1.5 text-[10px] font-medium transition ${
+                        selectedClip.transforms.flipH
+                          ? 'border-cyan-400 bg-cyan-500/20 text-cyan-200'
+                          : 'border-zinc-800 bg-zinc-950 text-zinc-300 hover:border-zinc-700'
+                      }`}
+                      title="Mirror Horizontal"
+                    >
+                      <FlipHorizontal2 className="h-3.5 w-3.5" />
+                      <span>Mirror H</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        useTimelineStore.getState().flipClip(selectedClip.id, 'v');
+                        refreshCanvasPreview();
+                      }}
+                      className={`flex flex-col items-center justify-center gap-0.5 rounded border py-1.5 text-[10px] font-medium transition ${
+                        selectedClip.transforms.flipV
+                          ? 'border-cyan-400 bg-cyan-500/20 text-cyan-200'
+                          : 'border-zinc-800 bg-zinc-950 text-zinc-300 hover:border-zinc-700'
+                      }`}
+                      title="Flip Vertikal"
+                    >
+                      <FlipVertical2 className="h-3.5 w-3.5" />
+                      <span>Flip V</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        useTimelineStore
+                          .getState()
+                          .rotateClip90(selectedClip.id);
+                        refreshCanvasPreview();
+                      }}
+                      className="flex flex-col items-center justify-center gap-0.5 rounded border border-zinc-800 bg-zinc-950 py-1.5 text-[10px] font-medium text-zinc-300 hover:border-zinc-700"
+                      title="Putar 90 Derajat"
+                    >
+                      <RotateCw className="h-3.5 w-3.5" />
+                      <span>Putar 90°</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        useTimelineStore
+                          .getState()
+                          .freezeClipAtTime(
+                            selectedClip.id,
+                            usePlaybackStore.getState().currentTime
+                          )
+                      }
+                      className="flex flex-col items-center justify-center gap-0.5 rounded border border-zinc-800 bg-zinc-950 py-1.5 text-[10px] font-medium text-cyan-300 hover:border-cyan-500/50"
+                      title="Bekukan Frame (Freeze 1.5s)"
+                    >
+                      <Snowflake className="h-3.5 w-3.5" />
+                      <span>Freeze</span>
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* CapCut In/Out Animations */}
+              {selectedClip.type !== 'audio' && (
+                <div className="space-y-2.5 border-b border-zinc-800 pb-4">
+                  <div className="flex items-center gap-1.5">
+                    <Wand2 className="h-3.5 w-3.5 text-violet-400" />
+                    <h3 className="text-[11px] font-semibold tracking-wider text-zinc-300 uppercase">
+                      Animasi Masuk & Keluar (CapCut)
+                    </h3>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <span className="text-[10px] text-zinc-400">
+                      Animasi Masuk (In):
+                    </span>
+                    <div className="grid grid-cols-3 gap-1">
+                      {ANIMATION_PRESETS.map((ap) => (
+                        <button
+                          key={`in-${ap.id}`}
+                          type="button"
+                          onClick={() =>
+                            useTimelineStore
+                              .getState()
+                              .setClipAnimation(selectedClip.id, { in: ap.id })
+                          }
+                          className={`rounded border py-1 text-[10px] font-medium transition ${
+                            clipAnim.in === ap.id
+                              ? 'border-violet-400 bg-violet-500/20 text-violet-200'
+                              : 'border-zinc-800 bg-zinc-900 text-zinc-400 hover:text-zinc-200'
+                          }`}
+                        >
+                          {ap.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <span className="text-[10px] text-zinc-400">
+                      Animasi Keluar (Out):
+                    </span>
+                    <div className="grid grid-cols-3 gap-1">
+                      {ANIMATION_PRESETS.map((ap) => (
+                        <button
+                          key={`out-${ap.id}`}
+                          type="button"
+                          onClick={() =>
+                            useTimelineStore
+                              .getState()
+                              .setClipAnimation(selectedClip.id, { out: ap.id })
+                          }
+                          className={`rounded border py-1 text-[10px] font-medium transition ${
+                            clipAnim.out === ap.id
+                              ? 'border-violet-400 bg-violet-500/20 text-violet-200'
+                              : 'border-zinc-800 bg-zinc-900 text-zinc-400 hover:text-zinc-200'
+                          }`}
+                        >
+                          {ap.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <SliderRow
+                    label="Durasi Animasi"
+                    value={clipAnim.inDuration || 0.35}
+                    min={0.1}
+                    max={1.5}
+                    step={0.05}
+                    suffix="s"
+                    onChange={(dur) =>
+                      useTimelineStore
+                        .getState()
+                        .setClipAnimation(selectedClip.id, {
+                          inDuration: dur,
+                          outDuration: dur,
+                        })
+                    }
+                  />
+                </div>
+              )}
+
+              {/* Speed Control (CapCut Kecepatan) */}
+              <div className="space-y-2.5 border-b border-zinc-800 pb-4">
+                <div className="flex items-center gap-1.5">
+                  <Gauge className="h-3.5 w-3.5 text-cyan-400" />
+                  <h3 className="text-[11px] font-semibold tracking-wider text-zinc-300 uppercase">
+                    Kecepatan (Speed)
+                  </h3>
+                </div>
+                <div className="grid grid-cols-5 gap-1">
+                  {[0.5, 1, 1.5, 2, 4].map((spd) => (
+                    <button
+                      key={spd}
+                      type="button"
+                      onClick={() =>
+                        useTimelineStore
+                          .getState()
+                          .setClipSpeed(selectedClip.id, spd)
+                      }
+                      className={`rounded border py-1 font-mono text-[11px] font-semibold transition ${
+                        Math.abs(clipSpeed - spd) < 0.05
+                          ? 'border-cyan-400 bg-cyan-500/20 text-cyan-200'
+                          : 'border-zinc-800 bg-zinc-900 text-zinc-400 hover:text-zinc-200'
+                      }`}
+                    >
+                      {spd}x
+                    </button>
+                  ))}
+                </div>
+                <SliderRow
+                  label="Speed Halus"
+                  value={clipSpeed}
+                  min={0.25}
+                  max={4}
+                  step={0.05}
+                  suffix="x"
+                  onChange={(val) =>
+                    useTimelineStore
+                      .getState()
+                      .setClipSpeed(selectedClip.id, val)
+                  }
+                />
+              </div>
+
+              {/* Audio Volume & Fade In/Out */}
+              {selectedClip.type !== 'text' && (
+                <div className="space-y-2.5 border-b border-zinc-800 pb-4">
+                  <div className="flex items-center gap-1.5">
+                    <Volume2 className="h-3.5 w-3.5 text-emerald-400" />
+                    <h3 className="text-[11px] font-semibold tracking-wider text-zinc-300 uppercase">
+                      Audio Klip & Fade
+                    </h3>
+                  </div>
+                  <SliderRow
+                    label="Volume Klip"
+                    value={clipVolume}
+                    min={0}
+                    max={2}
+                    step={0.05}
+                    suffix="x"
+                    onChange={(volume) =>
+                      useTimelineStore
+                        .getState()
+                        .setClipAudioParams(selectedClip.id, { volume })
+                    }
+                  />
+                  <SliderRow
+                    label="Fade In (Suara Masuk)"
+                    value={clipFadeIn}
+                    min={0}
+                    max={Math.max(0.5, selectedClip.duration / 2)}
+                    step={0.1}
+                    suffix="s"
+                    onChange={(fadeIn) =>
+                      useTimelineStore
+                        .getState()
+                        .setClipAudioParams(selectedClip.id, { fadeIn })
+                    }
+                  />
+                  <SliderRow
+                    label="Fade Out (Suara Keluar)"
+                    value={clipFadeOut}
+                    min={0}
+                    max={Math.max(0.5, selectedClip.duration / 2)}
+                    step={0.1}
+                    suffix="s"
+                    onChange={(fadeOut) =>
+                      useTimelineStore
+                        .getState()
+                        .setClipAudioParams(selectedClip.id, { fadeOut })
+                    }
+                  />
+                </div>
+              )}
+
+              {/* Transform Controls */}
+              {selectedClip.type !== 'audio' && (
+                <div className="space-y-3 border-b border-zinc-800 pb-4">
+                  <h3 className="text-[11px] font-semibold tracking-wider text-zinc-400 uppercase">
+                    Transformasi Presisi
+                  </h3>
+                  <SliderRow
+                    label="Posisi X"
+                    value={selectedClip.transforms.x}
+                    min={-960}
+                    max={960}
+                    step={1}
+                    suffix="px"
+                    onChange={(x) => {
+                      useTimelineStore
+                        .getState()
+                        .updateClipTransform(selectedClip.id, { x });
+                      refreshCanvasPreview();
+                    }}
+                  />
+                  <SliderRow
+                    label="Posisi Y"
+                    value={selectedClip.transforms.y}
+                    min={-540}
+                    max={540}
+                    step={1}
+                    suffix="px"
+                    onChange={(y) => {
+                      useTimelineStore
+                        .getState()
+                        .updateClipTransform(selectedClip.id, { y });
+                      refreshCanvasPreview();
+                    }}
+                  />
+                  <SliderRow
+                    label="Skala"
+                    value={selectedClip.transforms.scale}
+                    min={0.1}
+                    max={3}
+                    step={0.05}
+                    suffix="x"
+                    onChange={(scale) => {
+                      useTimelineStore
+                        .getState()
+                        .updateClipTransform(selectedClip.id, { scale });
+                      refreshCanvasPreview();
+                    }}
+                  />
+                  <SliderRow
+                    label="Rotasi"
+                    value={selectedClip.transforms.rotation}
+                    min={-180}
+                    max={180}
+                    step={1}
+                    suffix="°"
+                    onChange={(rotation) => {
+                      useTimelineStore
+                        .getState()
+                        .updateClipTransform(selectedClip.id, { rotation });
+                      refreshCanvasPreview();
+                    }}
+                  />
+                  <SliderRow
+                    label="Opasitas"
+                    value={selectedClip.transforms.opacity}
+                    min={0}
+                    max={1}
+                    step={0.02}
+                    onChange={(opacity) => {
+                      useTimelineStore
+                        .getState()
+                        .updateClipTransform(selectedClip.id, { opacity });
+                      refreshCanvasPreview();
+                    }}
+                  />
+                </div>
+              )}
+
+              {/* WebGL2 GLSL Color & Filter Shaders (For Video & Image Overlays) */}
+              {selectedClip.type !== 'audio' && selectedClip.type !== 'text' && (
+                <div className="space-y-3">
+                  <div className="flex items-center gap-1.5">
+                    <Sparkles className="h-3.5 w-3.5 text-cyan-400" />
+                    <h3 className="text-[11px] font-semibold tracking-wider text-zinc-400 uppercase">
+                      Filter LUT & WebGL2 Shaders
+                    </h3>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-1.5 pb-1">
+                    {FILTER_PRESETS.map((preset) => (
+                      <button
+                        key={preset.id}
+                        type="button"
+                        onClick={() => {
+                          useTimelineStore
+                            .getState()
+                            .applyFilterPreset(
+                              selectedClip.id,
+                              preset.id,
+                              preset.effects
+                            );
+                          refreshCanvasPreview();
+                        }}
+                        className={`truncate rounded border px-2 py-1 text-left text-[10px] font-medium transition ${
+                          (selectedClip.filterPreset || 'normal') === preset.id
+                            ? 'border-cyan-400 bg-cyan-500/20 text-cyan-200'
+                            : 'border-zinc-800 bg-zinc-900 text-zinc-400 hover:text-zinc-200'
+                        }`}
+                      >
+                        {preset.name}
+                      </button>
+                    ))}
+                  </div>
+
+                  <SliderRow
+                    label="Brightness"
+                    value={getEffect('brightness', 0)}
+                    min={-0.6}
+                    max={0.6}
+                    step={0.02}
+                    onChange={(val) => {
+                      useTimelineStore
+                        .getState()
+                        .setClipEffect(selectedClip.id, 'brightness', val);
+                      refreshCanvasPreview();
+                    }}
+                  />
+                  <SliderRow
+                    label="Contrast"
+                    value={getEffect('contrast', 1)}
+                    min={0.2}
+                    max={2}
+                    step={0.02}
+                    onChange={(val) => {
+                      useTimelineStore
+                        .getState()
+                        .setClipEffect(selectedClip.id, 'contrast', val);
+                      refreshCanvasPreview();
+                    }}
+                  />
+                  <SliderRow
+                    label="Saturation"
+                    value={getEffect('saturation', 1)}
+                    min={0}
+                    max={2}
+                    step={0.02}
+                    onChange={(val) => {
+                      useTimelineStore
+                        .getState()
+                        .setClipEffect(selectedClip.id, 'saturation', val);
+                      refreshCanvasPreview();
+                    }}
+                  />
+                  <SliderRow
+                    label="Grayscale"
+                    value={getEffect('grayscale', 0)}
+                    min={0}
+                    max={1}
+                    step={0.05}
+                    onChange={(val) => {
+                      useTimelineStore
+                        .getState()
+                        .setClipEffect(selectedClip.id, 'grayscale', val);
+                      refreshCanvasPreview();
+                    }}
+                  />
+                  <SliderRow
+                    label="Sepia Vintage"
+                    value={getEffect('sepia', 0)}
+                    min={0}
+                    max={1}
+                    step={0.05}
+                    onChange={(val) => {
+                      useTimelineStore
+                        .getState()
+                        .setClipEffect(selectedClip.id, 'sepia', val);
+                      refreshCanvasPreview();
+                    }}
+                  />
+                  <SliderRow
+                    label="Vignette"
+                    value={getEffect('vignette', 0)}
+                    min={0}
+                    max={1}
+                    step={0.05}
+                    onChange={(val) => {
+                      useTimelineStore
+                        .getState()
+                        .setClipEffect(selectedClip.id, 'vignette', val);
+                      refreshCanvasPreview();
+                    }}
+                  />
+                  <SliderRow
+                    label="RGB Glitch (Chromatic)"
+                    value={getEffect('chromab', 0)}
+                    min={0}
+                    max={1}
+                    step={0.05}
+                    onChange={(val) => {
+                      useTimelineStore
+                        .getState()
+                        .setClipEffect(selectedClip.id, 'chromab', val);
+                      refreshCanvasPreview();
+                    }}
+                  />
+                  <SliderRow
+                    label="Blur Halus"
+                    value={getEffect('blur', 0)}
+                    min={0}
+                    max={1}
+                    step={0.05}
+                    onChange={(val) => {
+                      useTimelineStore
+                        .getState()
+                        .setClipEffect(selectedClip.id, 'blur', val);
+                      refreshCanvasPreview();
+                    }}
+                  />
+                  <SliderRow
+                    label="Mosaic Pixelate"
+                    value={getEffect('pixelate', 0)}
+                    min={0}
+                    max={1}
+                    step={0.05}
+                    onChange={(val) => {
+                      useTimelineStore
+                        .getState()
+                        .setClipEffect(selectedClip.id, 'pixelate', val);
+                      refreshCanvasPreview();
+                    }}
+                  />
+                </div>
+              )}
+            </div>
+          )
+        ) : (
+          <div className="space-y-4">
+            {/* Free No-Watermark Banner */}
+            <div className="rounded-lg border border-emerald-500/30 bg-emerald-950/20 px-3 py-2 text-[11px] text-emerald-200">
+              <p className="font-bold">100% Gratis — Tanpa Watermark</p>
+              <p className="text-[10px] text-emerald-300/80">
+                Semua fitur efek, filter LUT, stiker, dan eksport 1080p/4K terbuka penuh tanpa langganan Pro.
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <p className="text-[11px] font-semibold tracking-wider text-zinc-400 uppercase">
+                Mode Dual-Rendering V-HESA
+              </p>
+
+              <button
+                type="button"
+                onClick={() => setRenderMode('client-webcodecs')}
+                className={`w-full rounded-lg border p-2.5 text-left transition ${
+                  renderMode === 'client-webcodecs'
+                    ? 'border-cyan-400 bg-cyan-950/30'
+                    : 'border-zinc-800 bg-zinc-900/50 hover:border-zinc-700'
+                }`}
+              >
+                <div className="flex items-center gap-2 text-xs font-semibold text-zinc-100">
+                  <Cpu className="h-4 w-4 text-cyan-400" />
+                  <span>Client Browser (Default)</span>
+                </div>
+                <p className="mt-1 text-[11px] text-zinc-400">
+                  WebCodecs + WebGL2 + mp4-muxer lokal di perangkat tanpa beban server.
+                </p>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setRenderMode('server-ffmpeg')}
+                className={`w-full rounded-lg border p-2.5 text-left transition ${
+                  renderMode === 'server-ffmpeg'
+                    ? 'border-emerald-400 bg-emerald-950/30'
+                    : 'border-zinc-800 bg-zinc-900/50 hover:border-zinc-700'
+                }`}
+              >
+                <div className="flex items-center gap-2 text-xs font-semibold text-zinc-100">
+                  <Server className="h-4 w-4 text-emerald-400" />
+                  <span>Server Offload (LAN / GPU)</span>
+                </div>
+                <p className="mt-1 text-[11px] text-zinc-400">
+                  Chunked upload 10MB + Native FFmpeg GPU (NVENC/VAAPI) di server lokal.
+                </p>
+              </button>
+            </div>
+
+            {renderMode === 'client-webcodecs' ? (
+              <div className="space-y-3 rounded-lg border border-zinc-800 bg-zinc-900/50 p-3">
+                <button
+                  type="button"
+                  disabled={isExporting}
+                  onClick={() => void handleClientExport()}
+                  className="flex w-full items-center justify-center gap-2 rounded-md bg-cyan-500 py-2 text-xs font-semibold text-zinc-950 hover:bg-cyan-400 disabled:opacity-50"
+                >
+                  {isExporting ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      <span>Merender MP4 ({clientProgress?.progress ?? 0}%)</span>
+                    </>
+                  ) : (
+                    <>
+                      <Download className="h-4 w-4" />
+                      <span>Export MP4 di Perangkat</span>
+                    </>
+                  )}
+                </button>
+
+                {clientProgress && isExporting && (
+                  <div className="space-y-1">
+                    <div className="h-1.5 overflow-hidden rounded-full bg-zinc-800">
+                      <div
+                        className="h-full bg-cyan-400 transition-all"
+                        style={{ width: `${clientProgress.progress}%` }}
+                      />
+                    </div>
+                    <p className="font-mono text-[10px] text-zinc-400">
+                      Fase: {clientProgress.phase} · Frame{' '}
+                      {clientProgress.currentFrame}/{clientProgress.totalFrames}
+                    </p>
+                  </div>
+                )}
+
+                {clientDownloadUrl && (
+                  <a
+                    href={clientDownloadUrl}
+                    download="velocut-export.mp4"
+                    className="block rounded-md border border-emerald-500/50 bg-emerald-500/15 py-2 text-center text-xs font-semibold text-emerald-300 hover:bg-emerald-500/25"
+                  >
+                    Unduh Hasil Render (.mp4)
+                  </a>
+                )}
+              </div>
+            ) : (
+              <div className="space-y-3 rounded-lg border border-zinc-800 bg-zinc-900/50 p-3">
+                <div className="space-y-1.5 border-b border-zinc-800 pb-2.5">
+                  <label className="flex items-center gap-1 text-[10px] font-medium text-zinc-400">
+                    <Globe className="h-3 w-3 text-cyan-400" />
+                    <span>URL Server V-HESA (Kosong = Origin Sama)</span>
+                  </label>
+                  <div className="flex gap-1.5">
+                    <input
+                      type="url"
+                      placeholder="https://editor.domainanda.com"
+                      value={serverUrlInput}
+                      onChange={(e) => setServerUrlInput(e.target.value)}
+                      className="min-w-0 flex-1 rounded border border-zinc-800 bg-zinc-950 px-2 py-1 font-mono text-[11px] text-zinc-200 outline-none focus:border-cyan-500"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => void handleSaveServerUrl()}
+                      className="rounded bg-zinc-800 px-2 py-1 text-[11px] font-medium text-zinc-200 hover:bg-zinc-700"
+                    >
+                      Set
+                    </button>
+                  </div>
+                </div>
+
+                <div className="space-y-1 text-[11px]">
+                  <div className="flex justify-between">
+                    <span className="text-zinc-400">Server Lokal:</span>
+                    <span
+                      className={
+                        serverCaps?.status === 'online'
+                          ? 'text-emerald-400'
+                          : 'text-rose-400'
+                      }
+                    >
+                      {serverCaps?.status === 'online' ? 'Online' : 'Offline'}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-zinc-400">FFmpeg Native:</span>
+                    <span className="font-mono text-zinc-200">
+                      {serverCaps?.ffmpegAvailable
+                        ? serverCaps.preferredEncoder || 'libx264'
+                        : 'Tidak terdeteksi'}
+                    </span>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  disabled={isExporting || serverCaps?.status !== 'online'}
+                  onClick={() => void handleServerExport()}
+                  className="flex w-full items-center justify-center gap-2 rounded-md bg-emerald-500 py-2 text-xs font-semibold text-zinc-950 hover:bg-emerald-400 disabled:opacity-50"
+                >
+                  {isExporting ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      <span>Mengirim & Render Server...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Server className="h-4 w-4" />
+                      <span>Render via Server FFmpeg</span>
+                    </>
+                  )}
+                </button>
+
+                {serverJob && (
+                  <div className="space-y-2 rounded border border-zinc-800 bg-zinc-950 p-2 text-[11px]">
+                    <div className="flex justify-between">
+                      <span className="text-zinc-400">Status Job:</span>
+                      <span className="font-mono text-cyan-300">
+                        {serverJob.status} ({serverJob.progress}%)
+                      </span>
+                    </div>
+                    {serverJob.error && (
+                      <p className="text-rose-400">{serverJob.error}</p>
+                    )}
+                    {serverJob.outputUrl && (
+                      <a
+                        href={serverJob.outputUrl}
+                        download
+                        className="block rounded bg-emerald-500/20 py-1.5 text-center font-semibold text-emerald-300"
+                      >
+                        Unduh Output Server (.mp4)
+                      </a>
+                    )}
+                    <details className="text-[10px] text-zinc-500">
+                      <summary className="cursor-pointer hover:text-zinc-300">
+                        Lihat Perintah FFmpeg
+                      </summary>
+                      <pre className="mt-1 overflow-x-auto whitespace-pre-wrap break-all font-mono text-zinc-400">
+                        {serverJob.ffmpegCommand}
+                      </pre>
+                    </details>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {exportError && (
+              <div className="rounded border border-rose-500/40 bg-rose-950/40 p-2.5 text-[11px] text-rose-300">
+                {exportError}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </aside>
+  );
+}
