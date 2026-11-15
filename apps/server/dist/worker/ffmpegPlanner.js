@@ -1,10 +1,26 @@
+import fs from 'node:fs';
+function resolveDefaultFontFile() {
+    const candidates = [
+        'C:/Windows/Fonts/arial.ttf',
+        'C:/Windows/Fonts/segoeui.ttf',
+        '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf',
+    ];
+    for (const c of candidates) {
+        if (fs.existsSync(c)) {
+            return c.replace(/:/g, '\\:');
+        }
+    }
+    return null;
+}
 function escapeDrawtext(text) {
     return text
+        .replace(/\r?\n/g, ' ')
         .replace(/\\/g, '\\\\')
         .replace(/:/g, '\\:')
-        .replace(/'/g, "\\'")
-        .replace(/%/g, '\\%')
-        .replace(/\n/g, '\\n');
+        .replace(/'/g, '')
+        .replace(/;/g, '\\;')
+        .replace(/,/g, '\\,')
+        .replace(/%/g, '\\%');
 }
 function getEffectValue(clip, type, fallback) {
     const match = clip.effects.find((e) => e.type === type);
@@ -90,10 +106,18 @@ export function buildFfmpegRenderPlan(options) {
             const xExpr = `(w-text_w)/2+${Math.round(clip.transforms.x)}`;
             const yExpr = `(h-text_h)/2+${Math.round(clip.transforms.y)}`;
             const fontColor = clip.textStyle.color || '#ffffff';
-            const boxPart = clip.textStyle.backgroundColor
+            const fontFile = resolveDefaultFontFile();
+            const fontFilePart = fontFile ? `:fontfile='${fontFile}'` : '';
+            const hasBgBox = clip.textStyle.backgroundColor &&
+                clip.textStyle.backgroundColor !== 'transparent';
+            const boxPart = hasBgBox
                 ? `:box=1:boxcolor=black@0.55:boxborderw=14`
                 : '';
-            filterParts.push(`[${currentVideoLabel}]drawtext=text='${escaped}':fontsize=${fontSize}:fontcolor=${fontColor}:x=${xExpr}:y=${yExpr}${boxPart}:enable='between(t,${clip.start.toFixed(3)},${clipEnd.toFixed(3)})'[${nextLabel}]`);
+            const strokeW = clip.textStyle.strokeWidth || 0;
+            const borderPart = strokeW > 0
+                ? `:borderw=${Math.min(12, Math.max(1, Math.round(strokeW / 2)))}:bordercolor=${clip.textStyle.strokeColor || 'black'}`
+                : '';
+            filterParts.push(`[${currentVideoLabel}]drawtext=text='${escaped}'${fontFilePart}:fontsize=${fontSize}:fontcolor=${fontColor}:x=${xExpr}:y=${yExpr}${borderPart}${boxPart}:enable='between(t,${clip.start.toFixed(3)},${clipEnd.toFixed(3)})'[${nextLabel}]`);
             currentVideoLabel = nextLabel;
             continue;
         }

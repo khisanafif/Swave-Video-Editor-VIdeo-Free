@@ -1,5 +1,6 @@
 import { execFile, spawn } from 'node:child_process';
 import fs from 'node:fs';
+import { createRequire } from 'node:module';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import type {
@@ -16,9 +17,76 @@ import { resolveSafeStoragePath } from '../utils/pathSecurity.js';
 import { buildFfmpegRenderPlan } from './ffmpegPlanner.js';
 
 const execFileAsync = promisify(execFile);
+const requireModule = createRequire(import.meta.url);
+
+function resolveFfmpegBinary(): string {
+  if (process.env.FFMPEG_PATH && fs.existsSync(process.env.FFMPEG_PATH)) {
+    return process.env.FFMPEG_PATH;
+  }
+  try {
+    const staticPath = requireModule('ffmpeg-static') as string | null;
+    if (staticPath && fs.existsSync(staticPath)) {
+      return staticPath;
+    }
+  } catch {
+    // Fallback to system PATH
+  }
+  return 'ffmpeg';
+}
+
+async function canInitializeEncoder(
+  ffmpegBin: string,
+  encoder: ServerEncoderCapability
+): Promise<boolean> {
+  if (encoder === 'libx264') return true;
+  try {
+    await execFileAsync(
+      ffmpegBin,
+      [
+        '-hide_banner',
+        '-loglevel',
+        'error',
+        '-f',
+        'lavfi',
+        '-i',
+        'color=c=black:s=64x64:d=0.04',
+        '-frames:v',
+        '1',
+        '-c:v',
+        encoder,
+        '-f',
+        'null',
+        '-',
+      ],
+      { timeout: 2500 }
+    );
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function fileHasAudioStream(
+  ffmpegBin: string,
+  filePath: string
+): Promise<boolean> {
+  try {
+    await execFileAsync(ffmpegBin, ['-hide_banner', '-i', filePath], {
+      timeout: 2500,
+    });
+    return true;
+  } catch (err) {
+    const stderr = (err as { stderr?: string })?.stderr || '';
+    if (stderr.includes('Stream #')) {
+      return /Stream #\d+:\d+.*Audio:/i.test(stderr);
+    }
+    return false;
+  }
+}
 
 let cachedProbe: {
   checkedAt: number;
+  ffmpegBin: string;
   ffmpegAvailable: boolean;
   ffmpegVersion: string | null;
   availableEncoders: ServerEncoderCapability[];
@@ -26,7 +94,16 @@ let cachedProbe: {
 
 export async function probeFfmpegCapabilities(
   force = false
-): Promise<Omit<ServerCapabilities, 'status' | 'version' | 'maxChunkSizeBytes' | 'recommendedChunkSizeBytes' | 'storageDir'>> {
+): Promise<
+  Omit<
+    ServerCapabilities,
+    | 'status'
+    | 'version'
+    | 'maxChunkSizeBytes'
+    | 'recommendedChunkSizeBytes'
+    | 'storageDir'
+  >
+> {
   const now = Date.now();
   if (!force && cachedProbe && now - cachedProbe.checkedAt < 30_000) {
     return {
@@ -37,16 +114,22 @@ export async function probeFfmpegCapabilities(
     };
   }
 
+  const ffmpegBin = resolveFfmpegBinary();
+
   try {
-    const { stdout: versionOut } = await execFileAsync('ffmpeg', ['-version'], {
-      timeout: 3000,
-    });
+    const { stdout: versionOut } = await execFileAsync(
+      ffmpegBin,
+      ['-version'],
+      {
+        timeout: 4000,
+      }
+    );
     const firstLine = versionOut.split(/\r?\n/)[0] ?? 'ffmpeg available';
 
     const { stdout: encodersOut } = await execFileAsync(
-      'ffmpeg',
+      ffmpegBin,
       ['-hide_banner', '-encoders'],
-      { timeout: 3000 }
+      { timeout: 4000 }
     );
 
     const priorityOrder: ServerEncoderCapability[] = [
@@ -55,19 +138,31 @@ export async function probeFfmpegCapabilities(
       'h264_qsv',
       'libx264',
     ];
-    const availableEncoders = priorityOrder.filter((enc) =>
+    const listedEncoders = priorityOrder.filter((enc) =>
       encodersOut.includes(enc)
     );
 
+    const verifiedEncoders: ServerEncoderCapability[] = [];
+    for (const enc of listedEncoders) {
+      if (await canInitializeEncoder(ffmpegBin, enc)) {
+        verifiedEncoders.push(enc);
+      }
+    }
+    if (verifiedEncoders.length === 0) {
+      verifiedEncoders.push('libx264');
+    }
+
     cachedProbe = {
       checkedAt: now,
+      ffmpegBin,
       ffmpegAvailable: true,
       ffmpegVersion: firstLine.trim(),
-      availableEncoders,
+      availableEncoders: verifiedEncoders,
     };
   } catch {
     cachedProbe = {
       checkedAt: now,
+      ffmpegBin,
       ffmpegAvailable: false,
       ffmpegVersion: null,
       availableEncoders: [],
@@ -106,6 +201,8 @@ export async function enqueueServerRenderJob(options: {
 }): Promise<void> {
   const { db, storageDir, jobId, project, quality, preferredEncoder } = options;
   const probe = await probeFfmpegCapabilities();
+  const ffmpegBin = cachedProbe?.ffmpegBin || resolveFfmpegBinary();
+
   const encoder: ServerEncoderCapability =
     (preferredEncoder && probe.availableEncoders.includes(preferredEncoder)
       ? preferredEncoder
@@ -115,8 +212,25 @@ export async function enqueueServerRenderJob(options: {
   const outputFullPath = resolveSafeStoragePath(storageDir, outputRelativePath);
   fs.mkdirSync(path.dirname(outputFullPath), { recursive: true });
 
+  // Clone project and verify actual audio streams on disk so video-only files
+  // never cause FFmpeg ":a matches no streams" errors
+  const sanitizedProject: ProjectDocument = structuredClone(project);
+  if (probe.ffmpegAvailable) {
+    for (const asset of Object.values(sanitizedProject.assets)) {
+      if (asset.kind === 'video' && asset.hasAudio) {
+        const row = db.getMediaAsset(asset.serverAssetId || asset.id);
+        if (row) {
+          const fullPath = resolveSafeStoragePath(storageDir, row.relativePath);
+          if (fs.existsSync(fullPath)) {
+            asset.hasAudio = await fileHasAudioStream(ffmpegBin, fullPath);
+          }
+        }
+      }
+    }
+  }
+
   const plan = buildFfmpegRenderPlan({
-    project,
+    project: sanitizedProject,
     outputPath: outputFullPath,
     encoder,
     quality,
@@ -162,7 +276,7 @@ export async function enqueueServerRenderJob(options: {
   setImmediate(() => {
     db.updateRenderJob(jobId, { status: 'processing', progress: 1 });
     const spawnArgs = ['-progress', 'pipe:1', '-nostats', ...plan.args];
-    const child = spawn('ffmpeg', spawnArgs, {
+    const child = spawn(ffmpegBin, spawnArgs, {
       stdio: ['ignore', 'pipe', 'pipe'],
     });
 
@@ -174,7 +288,10 @@ export async function enqueueServerRenderJob(options: {
       const match = /out_time_ms=(\d+)/.exec(text);
       if (match) {
         const outMs = Number(match[1]) / 1000;
-        const pct = Math.max(1, Math.min(99, Math.round((outMs / totalMs) * 100)));
+        const pct = Math.max(
+          1,
+          Math.min(99, Math.round((outMs / totalMs) * 100))
+        );
         db.updateRenderJob(jobId, { progress: pct });
       }
     });
@@ -207,4 +324,3 @@ export async function enqueueServerRenderJob(options: {
     });
   });
 }
-

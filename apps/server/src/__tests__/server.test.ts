@@ -212,5 +212,86 @@ describe('VeloCut Local Server API', () => {
     expect(spaRes.headers['cross-origin-embedder-policy']).toBe('require-corp');
     expect(spaRes.body).toContain('VeloCut SPA');
   });
+
+  it('detects bundled FFmpeg and completes a server-side MP4 render job end-to-end', async () => {
+    const { app } = await createTestServer();
+
+    const capsRes = await app.inject({ method: 'GET', url: '/api/capabilities' });
+    expect(capsRes.statusCode).toBe(200);
+    const caps = capsRes.json();
+    expect(caps.ffmpegAvailable).toBe(true);
+    expect(caps.preferredEncoder).toBeTruthy();
+
+    const project: ProjectDocument = {
+      id: 'proj-render-e2e',
+      name: 'Server Render Test',
+      resolution: { width: 320, height: 180, fps: 15, label: '320p' },
+      trackOrder: ['track-2'],
+      tracks: {
+        'track-2': {
+          id: 'track-2',
+          type: 'text',
+          name: 'Teks',
+          isMuted: false,
+          isLocked: false,
+          clipIds: ['clip-txt-1'],
+        },
+      },
+      clips: {
+        'clip-txt-1': {
+          id: 'clip-txt-1',
+          trackId: 'track-2',
+          assetId: 'text',
+          type: 'text',
+          name: 'Halo CapCut',
+          start: 0,
+          duration: 1.0,
+          offset: 0,
+          transforms: { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1 },
+          effects: [],
+          textStyle: {
+            content: 'VELOCUT FREE',
+            fontFamily: 'Inter, sans-serif',
+            fontSize: 32,
+            color: '#facc15',
+            backgroundColor: 'transparent',
+            align: 'center',
+            bold: true,
+            shadow: true,
+            strokeColor: '#000000',
+            strokeWidth: 6,
+          },
+        },
+      },
+      assets: {},
+      updatedAt: new Date().toISOString(),
+    };
+
+    const startRes = await app.inject({
+      method: 'POST',
+      url: '/api/render/jobs',
+      payload: { project, quality: 'draft' },
+    });
+    expect(startRes.statusCode).toBe(202);
+    const jobId = startRes.json().id;
+
+    let finalJob = startRes.json();
+    for (let i = 0; i < 30; i++) {
+      await new Promise((r) => setTimeout(r, 250));
+      const pollRes = await app.inject({
+        method: 'GET',
+        url: `/api/render/jobs/${jobId}`,
+      });
+      finalJob = pollRes.json();
+      if (finalJob.status === 'completed' || finalJob.status === 'failed') {
+        break;
+      }
+    }
+
+    expect(finalJob.error).toBeNull();
+    expect(finalJob.status).toBe('completed');
+    expect(finalJob.progress).toBe(100);
+    expect(finalJob.outputUrl).toContain(`/media/renders/${jobId}.mp4`);
+  }, 15000);
 });
 

@@ -119,6 +119,9 @@ export async function probeAndRegisterMediaFile(
 
   const waveform =
     kind === 'audio' || kind === 'video' ? await extractWaveformPeaks(file) : [];
+  if (kind === 'video') {
+    hasAudio = waveform.length > 0;
+  }
 
   return {
     id: assetId,
@@ -304,6 +307,7 @@ export async function generateSyntheticDemoMedia(): Promise<{
         'velocut_studio_demo.mp4',
         'video/mp4'
       );
+      visualAsset.hasAudio = false;
       return { visualAsset, audioAsset };
     } catch {
       // Fall back to procedural PNG overlay card
