@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
+import type { BlendMode } from '@swave/shared';
 import {
   Captions,
   CloudUpload,
   CheckCircle2,
   Film,
   Image as ImageIcon,
+  Layers,
   Music,
   Plus,
   RefreshCw,
@@ -19,11 +21,8 @@ import {
 } from 'lucide-react';
 import {
   FILTER_PRESETS,
-  SFX_PRESETS,
   STICKER_PRESETS,
   TEXT_PRESETS,
-  type SfxPresetId,
-  synthesizeAudioAsset,
 } from '../engine/editorPresets';
 import {
   generateSyntheticDemoMedia,
@@ -40,6 +39,7 @@ import { usePlaybackStore } from '../stores/playbackStore';
 import { useTimelineStore } from '../stores/timelineStore';
 import { useUiStore, type MediaBinCategory } from '../stores/uiStore';
 import { formatBytes } from '../utils/format';
+import { AudioStudioTab } from './AudioStudioTab';
 import { SubtitleStudioTab } from './SubtitleStudioTab';
 
 interface MediaBinPanelProps {
@@ -57,8 +57,6 @@ export function MediaBinPanel({
   const runtimeMode = useUiStore((s) => s.runtimeMode);
   const [isImporting, setIsImporting] = useState(false);
   const [isGeneratingDemo, setIsGeneratingDemo] = useState(false);
-  const [busySfxId, setBusySfxId] = useState<string | null>(null);
-  const [duckFeedback, setDuckFeedback] = useState<string | null>(null);
   const [captionScript, setCaptionScript] = useState(
     'Halo semuanya! Selamat datang di SWAVE Video.\nEdit visual & subtitle otomatis 100% gratis tanpa watermark!'
   );
@@ -180,26 +178,6 @@ export function MediaBinPanel({
       onClipAdded?.();
     } finally {
       setIsGeneratingDemo(false);
-    }
-  };
-
-  const handleAddBuiltInSfx = async (presetId: SfxPresetId) => {
-    setBusySfxId(presetId);
-    try {
-      const audioAsset = await synthesizeAudioAsset(presetId);
-      const store = useTimelineStore.getState();
-      store.registerAsset(audioAsset);
-      store.addClipFromAsset(
-        audioAsset.id,
-        undefined,
-        usePlaybackStore.getState().currentTime
-      );
-      if (autoSyncServer && isServerOnline) {
-        void handleChunkedUpload(audioAsset.id);
-      }
-      onClipAdded?.();
-    } finally {
-      setBusySfxId(null);
     }
   };
 
@@ -471,23 +449,36 @@ export function MediaBinPanel({
                           </span>
                         )}
 
-                        <button
-                          type="button"
-                          onClick={() => {
-                            useTimelineStore
-                              .getState()
-                              .addClipFromAsset(
-                                asset.id,
-                                undefined,
-                                usePlaybackStore.getState().currentTime
-                              );
-                            onClipAdded?.();
-                          }}
-                          className="inline-flex items-center gap-1 rounded bg-zinc-800 px-2.5 py-1 text-[11px] font-medium text-zinc-200 hover:bg-cyan-500 hover:text-zinc-950 active:scale-95"
-                        >
-                          <Plus className="h-3 w-3" />
-                          <span>Timeline</span>
-                        </button>
+                        <div className="flex items-center gap-1">
+                          {asset.kind === 'video' && (
+                            <button
+                              type="button"
+                              onClick={() => setActiveCategory('audio')}
+                              className="inline-flex items-center gap-1 rounded border border-emerald-500/40 bg-emerald-500/10 px-2 py-1 text-[10px] font-medium text-emerald-300 hover:bg-emerald-500/20"
+                              title="Buka tab Audio untuk ekstrak suara video ini ke .WAV atau Track Audio"
+                            >
+                              <Music className="h-3 w-3" />
+                              <span>Ekstrak</span>
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              useTimelineStore
+                                .getState()
+                                .addClipFromAsset(
+                                  asset.id,
+                                  undefined,
+                                  usePlaybackStore.getState().currentTime
+                                );
+                              onClipAdded?.();
+                            }}
+                            className="inline-flex items-center gap-1 rounded bg-zinc-800 px-2.5 py-1 text-[11px] font-medium text-zinc-200 hover:bg-cyan-500 hover:text-zinc-950 active:scale-95"
+                          >
+                            <Plus className="h-3 w-3" />
+                            <span>Timeline</span>
+                          </button>
+                        </div>
                       </div>
                     </div>
                   );
@@ -553,72 +544,17 @@ export function MediaBinPanel({
         <SubtitleStudioTab onClipAdded={onClipAdded} />
       )}
 
-      {/* Tab 3: AUDIO & SFX (CapCut Built-in Sound Library) */}
+      {/* Tab 3: AUDIO UPLOAD, EXTRACT AUDIO, VOICEOVER & SFX */}
       {activeCategory === 'audio' && (
-        <div className="flex-1 space-y-3 overflow-y-auto p-3">
-          <div className="rounded-lg border border-emerald-500/30 bg-emerald-950/20 p-2.5 text-[11px] text-emerald-200">
-            <p className="font-semibold">Sound Effects & Musik BGM Gratis</p>
-            <p className="mt-0.5 text-[10px] text-emerald-300/80">
-              Bebas hak cipta (synthesized). Klik untuk langsung masuk ke Track Audio.
-            </p>
-            <button
-              type="button"
-              onClick={() => {
-                const count = useTimelineStore
-                  .getState()
-                  .autoDuckAudioTracks(0.22);
-                setDuckFeedback(
-                  count > 0
-                    ? `Volume ${count} musik latar diturunkan otomatis ke 22% agar suara utama jelas!`
-                    : 'Tambahkan musik ke Track Audio terlebih dahulu.'
-                );
-                setTimeout(() => setDuckFeedback(null), 3000);
-              }}
-              className="mt-2 w-full rounded-md border border-emerald-400/40 bg-emerald-500/20 py-1.5 text-[10px] font-bold text-emerald-200 hover:bg-emerald-500/30"
-            >
-              Auto-Duck BGM (Pelankan Musik Saat Bicara)
-            </button>
-            {duckFeedback && (
-              <p className="mt-1.5 text-[10px] text-cyan-200">{duckFeedback}</p>
-            )}
-          </div>
-
-          <div className="space-y-1.5">
-            {SFX_PRESETS.map((sfx) => (
-              <div
-                key={sfx.id}
-                className="flex items-center justify-between rounded-lg border border-zinc-800 bg-zinc-900/70 px-3 py-2 hover:border-emerald-500/40"
-              >
-                <div className="min-w-0">
-                  <div className="flex items-center gap-1.5">
-                    <span
-                      className={`rounded px-1.5 py-0.5 text-[9px] font-bold uppercase ${sfx.category === 'bgm'
-                        ? 'bg-violet-500/20 text-violet-300'
-                        : 'bg-emerald-500/20 text-emerald-300'
-                        }`}
-                    >
-                      {sfx.category}
-                    </span>
-                    <p className="truncate text-xs font-medium text-zinc-100">
-                      {sfx.name}
-                    </p>
-                  </div>
-                  <p className="mt-0.5 text-[10px] text-zinc-500">
-                    Durasi: {sfx.durationLabel} · Stereo WAV 44.1kHz
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  disabled={busySfxId === sfx.id}
-                  onClick={() => void handleAddBuiltInSfx(sfx.id)}
-                  className="shrink-0 rounded-md bg-emerald-500/20 px-2.5 py-1 text-[11px] font-semibold text-emerald-300 hover:bg-emerald-500 hover:text-zinc-950 disabled:opacity-50"
-                >
-                  {busySfxId === sfx.id ? '...' : '+ Pakai'}
-                </button>
-              </div>
-            ))}
-          </div>
-        </div>
+        <AudioStudioTab
+          onImportAudioFiles={handleFiles}
+          onSyncAsset={(assetId) => {
+            if (autoSyncServer && isServerOnline) {
+              void handleChunkedUpload(assetId);
+            }
+          }}
+          onClipAdded={onClipAdded}
+        />
       )}
 
       {/* Tab 3: TEKS & AUTO-CAPTION CAPCUT */}
@@ -804,6 +740,43 @@ export function MediaBinPanel({
                     </button>
                   );
                 })}
+              </div>
+
+              <div className="space-y-2 border-t border-zinc-800 pt-3">
+                <div className="flex items-center gap-1.5 text-[11px] font-semibold text-zinc-300 uppercase">
+                  <Layers className="h-3.5 w-3.5 text-violet-400" />
+                  <span>Blend Mode Layer & Chroma Key</span>
+                </div>
+                <div className="grid grid-cols-3 gap-1.5">
+                  {(
+                    [
+                      { id: 'normal', label: 'Normal' },
+                      { id: 'screen', label: 'Screen' },
+                      { id: 'multiply', label: 'Multiply' },
+                      { id: 'overlay', label: 'Overlay' },
+                      { id: 'lighten', label: 'Lighten' },
+                      { id: 'darken', label: 'Darken' },
+                    ] as Array<{ id: BlendMode; label: string }>
+                  ).map((bm) => (
+                    <button
+                      key={bm.id}
+                      type="button"
+                      onClick={() => {
+                        useTimelineStore
+                          .getState()
+                          .setClipBlendMode(targetVisualClip.id, bm.id);
+                        onClipAdded?.();
+                      }}
+                      className={`rounded border px-2 py-1 text-[10px] font-medium ${
+                        (targetVisualClip.blendMode || 'normal') === bm.id
+                          ? 'border-violet-400 bg-violet-500/20 text-violet-200'
+                          : 'border-zinc-800 bg-zinc-900 text-zinc-400 hover:text-zinc-200'
+                      }`}
+                    >
+                      {bm.label}
+                    </button>
+                  ))}
+                </div>
               </div>
             </>
           )}

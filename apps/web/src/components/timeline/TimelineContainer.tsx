@@ -1,9 +1,12 @@
 import {
   AlignHorizontalSpaceAround,
+  ChevronLeft,
+  ChevronRight,
   Copy,
   FlipHorizontal2,
   Lock,
   Magnet,
+  Maximize2,
   Plus,
   Redo2,
   Scissors,
@@ -173,6 +176,33 @@ export function TimelineContainer() {
             <span className="hidden sm:inline">Mirror</span>
           </button>
 
+          {selectedClipIds.length === 1 && (
+            <div className="hidden items-center rounded border border-zinc-800 bg-zinc-900/80 md:inline-flex">
+              <button
+                type="button"
+                onClick={() =>
+                  useTimelineStore.getState().nudgeClip(selectedClipIds[0], -0.1)
+                }
+                className="px-1 py-0.5 text-[10px] text-zinc-300 hover:bg-zinc-800"
+                title="Geser klip mundur 0.1 detik"
+              >
+                <ChevronLeft className="inline h-3 w-3" />
+                0.1s
+              </button>
+              <button
+                type="button"
+                onClick={() =>
+                  useTimelineStore.getState().nudgeClip(selectedClipIds[0], 0.1)
+                }
+                className="border-l border-zinc-800 px-1 py-0.5 text-[10px] text-zinc-300 hover:bg-zinc-800"
+                title="Geser klip maju 0.1 detik"
+              >
+                0.1s
+                <ChevronRight className="inline h-3 w-3" />
+              </button>
+            </div>
+          )}
+
           <button
             type="button"
             disabled={selectedClipIds.length !== 1}
@@ -309,6 +339,19 @@ export function TimelineContainer() {
               aria-label="Zoom in timeline"
             >
               <ZoomIn className="h-3.5 w-3.5" />
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                const dur = Math.max(5, getTimelineDuration(clips, 20));
+                const fitPps = Math.max(15, Math.min(180, Math.round(640 / dur)));
+                useTimelineStore.getState().setPixelsPerSecond(fitPps);
+              }}
+              className="hidden rounded p-1 text-zinc-400 hover:bg-zinc-800 hover:text-cyan-300 sm:inline-flex"
+              aria-label="Fit timeline"
+              title="Paskan seluruh durasi timeline ke layar"
+            >
+              <Maximize2 className="h-3 w-3" />
             </button>
           </div>
         </div>

@@ -2,6 +2,28 @@ export type TrackType = 'video' | 'audio' | 'text' | 'overlay';
 
 export type MediaKind = 'video' | 'audio' | 'image';
 
+export type BlendMode =
+  | 'normal'
+  | 'screen'
+  | 'multiply'
+  | 'overlay'
+  | 'lighten'
+  | 'darken';
+
+export interface ClipCrop {
+  top: number;
+  right: number;
+  bottom: number;
+  left: number;
+}
+
+export interface ChromaKeyConfig {
+  enabled: boolean;
+  color: string;
+  tolerance: number;
+  smoothness?: number;
+}
+
 export interface ClipTransform {
   x: number;
   y: number;
@@ -10,12 +32,15 @@ export interface ClipTransform {
   opacity: number;
   flipH?: boolean;
   flipV?: boolean;
+  crop?: ClipCrop;
+  cornerRadius?: number;
 }
 
 export type ClipEffectType =
   | 'brightness'
   | 'contrast'
   | 'saturation'
+  | 'temperature'
   | 'vignette'
   | 'grayscale'
   | 'sepia'
@@ -86,6 +111,8 @@ export interface Clip {
   fadeIn?: number;
   fadeOut?: number;
   filterPreset?: string;
+  blendMode?: BlendMode;
+  chromaKey?: ChromaKeyConfig;
   animation?: ClipAnimation;
   transforms: ClipTransform;
   effects: ClipEffect[];
@@ -259,6 +286,20 @@ export interface RenderJobRecord {
 
 export const DEFAULT_CHUNK_SIZE_BYTES = 10 * 1024 * 1024;
 export const MAX_CLOUDFLARE_CHUNK_BYTES = 50 * 1024 * 1024;
+
+export const DEFAULT_CLIP_CROP: ClipCrop = {
+  top: 0,
+  right: 0,
+  bottom: 0,
+  left: 0,
+};
+
+export const DEFAULT_CHROMA_KEY: ChromaKeyConfig = {
+  enabled: false,
+  color: '#00b140',
+  tolerance: 0.32,
+  smoothness: 0.08,
+};
 
 export const DEFAULT_CLIP_TRANSFORM: ClipTransform = {
   x: 0,

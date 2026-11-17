@@ -8,14 +8,18 @@ import {
   ClipboardPaste,
   Copy,
   Cpu,
+  Crop,
   Download,
+  FileAudio,
   FlipHorizontal2,
   FlipVertical2,
   Gauge,
   Globe,
+  Layers,
   Loader2,
   Move,
   Palette,
+  Pipette,
   RotateCw,
   Scissors,
   Server,
@@ -24,18 +28,24 @@ import {
   Snowflake,
   Sparkles,
   Volume2,
+  VolumeX,
   Wand2,
 } from 'lucide-react';
 import {
+  DEFAULT_CHROMA_KEY,
   DEFAULT_CLIP_ANIMATION,
+  DEFAULT_CLIP_CROP,
+  type BlendMode,
   type RenderJobRecord,
   type RenderMode,
   type ServerCapabilities,
 } from '@swave/shared';
 import {
   detectSpeechSegmentsVad,
+  extractAudioFromMediaAsset,
   extractProjectAudioPcm16k,
 } from '../engine/audioExtractor';
+import { probeAndRegisterMediaFile } from '../engine/mediaProbe';
 import {
   ANIMATION_PRESETS,
   CANVAS_BG_PRESETS,
@@ -164,6 +174,7 @@ export function InspectorPanel({
   const [serverJob, setServerJob] = useState<RenderJobRecord | null>(null);
   const [actionNotice, setActionNotice] = useState<string | null>(null);
   const [isCuttingSilence, setIsCuttingSilence] = useState(false);
+  const [isExtractingAudio, setIsExtractingAudio] = useState(false);
 
   const experienceMode = useUiStore((s) => s.experienceMode);
   const runtimeMode = useUiStore((s) => s.runtimeMode);
@@ -241,6 +252,37 @@ export function InspectorPanel({
       showNotice((err as Error).message);
     } finally {
       setIsCuttingSilence(false);
+    }
+  };
+
+  const handleExtractClipAudioWav = async (downloadToo = false) => {
+    if (!selectedClip) return;
+    const store = useTimelineStore.getState();
+    const asset = store.assets[selectedClip.assetId];
+    if (!asset) return;
+
+    setIsExtractingAudio(true);
+    try {
+      const { wavBlob, filename } = await extractAudioFromMediaAsset(asset, {
+        clip: selectedClip,
+      });
+      const wavAsset = await probeAndRegisterMediaFile(wavBlob, filename, 'audio/wav');
+      store.linkExtractedAudioAsset(selectedClip.id, wavAsset, selectedClip.start);
+      if (downloadToo) {
+        await saveBlobToDevice(wavBlob, filename);
+      }
+      showNotice(
+        downloadToo
+          ? `Audio ${filename} diekstrak & diunduh!`
+          : `Audio ${filename} diekstrak ke Track Audio!`
+      );
+    } catch {
+      const audId = store.detachAudioFromClip(selectedClip.id);
+      if (audId) {
+        showNotice('Audio dipisah ke Track Audio (mode track langsung)!');
+      }
+    } finally {
+      setIsExtractingAudio(false);
     }
   };
 
@@ -912,20 +954,32 @@ export function InspectorPanel({
                   )}
 
                   {selectedClip.type === 'video' && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const audId = useTimelineStore
-                          .getState()
-                          .detachAudioFromClip(selectedClip.id);
-                        if (audId) showNotice('Audio berhasil dipisah ke Track Audio!');
-                      }}
-                      className="inline-flex flex-1 items-center justify-center gap-1 rounded border border-emerald-500/40 bg-emerald-500/15 px-2 py-1 text-[10px] font-semibold text-emerald-200 hover:bg-emerald-500/25"
-                      title="Pisahkan suara video ke track audio terpisah (J-Cut / L-Cut)"
-                    >
-                      <Volume2 className="h-3 w-3" />
-                      <span>Pisah Audio</span>
-                    </button>
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const audId = useTimelineStore
+                            .getState()
+                            .detachAudioFromClip(selectedClip.id);
+                          if (audId) showNotice('Audio berhasil dipisah ke Track Audio!');
+                        }}
+                        className="inline-flex flex-1 items-center justify-center gap-1 rounded border border-emerald-500/40 bg-emerald-500/15 px-2 py-1 text-[10px] font-semibold text-emerald-200 hover:bg-emerald-500/25"
+                        title="Pisahkan suara video ke track audio terpisah (J-Cut / L-Cut)"
+                      >
+                        <Volume2 className="h-3 w-3" />
+                        <span>Pisah Audio</span>
+                      </button>
+                      <button
+                        type="button"
+                        disabled={isExtractingAudio}
+                        onClick={() => void handleExtractClipAudioWav(true)}
+                        className="inline-flex flex-1 items-center justify-center gap-1 rounded border border-cyan-500/40 bg-cyan-500/15 px-2 py-1 text-[10px] font-semibold text-cyan-200 hover:bg-cyan-500/25 disabled:opacity-50"
+                        title="Ekstrak suara video menjadi file .WAV mandiri & unduh"
+                      >
+                        <FileAudio className="h-3 w-3" />
+                        <span>{isExtractingAudio ? 'Ekstrak...' : 'Ekstrak .WAV'}</span>
+                      </button>
+                    </>
                   )}
 
                   {experienceMode === 'pro' && (
@@ -937,6 +991,14 @@ export function InspectorPanel({
                             selectedClip.textStyle || ({} as NonNullable<typeof selectedClip.textStyle>);
                           setClipboardStyle({
                             filterPreset: selectedClip.filterPreset,
+                            blendMode: selectedClip.blendMode,
+                            chromaKey: selectedClip.chromaKey
+                              ? { ...selectedClip.chromaKey }
+                              : undefined,
+                            crop: selectedClip.transforms.crop
+                              ? { ...selectedClip.transforms.crop }
+                              : undefined,
+                            cornerRadius: selectedClip.transforms.cornerRadius,
                             effects: selectedClip.effects.map((e) => ({ ...e })),
                             animation: selectedClip.animation
                               ? { ...selectedClip.animation }
@@ -1104,11 +1166,59 @@ export function InspectorPanel({
               {/* Audio Volume & Fade In/Out */}
               {selectedClip.type !== 'text' && (
                 <div className="space-y-2.5 border-b border-zinc-800 pb-4">
-                  <div className="flex items-center gap-1.5">
-                    <Volume2 className="h-3.5 w-3.5 text-emerald-400" />
-                    <h3 className="text-[11px] font-semibold tracking-wider text-zinc-300 uppercase">
-                      Audio Klip & Fade
-                    </h3>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1.5">
+                      {clipVolume === 0 ? (
+                        <VolumeX className="h-3.5 w-3.5 text-rose-400" />
+                      ) : (
+                        <Volume2 className="h-3.5 w-3.5 text-emerald-400" />
+                      )}
+                      <h3 className="text-[11px] font-semibold tracking-wider text-zinc-300 uppercase">
+                        Audio Klip & Fade
+                      </h3>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        useTimelineStore
+                          .getState()
+                          .setClipAudioParams(selectedClip.id, {
+                            volume: clipVolume === 0 ? 1 : 0,
+                          })
+                      }
+                      className={`rounded border px-2 py-0.5 text-[10px] font-semibold ${
+                        clipVolume === 0
+                          ? 'border-rose-500/40 bg-rose-500/15 text-rose-200'
+                          : 'border-zinc-700 bg-zinc-900 text-zinc-300 hover:border-cyan-400'
+                      }`}
+                    >
+                      {clipVolume === 0 ? 'Unmute' : 'Mute Klip'}
+                    </button>
+                  </div>
+                  <div className="grid grid-cols-4 gap-1">
+                    {[
+                      { label: '0%', v: 0 },
+                      { label: 'BGM 25%', v: 0.25 },
+                      { label: '100%', v: 1 },
+                      { label: '160%', v: 1.6 },
+                    ].map((g) => (
+                      <button
+                        key={g.label}
+                        type="button"
+                        onClick={() =>
+                          useTimelineStore
+                            .getState()
+                            .setClipAudioParams(selectedClip.id, { volume: g.v })
+                        }
+                        className={`rounded border py-1 text-[10px] font-medium ${
+                          Math.abs(clipVolume - g.v) < 0.04
+                            ? 'border-emerald-400 bg-emerald-500/20 text-emerald-200'
+                            : 'border-zinc-800 bg-zinc-900 text-zinc-400 hover:text-zinc-200'
+                        }`}
+                      >
+                        {g.label}
+                      </button>
+                    ))}
                   </div>
                   <SliderRow
                     label="Volume Klip"
@@ -1188,6 +1298,231 @@ export function InspectorPanel({
                         {preset.name}
                       </button>
                     ))}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const count = useTimelineStore
+                        .getState()
+                        .applyEffectsToAllVisualClips(selectedClip.id);
+                      refreshCanvasPreview();
+                      showNotice(
+                        count > 0
+                          ? `Filter, Blend & Warna disalin ke ${count} klip visual lain!`
+                          : 'Tambahkan klip visual lain untuk menyinkronkan warna.'
+                      );
+                    }}
+                    className="w-full rounded border border-cyan-500/35 bg-cyan-500/10 py-1 text-[10px] font-semibold text-cyan-200 hover:bg-cyan-500/20"
+                  >
+                    Terapkan Filter & Warna ke Semua Klip
+                  </button>
+                </div>
+              )}
+
+              {/* Crop, Corner Radius, Blend Mode & Chroma Key (Green Screen) */}
+              {selectedClip.type !== 'audio' && selectedClip.type !== 'text' && (
+                <div className="space-y-3 border-b border-zinc-800 pb-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1.5">
+                      <Crop className="h-3.5 w-3.5 text-amber-400" />
+                      <h3 className="text-[11px] font-semibold tracking-wider text-zinc-300 uppercase">
+                        Crop, Sudut & Blend
+                      </h3>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        useTimelineStore
+                          .getState()
+                          .updateClipCrop(selectedClip.id, DEFAULT_CLIP_CROP);
+                        useTimelineStore
+                          .getState()
+                          .updateClipTransform(selectedClip.id, { cornerRadius: 0 });
+                        refreshCanvasPreview();
+                      }}
+                      className="text-[10px] text-zinc-400 hover:text-cyan-300"
+                    >
+                      Reset Crop
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    {(
+                      [
+                        { key: 'top', label: 'Crop Atas' },
+                        { key: 'bottom', label: 'Crop Bawah' },
+                        { key: 'left', label: 'Crop Kiri' },
+                        { key: 'right', label: 'Crop Kanan' },
+                      ] as const
+                    ).map((edge) => (
+                      <SliderRow
+                        key={edge.key}
+                        label={edge.label}
+                        value={selectedClip.transforms.crop?.[edge.key] ?? 0}
+                        min={0}
+                        max={45}
+                        step={1}
+                        suffix="%"
+                        onChange={(val) => {
+                          useTimelineStore
+                            .getState()
+                            .updateClipCrop(selectedClip.id, { [edge.key]: val });
+                          refreshCanvasPreview();
+                        }}
+                      />
+                    ))}
+                  </div>
+
+                  <SliderRow
+                    label="Sudut Melengkung (Rounded)"
+                    value={selectedClip.transforms.cornerRadius ?? 0}
+                    min={0}
+                    max={50}
+                    step={1}
+                    suffix="%"
+                    onChange={(cornerRadius) => {
+                      useTimelineStore
+                        .getState()
+                        .updateClipTransform(selectedClip.id, { cornerRadius });
+                      refreshCanvasPreview();
+                    }}
+                  />
+
+                  <div className="space-y-1.5">
+                    <div className="flex items-center gap-1 text-[10px] text-zinc-400">
+                      <Layers className="h-3 w-3 text-violet-400" />
+                      <span>Blend Mode Layer</span>
+                    </div>
+                    <div className="grid grid-cols-3 gap-1">
+                      {(
+                        [
+                          'normal',
+                          'screen',
+                          'multiply',
+                          'overlay',
+                          'lighten',
+                          'darken',
+                        ] as BlendMode[]
+                      ).map((bm) => (
+                        <button
+                          key={bm}
+                          type="button"
+                          onClick={() => {
+                            useTimelineStore
+                              .getState()
+                              .setClipBlendMode(selectedClip.id, bm);
+                            refreshCanvasPreview();
+                          }}
+                          className={`rounded border px-1.5 py-1 text-[10px] font-medium capitalize ${
+                            (selectedClip.blendMode || 'normal') === bm
+                              ? 'border-violet-400 bg-violet-500/20 text-violet-200'
+                              : 'border-zinc-800 bg-zinc-900 text-zinc-400 hover:text-zinc-200'
+                          }`}
+                        >
+                          {bm}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Chroma Key / Green Screen Removal */}
+                  <div className="space-y-2 rounded-lg border border-emerald-500/25 bg-emerald-950/15 p-2.5">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5 text-[11px] font-semibold text-emerald-200">
+                        <Pipette className="h-3.5 w-3.5 text-emerald-400" />
+                        <span>Chroma Key (Green Screen)</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          useTimelineStore.getState().setClipChromaKey(
+                            selectedClip.id,
+                            {
+                              enabled: !selectedClip.chromaKey?.enabled,
+                              color: selectedClip.chromaKey?.color || DEFAULT_CHROMA_KEY.color,
+                              tolerance: selectedClip.chromaKey?.tolerance ?? DEFAULT_CHROMA_KEY.tolerance,
+                            }
+                          );
+                          refreshCanvasPreview();
+                        }}
+                        className={`rounded border px-2 py-0.5 text-[10px] font-bold ${
+                          selectedClip.chromaKey?.enabled
+                            ? 'border-emerald-400 bg-emerald-500/25 text-emerald-200'
+                            : 'border-zinc-700 bg-zinc-900 text-zinc-400'
+                        }`}
+                      >
+                        {selectedClip.chromaKey?.enabled ? 'Aktif' : 'Nonaktif'}
+                      </button>
+                    </div>
+
+                    {selectedClip.chromaKey?.enabled && (
+                      <div className="space-y-2 pt-1">
+                        <div className="flex items-center justify-between gap-2 text-[10px]">
+                          <span className="text-zinc-400">Warna Kunci:</span>
+                          <div className="flex items-center gap-1.5">
+                            {[
+                              { label: 'Green', color: '#00b140' },
+                              { label: 'Blue', color: '#0047bb' },
+                            ].map((sw) => (
+                              <button
+                                key={sw.label}
+                                type="button"
+                                onClick={() => {
+                                  useTimelineStore
+                                    .getState()
+                                    .setClipChromaKey(selectedClip.id, { color: sw.color });
+                                  refreshCanvasPreview();
+                                }}
+                                className="rounded border border-zinc-700 bg-zinc-900 px-2 py-0.5 text-[10px] text-zinc-200 hover:border-emerald-400"
+                              >
+                                {sw.label}
+                              </button>
+                            ))}
+                            <input
+                              type="color"
+                              aria-label="Warna Chroma Key"
+                              value={selectedClip.chromaKey.color || '#00b140'}
+                              onChange={(e) => {
+                                useTimelineStore
+                                  .getState()
+                                  .setClipChromaKey(selectedClip.id, {
+                                    color: e.target.value,
+                                  });
+                                refreshCanvasPreview();
+                              }}
+                              className="h-6 w-8 cursor-pointer rounded border border-zinc-700 bg-transparent"
+                            />
+                          </div>
+                        </div>
+
+                        <SliderRow
+                          label="Toleransi Hapus"
+                          value={selectedClip.chromaKey.tolerance ?? 0.32}
+                          min={0.08}
+                          max={0.65}
+                          step={0.02}
+                          onChange={(tolerance) => {
+                            useTimelineStore
+                              .getState()
+                              .setClipChromaKey(selectedClip.id, { tolerance });
+                            refreshCanvasPreview();
+                          }}
+                        />
+                        <SliderRow
+                          label="Halus Tepi (Edge)"
+                          value={selectedClip.chromaKey.smoothness ?? 0.08}
+                          min={0.02}
+                          max={0.25}
+                          step={0.01}
+                          onChange={(smoothness) => {
+                            useTimelineStore
+                              .getState()
+                              .setClipChromaKey(selectedClip.id, { smoothness });
+                            refreshCanvasPreview();
+                          }}
+                        />
+                      </div>
+                    )}
                   </div>
                 </div>
               )}
@@ -1313,6 +1648,19 @@ export function InspectorPanel({
                             useTimelineStore
                               .getState()
                               .setClipEffect(selectedClip.id, 'saturation', val);
+                            refreshCanvasPreview();
+                          }}
+                        />
+                        <SliderRow
+                          label="Suhu Warna (Warmth)"
+                          value={getEffect('temperature', 0)}
+                          min={-1}
+                          max={1}
+                          step={0.04}
+                          onChange={(val) => {
+                            useTimelineStore
+                              .getState()
+                              .setClipEffect(selectedClip.id, 'temperature', val);
                             refreshCanvasPreview();
                           }}
                         />

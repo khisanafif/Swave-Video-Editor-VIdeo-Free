@@ -420,6 +420,22 @@ export function buildFfmpegRenderPlan(options: {
       const targetScale = Math.max(0.05, clip.transforms.scale || 1);
       const scaledW = Math.max(2, Math.round((width * targetScale) / 2) * 2);
       const scaledH = Math.max(2, Math.round((height * targetScale) / 2) * 2);
+
+      const crop = clip.transforms.crop;
+      if (crop) {
+        const cTop = Math.max(0, Math.min(45, crop.top || 0)) / 100;
+        const cRight = Math.max(0, Math.min(45, crop.right || 0)) / 100;
+        const cBottom = Math.max(0, Math.min(45, crop.bottom || 0)) / 100;
+        const cLeft = Math.max(0, Math.min(45, crop.left || 0)) / 100;
+        const wFrac = Math.max(0.1, 1 - cLeft - cRight);
+        const hFrac = Math.max(0.1, 1 - cTop - cBottom);
+        if (cTop > 0.001 || cRight > 0.001 || cBottom > 0.001 || cLeft > 0.001) {
+          chain.push(
+            `crop=iw*${wFrac.toFixed(3)}:ih*${hFrac.toFixed(3)}:iw*${cLeft.toFixed(3)}:ih*${cTop.toFixed(3)}`
+          );
+        }
+      }
+
       chain.push(
         `scale=${scaledW}:${scaledH}:force_original_aspect_ratio=decrease`
       );
@@ -431,6 +447,24 @@ export function buildFfmpegRenderPlan(options: {
         chain.push(
           `eq=brightness=${brightness.toFixed(2)}:contrast=${contrast.toFixed(2)}:saturation=${saturation.toFixed(2)}`
         );
+      }
+
+      const temperature = getEffectValue(clip, 'temperature', 0);
+      if (Math.abs(temperature) > 0.01) {
+        const rs = (temperature * 0.28).toFixed(2);
+        const bs = (-temperature * 0.28).toFixed(2);
+        chain.push(`colorbalance=rs=${rs}:bs=${bs}`);
+      }
+
+      if (clip.chromaKey?.enabled) {
+        const hexKey = (clip.chromaKey.color || '#00b140')
+          .replace('#', '')
+          .trim()
+          .padEnd(6, '0')
+          .slice(0, 6);
+        const sim = Math.max(0.05, Math.min(0.6, clip.chromaKey.tolerance || 0.32)).toFixed(2);
+        const blend = Math.max(0.01, Math.min(0.3, clip.chromaKey.smoothness ?? 0.08)).toFixed(2);
+        chain.push(`colorkey=0x${hexKey}:${sim}:${blend}`);
       }
 
       const grayscale = getEffectValue(clip, 'grayscale', 0);

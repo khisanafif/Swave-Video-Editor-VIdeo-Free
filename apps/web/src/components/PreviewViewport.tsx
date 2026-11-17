@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import {
+  Camera,
   Captions,
   ChevronLeft,
   ChevronRight,
@@ -14,6 +15,7 @@ import {
   VolumeX,
 } from 'lucide-react';
 import { PRESET_RESOLUTIONS } from '@swave/shared';
+import { saveBlobToDevice } from '../engine/localPersistence';
 import {
   generateSyntheticDemoMedia,
   probeAndRegisterMediaFile,
@@ -128,6 +130,23 @@ export function PreviewViewport() {
     setSafeGuideMode(order[(idx + 1) % order.length]);
   };
 
+  const handleCaptureSnapshot = () => {
+    const canvas = canvasRef.current;
+    if (!canvas || Object.keys(clips).length === 0) return;
+    const t = usePlaybackStore.getState().currentTime;
+    mediaRuntime.renderFrameAt(t, false);
+    if (typeof canvas.toBlob !== 'function') return;
+
+    canvas.toBlob((blob) => {
+      if (!blob) return;
+      const fname = `swave-snapshot-${t.toFixed(1).replace('.', '_')}s.png`;
+      void saveBlobToDevice(blob, fname);
+      void probeAndRegisterMediaFile(blob, fname, 'image/png').then((asset) => {
+        useTimelineStore.getState().registerAsset(asset);
+      });
+    }, 'image/png');
+  };
+
   return (
     <main className="flex min-h-[195px] min-w-0 shrink-0 flex-col bg-[#09090c] max-lg:h-[34dvh] sm:max-lg:h-[38dvh] lg:min-h-0 lg:flex-1">
       {/* Stage Top Bar */}
@@ -166,6 +185,17 @@ export function PreviewViewport() {
               </option>
             ))}
           </select>
+
+          <button
+            type="button"
+            disabled={Object.keys(clips).length === 0}
+            onClick={handleCaptureSnapshot}
+            className="inline-flex items-center gap-1 rounded px-2 py-1 text-[10px] font-medium text-zinc-300 hover:bg-zinc-800 hover:text-cyan-300 disabled:cursor-not-allowed disabled:opacity-35"
+            title="Tangkap Frame Saat Ini sebagai Gambar PNG (juga masuk Media Bin)"
+          >
+            <Camera className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">Snapshot</span>
+          </button>
 
           <button
             type="button"

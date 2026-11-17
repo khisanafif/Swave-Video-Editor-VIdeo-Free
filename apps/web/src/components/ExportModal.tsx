@@ -20,6 +20,7 @@ import {
 } from '@swave/shared';
 import {
   type ClientExportProgress,
+  exportProjectAudioWav,
   exportProjectClientSide,
 } from '../engine/clientExporter';
 import {
@@ -76,6 +77,7 @@ export function ExportModal({
   const [serverJob, setServerJob] = useState<RenderJobRecord | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [isExporting, setIsExporting] = useState(false);
+  const [isExportingAudio, setIsExportingAudio] = useState(false);
 
   const subtitleCount = selectExportableSubtitleClips(Object.values(clips)).length;
 
@@ -204,6 +206,26 @@ export function ExportModal({
     const blob = new Blob([body], { type: 'text/plain;charset=utf-8' });
     const filename = `${(projectName || 'swave-video').replace(/[^\w.-]/g, '_')}.${ext}`;
     void saveBlobToDevice(blob, filename);
+  };
+
+  const handleExportAudioOnly = async () => {
+    setErrorMsg(null);
+    setIsExportingAudio(true);
+    try {
+      const project = useTimelineStore.getState().exportProjectDocument();
+      const wavBlob = await exportProjectAudioWav(project);
+      const filename = `${(projectName || 'swave-audio').replace(/[^\w.-]/g, '_')}.wav`;
+      const how = await saveBlobToDevice(wavBlob, filename);
+      setSaveNotice(
+        how === 'native-saved'
+          ? `Audio tersimpan ke Downloads/SWAVE-VIDEO/${filename}`
+          : `Audio master ${filename} berhasil diunduh!`
+      );
+    } catch (err) {
+      setErrorMsg((err as Error).message);
+    } finally {
+      setIsExportingAudio(false);
+    }
   };
 
   const activeProgress =
@@ -422,6 +444,19 @@ export function ExportModal({
                 className="rounded-xl border border-rose-500/50 bg-rose-950/40 px-4 py-2.5 text-xs font-bold text-rose-200 hover:bg-rose-900/50"
               >
                 Batal
+              </button>
+            )}
+
+            {!isExporting && (
+              <button
+                type="button"
+                disabled={isExportingAudio || Object.keys(clips).length === 0}
+                onClick={() => void handleExportAudioOnly()}
+                className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-emerald-500/40 bg-emerald-500/15 px-3 py-2.5 text-xs font-bold text-emerald-200 hover:bg-emerald-500/25 disabled:opacity-50"
+                title="Ekspor campuran semua audio timeline menjadi file .WAV"
+              >
+                <Download className="h-3.5 w-3.5" />
+                <span>{isExportingAudio ? 'Mixing...' : 'Audio (.WAV)'}</span>
               </button>
             )}
           </div>

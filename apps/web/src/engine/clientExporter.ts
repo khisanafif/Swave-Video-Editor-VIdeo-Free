@@ -1,5 +1,6 @@
 import { ArrayBufferTarget, Muxer } from 'mp4-muxer';
 import type { MediaAsset, ProjectDocument } from '@swave/shared';
+import { encodeWavFromChannels } from './audioExtractor';
 import { mediaRegistry } from './opfsStorage';
 import { resolveServerUrl } from './serverOffloadClient';
 import { type CompositeLayer, WebGLCompositor } from './webglCompositor';
@@ -675,4 +676,30 @@ export async function exportProjectClientSide(options: {
   } finally {
     compositor.dispose();
   }
+}
+
+/**
+ * Renders the full mixed audio timeline (all unmuted video + audio clips with fades,
+ * speed, and gain) directly into a stereo WAV Blob without encoding video frames.
+ */
+export async function exportProjectAudioWav(
+  project: ProjectDocument
+): Promise<Blob> {
+  const clips = Object.values(project.clips);
+  const totalDuration = Math.max(
+    0.5,
+    clips.reduce((maxEnd, c) => Math.max(maxEnd, c.start + c.duration), 0)
+  );
+  const mixed = await mixAudioTrackBuffer(project, totalDuration, 44100);
+  if (!mixed) {
+    throw new Error(
+      'Tidak ada klip audio atau video bersuara yang aktif di timeline untuk diekspor.'
+    );
+  }
+  const ch0 = new Float32Array(mixed.getChannelData(0));
+  const ch1 =
+    mixed.numberOfChannels >= 2
+      ? new Float32Array(mixed.getChannelData(1))
+      : ch0;
+  return encodeWavFromChannels([ch0, ch1], mixed.sampleRate);
 }

@@ -200,5 +200,34 @@ describe('buildFfmpegRenderPlan', () => {
     expect(plan.commandPreview).toContain('afade=t=in');
     expect(plan.commandPreview).toContain("ass='/tmp/subs.ass'");
   });
+
+  it('includes crop, color temperature (colorbalance), and chroma key filters when configured on clips', () => {
+    const project = createSampleProject();
+    project.clips['c-vid'].transforms.crop = {
+      top: 10,
+      right: 5,
+      bottom: 10,
+      left: 5,
+    };
+    project.clips['c-vid'].effects.push({ type: 'temperature', value: 0.5 });
+    project.clips['c-vid'].chromaKey = {
+      enabled: true,
+      color: '#00b140',
+      tolerance: 0.35,
+      smoothness: 0.1,
+    };
+
+    const plan = buildFfmpegRenderPlan({
+      project,
+      encoder: 'libx264',
+      outputPath: '/tmp/out.mp4',
+      resolveAssetPath: (id) =>
+        id === 'asset-v1' ? '/tmp/v1.mp4' : '/tmp/a1.mp3',
+    });
+
+    expect(plan.commandPreview).toContain('crop=iw*0.900:ih*0.800:iw*0.050:ih*0.100');
+    expect(plan.commandPreview).toContain('colorbalance=rs=0.14:bs=-0.14');
+    expect(plan.commandPreview).toContain('colorkey=0x00b140:0.35:0.10');
+  });
 });
 

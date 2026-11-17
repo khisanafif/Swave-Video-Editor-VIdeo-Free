@@ -1,4 +1,4 @@
-import type { Clip, ClipAnimationType, TextStyle } from '@swave/shared';
+import type { BlendMode, Clip, ClipAnimationType, TextStyle } from '@swave/shared';
 
 export interface CompositeLayer {
   clip: Clip;
@@ -47,16 +47,24 @@ precision highp float;
 in vec2 v_uv;
 
 uniform sampler2D u_texture;
+uniform vec2 u_quadSize;
+uniform vec4 u_crop;
+uniform float u_cornerRadius;
 uniform float u_opacity;
 uniform float u_brightness;
 uniform float u_contrast;
 uniform float u_saturation;
+uniform float u_temperature;
 uniform float u_grayscale;
 uniform float u_sepia;
 uniform float u_vignette;
 uniform float u_chromab;
 uniform float u_blur;
 uniform float u_pixelate;
+uniform float u_chromaEnabled;
+uniform vec3 u_chromaColor;
+uniform float u_chromaTolerance;
+uniform float u_chromaSmooth;
 
 out vec4 outColor;
 
@@ -66,6 +74,33 @@ vec4 sampleTex(vec2 uv) {
 }
 
 void main() {
+  float cTop = u_crop.x;
+  float cRight = u_crop.y;
+  float cBottom = u_crop.z;
+  float cLeft = u_crop.w;
+
+  if (
+    v_uv.x < cLeft ||
+    v_uv.x > (1.0 - cRight) ||
+    v_uv.y < cTop ||
+    v_uv.y > (1.0 - cBottom)
+  ) {
+    discard;
+  }
+
+  float edgeAlpha = 1.0;
+  if (u_cornerRadius > 0.002) {
+    vec2 boxMin = vec2(cLeft, cTop) * u_quadSize;
+    vec2 boxMax = vec2(1.0 - cRight, 1.0 - cBottom) * u_quadSize;
+    vec2 boxCenter = (boxMin + boxMax) * 0.5;
+    vec2 halfSize = max(vec2(1.0), (boxMax - boxMin) * 0.5);
+    float radius = clamp(u_cornerRadius, 0.0, 0.5) * min(halfSize.x, halfSize.y) * 2.0;
+    vec2 p = abs((v_uv * u_quadSize) - boxCenter) - (halfSize - vec2(radius));
+    float dist = length(max(p, 0.0)) + min(max(p.x, p.y), 0.0) - radius;
+    edgeAlpha = 1.0 - smoothstep(-1.2, 1.2, dist);
+    if (edgeAlpha <= 0.001) discard;
+  }
+
   vec2 uv = v_uv;
 
   // Pixelate (Mosaic)
@@ -100,11 +135,32 @@ void main() {
     tex.b = bChan;
   }
 
+  // Chroma Key (Green/Blue Screen) in YCbCr chroma space
+  float chromaAlpha = 1.0;
+  if (u_chromaEnabled > 0.5) {
+    float kCb = -0.168736 * u_chromaColor.r - 0.331264 * u_chromaColor.g + 0.5 * u_chromaColor.b;
+    float kCr = 0.5 * u_chromaColor.r - 0.418688 * u_chromaColor.g - 0.081312 * u_chromaColor.b;
+    float pCb = -0.168736 * tex.r - 0.331264 * tex.g + 0.5 * tex.b;
+    float pCr = 0.5 * tex.r - 0.418688 * tex.g - 0.081312 * tex.b;
+    float dist = distance(vec2(pCb, pCr), vec2(kCb, kCr));
+    float smoothW = max(0.02, u_chromaSmooth);
+    chromaAlpha = smoothstep(u_chromaTolerance - smoothW, u_chromaTolerance + smoothW, dist);
+    if (chromaAlpha < 0.98 && u_chromaColor.g >= u_chromaColor.r && u_chromaColor.g >= u_chromaColor.b) {
+      float maxRB = max(tex.r, tex.b);
+      if (tex.g > maxRB) {
+        tex.g = mix(tex.g, maxRB, 0.55 * (1.0 - chromaAlpha));
+      }
+    }
+  }
+
   vec3 color = tex.rgb;
 
-  // Brightness & Contrast
+  // Brightness, Contrast & Color Temperature (Warm / Cool)
   color += vec3(u_brightness);
   color = (color - 0.5) * u_contrast + 0.5;
+  color.r += u_temperature * 0.14;
+  color.g += u_temperature * 0.025;
+  color.b -= u_temperature * 0.14;
 
   // Saturation & Grayscale
   float luma = dot(color, vec3(0.2126, 0.7152, 0.0722));
@@ -129,7 +185,7 @@ void main() {
   }
 
   color = clamp(color, 0.0, 1.0);
-  outColor = vec4(color, tex.a * u_opacity);
+  outColor = vec4(color, tex.a * u_opacity * edgeAlpha * chromaAlpha);
 }
 `;
 
@@ -262,6 +318,69 @@ function compileShader(
 function getEffect(clip: Clip, type: string, fallback: number): number {
   const found = clip.effects.find((e) => e.type === type);
   return found ? found.value : fallback;
+}
+
+function applyWebGLBlendMode(
+  gl: WebGL2RenderingContext,
+  blendMode?: BlendMode
+): void {
+  switch (blendMode) {
+    case 'screen':
+      gl.blendEquation(gl.FUNC_ADD);
+      gl.blendFuncSeparate(
+        gl.SRC_ALPHA,
+        gl.ONE_MINUS_SRC_COLOR,
+        gl.ONE,
+        gl.ONE_MINUS_SRC_ALPHA
+      );
+      break;
+    case 'multiply':
+      gl.blendEquation(gl.FUNC_ADD);
+      gl.blendFuncSeparate(
+        gl.DST_COLOR,
+        gl.ONE_MINUS_SRC_ALPHA,
+        gl.ONE,
+        gl.ONE_MINUS_SRC_ALPHA
+      );
+      break;
+    case 'overlay':
+      gl.blendEquation(gl.FUNC_ADD);
+      gl.blendFuncSeparate(
+        gl.SRC_ALPHA,
+        gl.ONE,
+        gl.ONE,
+        gl.ONE_MINUS_SRC_ALPHA
+      );
+      break;
+    case 'lighten':
+      gl.blendEquation(gl.MAX);
+      gl.blendFuncSeparate(
+        gl.SRC_ALPHA,
+        gl.ONE_MINUS_SRC_ALPHA,
+        gl.ONE,
+        gl.ONE_MINUS_SRC_ALPHA
+      );
+      break;
+    case 'darken':
+      gl.blendEquation(gl.MIN);
+      gl.blendFuncSeparate(
+        gl.SRC_ALPHA,
+        gl.ONE_MINUS_SRC_ALPHA,
+        gl.ONE,
+        gl.ONE_MINUS_SRC_ALPHA
+      );
+      break;
+    case 'normal':
+    default:
+      gl.blendEquation(gl.FUNC_ADD);
+      gl.blendFuncSeparate(
+        gl.SRC_ALPHA,
+        gl.ONE_MINUS_SRC_ALPHA,
+        gl.ONE,
+        gl.ONE_MINUS_SRC_ALPHA
+      );
+      break;
+  }
 }
 
 export class WebGLCompositor {
@@ -616,7 +735,22 @@ export class WebGLCompositor {
       const quadW = sourceWidth * fitScale;
       const quadH = sourceHeight * fitScale;
 
+      const crop = clip.transforms.crop;
+      const cTop = Math.max(0, Math.min(45, crop?.top ?? 0)) / 100;
+      const cRight = Math.max(0, Math.min(45, crop?.right ?? 0)) / 100;
+      const cBottom = Math.max(0, Math.min(45, crop?.bottom ?? 0)) / 100;
+      const cLeft = Math.max(0, Math.min(45, crop?.left ?? 0)) / 100;
+      const cornerRadius =
+        Math.max(0, Math.min(50, clip.transforms.cornerRadius ?? 0)) / 100;
+
+      const chroma = clip.chromaKey;
+      const [ckR, ckG, ckB] = chroma?.enabled
+        ? hexToRgbNormalized(chroma.color || '#00b140')
+        : [0, 0.7, 0.25];
+
       gl.uniform2f(loc('u_quadSize'), quadW, quadH);
+      gl.uniform4f(loc('u_crop'), cTop, cRight, cBottom, cLeft);
+      gl.uniform1f(loc('u_cornerRadius'), cornerRadius);
       gl.uniform2f(loc('u_offset'), anim.x, anim.y);
       gl.uniform1f(loc('u_scale'), anim.scale);
       gl.uniform1f(
@@ -628,16 +762,23 @@ export class WebGLCompositor {
       gl.uniform1f(loc('u_brightness'), getEffect(clip, 'brightness', 0));
       gl.uniform1f(loc('u_contrast'), getEffect(clip, 'contrast', 1));
       gl.uniform1f(loc('u_saturation'), getEffect(clip, 'saturation', 1));
+      gl.uniform1f(loc('u_temperature'), getEffect(clip, 'temperature', 0));
       gl.uniform1f(loc('u_grayscale'), getEffect(clip, 'grayscale', 0));
       gl.uniform1f(loc('u_sepia'), getEffect(clip, 'sepia', 0));
       gl.uniform1f(loc('u_vignette'), getEffect(clip, 'vignette', 0));
       gl.uniform1f(loc('u_chromab'), getEffect(clip, 'chromab', 0));
       gl.uniform1f(loc('u_blur'), getEffect(clip, 'blur', 0));
       gl.uniform1f(loc('u_pixelate'), getEffect(clip, 'pixelate', 0));
+      gl.uniform1f(loc('u_chromaEnabled'), chroma?.enabled ? 1 : 0);
+      gl.uniform3f(loc('u_chromaColor'), ckR, ckG, ckB);
+      gl.uniform1f(loc('u_chromaTolerance'), chroma?.tolerance ?? 0.32);
+      gl.uniform1f(loc('u_chromaSmooth'), chroma?.smoothness ?? 0.08);
 
+      applyWebGLBlendMode(gl, clip.blendMode);
       gl.drawArrays(gl.TRIANGLES, 0, 6);
     }
 
+    applyWebGLBlendMode(gl, 'normal');
     gl.bindVertexArray(null);
   }
 
@@ -661,12 +802,48 @@ export class WebGLCompositor {
       const fitScale = Math.min(cw / sourceWidth, ch / sourceHeight);
       const drawW = sourceWidth * fitScale * anim.scale;
       const drawH = sourceHeight * fitScale * anim.scale;
+      const crop = clip.transforms.crop;
+      const cTop = (Math.max(0, Math.min(45, crop?.top ?? 0)) / 100) * drawH;
+      const cRight = (Math.max(0, Math.min(45, crop?.right ?? 0)) / 100) * drawW;
+      const cBottom = (Math.max(0, Math.min(45, crop?.bottom ?? 0)) / 100) * drawH;
+      const cLeft = (Math.max(0, Math.min(45, crop?.left ?? 0)) / 100) * drawW;
+      const cornerNorm = Math.max(0, Math.min(50, clip.transforms.cornerRadius ?? 0)) / 100;
 
       ctx.save();
       ctx.globalAlpha = anim.opacity;
+      if (clip.blendMode && clip.blendMode !== 'normal') {
+        ctx.globalCompositeOperation = clip.blendMode;
+      }
+
+      const b = getEffect(clip, 'brightness', 0);
+      const c = getEffect(clip, 'contrast', 1);
+      const s = getEffect(clip, 'saturation', 1);
+      const gs = getEffect(clip, 'grayscale', 0);
+      const sp = getEffect(clip, 'sepia', 0);
+      const bl = getEffect(clip, 'blur', 0);
+      if (b !== 0 || c !== 1 || s !== 1 || gs > 0 || sp > 0 || bl > 0) {
+        ctx.filter = `brightness(${1 + b}) contrast(${c}) saturate(${s}) grayscale(${gs}) sepia(${sp}) blur(${bl * 8}px)`;
+      }
+
       ctx.translate(cw / 2 + anim.x, ch / 2 + anim.y);
       ctx.rotate((anim.rotationDeg * Math.PI) / 180);
       ctx.scale(anim.flipX, anim.flipY);
+
+      if (cTop > 0 || cRight > 0 || cBottom > 0 || cLeft > 0 || cornerNorm > 0.002) {
+        const bx = -drawW / 2 + cLeft;
+        const by = -drawH / 2 + cTop;
+        const bw = Math.max(2, drawW - cLeft - cRight);
+        const bh = Math.max(2, drawH - cTop - cBottom);
+        const rPx = cornerNorm * Math.min(bw, bh);
+        ctx.beginPath();
+        if (typeof ctx.roundRect === 'function') {
+          ctx.roundRect(bx, by, bw, bh, rPx);
+        } else {
+          ctx.rect(bx, by, bw, bh);
+        }
+        ctx.clip();
+      }
+
       ctx.drawImage(
         source as CanvasImageSource,
         -drawW / 2,

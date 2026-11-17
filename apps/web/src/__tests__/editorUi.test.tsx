@@ -276,4 +276,50 @@ describe('VideoEditorPage UI Integration (Desktop, Tablet, Android & Multi-Devic
     });
     expect(useUiStore.getState().runtimeMode).toBe('server');
   });
+
+  it('exposes Audio Upload, Extract Audio (.WAV), Voiceover Recorder, Crop, Blend Mode, Chroma Key, Snapshot & Audio Export UI', async () => {
+    useTimelineStore.getState().registerAsset({
+      id: 'vid-sample',
+      name: 'kamera.mp4',
+      kind: 'video',
+      mimeType: 'video/mp4',
+      size: 2048,
+      duration: 8,
+      width: 1920,
+      height: 1080,
+      hasAudio: true,
+      source: 'local',
+    });
+    useTimelineStore.getState().addClipFromAsset('vid-sample', 'track-1', 0);
+
+    render(<VideoEditorPage />);
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    // Video clip inspector exposes Extract .WAV, Crop, Blend Mode & Chroma Key
+    expect(screen.getByRole('button', { name: /Ekstrak \.WAV/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Mute Klip/i })).toBeInTheDocument();
+    expect(screen.getByText(/Crop, Sudut & Blend/i)).toBeInTheDocument();
+    expect(screen.getByText(/Chroma Key \(Green Screen\)/i)).toBeInTheDocument();
+
+    // Preview bar exposes Snapshot PNG button
+    expect(screen.getByRole('button', { name: /Snapshot/i })).toBeInTheDocument();
+
+    // Switch to Audio tab -> dedicated Audio Upload, Extract Audio & Mic Voiceover
+    fireEvent.click(screen.getByTitle(/Kategori Audio/i));
+    expect(
+      screen.getByText(/Upload Musik & Audio \(MP3, WAV, M4A, OGG\)/i)
+    ).toBeInTheDocument();
+    expect(screen.getByText(/Ekstrak Audio dari Video \(\.WAV\)/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Ekstrak ke Track/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Unduh Audio \.WAV/i })).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: /Mulai Rekam Mikrofon/i })
+    ).toBeInTheDocument();
+
+    // Open Export Modal -> Audio-only WAV export option exists alongside Video export
+    fireEvent.click(screen.getByRole('button', { name: /Ekspor MP4/i }));
+    expect(screen.getByRole('button', { name: /Audio \(\.WAV\)/i })).toBeInTheDocument();
+  });
 });

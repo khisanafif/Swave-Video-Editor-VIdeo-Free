@@ -1,4 +1,4 @@
-import type { Clip, ProjectDocument } from '@swave/shared';
+import type { Clip, MediaAsset, ProjectDocument } from '@swave/shared';
 import { mediaRegistry } from './opfsStorage';
 import { resolveServerUrl } from './serverOffloadClient';
 
@@ -7,11 +7,20 @@ export interface SpeechSegment {
   end: number;
 }
 
-export function encodeMonoWav16k(
-  samples: Float32Array,
-  sampleRate = 16000
+/**
+ * Encodes 1 (mono) or 2 (stereo) Float32 PCM channels into a 16-bit PCM WAV Blob.
+ */
+export function encodeWavFromChannels(
+  channels: Float32Array[],
+  sampleRate = 44100
 ): Blob {
-  const buffer = new ArrayBuffer(44 + samples.length * 2);
+  const numChannels = channels.length >= 2 ? 2 : 1;
+  const ch0 = channels[0] || new Float32Array(0);
+  const ch1 = numChannels === 2 ? channels[1] || ch0 : ch0;
+  const numSamples = ch0.length;
+  const blockAlign = numChannels * 2;
+  const dataBytes = numSamples * blockAlign;
+  const buffer = new ArrayBuffer(44 + dataBytes);
   const view = new DataView(buffer);
 
   const writeStr = (offset: number, str: string) => {
@@ -21,27 +30,38 @@ export function encodeMonoWav16k(
   };
 
   writeStr(0, 'RIFF');
-  view.setUint32(4, 36 + samples.length * 2, true);
+  view.setUint32(4, 36 + dataBytes, true);
   writeStr(8, 'WAVE');
   writeStr(12, 'fmt ');
   view.setUint32(16, 16, true);
   view.setUint16(20, 1, true);
-  view.setUint16(22, 1, true);
+  view.setUint16(22, numChannels, true);
   view.setUint32(24, sampleRate, true);
-  view.setUint32(28, sampleRate * 2, true);
-  view.setUint16(32, 2, true);
+  view.setUint32(28, sampleRate * blockAlign, true);
+  view.setUint16(32, blockAlign, true);
   view.setUint16(34, 16, true);
   writeStr(36, 'data');
-  view.setUint32(40, samples.length * 2, true);
+  view.setUint32(40, dataBytes, true);
 
   let offset = 44;
-  for (let i = 0; i < samples.length; i++) {
-    const s = Math.max(-1, Math.min(1, samples[i]));
-    view.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7fff, true);
-    offset += 2;
+  for (let i = 0; i < numSamples; i++) {
+    const l = Math.max(-1, Math.min(1, ch0[i]));
+    view.setInt16(offset, l < 0 ? l * 0x8000 : l * 0x7fff, true);
+    if (numChannels === 2) {
+      const r = Math.max(-1, Math.min(1, ch1[i]));
+      view.setInt16(offset + 2, r < 0 ? r * 0x8000 : r * 0x7fff, true);
+    }
+    offset += blockAlign;
   }
 
   return new Blob([buffer], { type: 'audio/wav' });
+}
+
+export function encodeMonoWav16k(
+  samples: Float32Array,
+  sampleRate = 16000
+): Blob {
+  return encodeWavFromChannels([samples], sampleRate);
 }
 
 export function detectSpeechSegmentsVad(
@@ -223,5 +243,92 @@ export async function extractProjectAudioPcm16k(
     duration: totalDuration,
     startOffsetSec,
     wavBlob,
+  };
+}
+
+/**
+ * Extracts stereo/mono high-quality WAV audio directly from a video/audio MediaAsset
+ * (or a specific trimmed Clip slice), ready to register in Media Bin or download.
+ */
+export async function extractAudioFromMediaAsset(
+  asset: MediaAsset,
+  options?: { clip?: Clip }
+): Promise<{
+  wavBlob: Blob;
+  filename: string;
+  duration: number;
+  sampleRate: number;
+}> {
+  const blob = mediaRegistry.getBlob(asset.id);
+  const buf = blob
+    ? await blob.arrayBuffer()
+    : asset.serverUrl
+    ? await (await fetch(resolveServerUrl(asset.serverUrl))).arrayBuffer()
+    : null;
+
+  if (!buf) {
+    throw new Error(
+      `File media "${asset.name}" belum tersedia di memori perangkat atau server.`
+    );
+  }
+
+  const OfflineCtx =
+    window.OfflineAudioContext ||
+    (window as unknown as { webkitOfflineAudioContext: typeof OfflineAudioContext })
+      .webkitOfflineAudioContext;
+
+  if (!OfflineCtx) {
+    throw new Error(
+      'Browser/WebView ini belum mendukung OfflineAudioContext untuk ekstrak audio.'
+    );
+  }
+
+  // Decode source audio using a temporary small OfflineAudioContext
+  const probeCtx = new OfflineCtx(2, 1, 44100);
+  let decoded: AudioBuffer;
+  try {
+    decoded = await probeCtx.decodeAudioData(buf.slice(0));
+  } catch {
+    throw new Error(
+      `Track audio tidak ditemukan atau codec tidak didukung pada "${asset.name}".`
+    );
+  }
+
+  const sampleRate = decoded.sampleRate || 44100;
+  const outChannels = decoded.numberOfChannels >= 2 ? 2 : 1;
+  const clip = options?.clip;
+  const speed = clip ? Math.max(0.25, Math.min(4, clip.speed || 1)) : 1;
+  const offsetSec = clip ? Math.max(0, clip.offset) : 0;
+  const durationSec = clip
+    ? Math.max(0.2, clip.duration)
+    : Math.max(0.2, decoded.duration);
+
+  const totalFrames = Math.max(1, Math.ceil(durationSec * sampleRate));
+  const offline = new OfflineCtx(outChannels, totalFrames, sampleRate);
+  const src = offline.createBufferSource();
+  src.buffer = decoded;
+  src.playbackRate.value = speed;
+
+  const gain = offline.createGain();
+  gain.gain.value = clip ? Math.max(0.05, Math.min(2, clip.volume ?? 1)) : 1;
+  src.connect(gain);
+  gain.connect(offline.destination);
+  src.start(0, offsetSec, durationSec * speed);
+
+  const rendered = await offline.startRendering();
+  const channels: Float32Array[] = [new Float32Array(rendered.getChannelData(0))];
+  if (outChannels === 2 && rendered.numberOfChannels >= 2) {
+    channels.push(new Float32Array(rendered.getChannelData(1)));
+  }
+
+  const wavBlob = encodeWavFromChannels(channels, sampleRate);
+  const baseName = asset.name.replace(/\.[^.]+$/, '') || 'audio-ekstrak';
+  const filename = `${baseName}_audio.wav`;
+
+  return {
+    wavBlob,
+    filename,
+    duration: Number(rendered.duration.toFixed(3)),
+    sampleRate,
   };
 }

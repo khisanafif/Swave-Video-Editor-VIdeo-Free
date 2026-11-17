@@ -1,6 +1,9 @@
 import { create } from 'zustand';
 import type {
+  BlendMode,
+  ChromaKeyConfig,
   ClipAnimation,
+  ClipCrop,
   ClipEffect,
   TextStyle,
 } from '@swave/shared';
@@ -18,6 +21,10 @@ export type MediaBinCategory =
 
 export interface CopiedClipStyle {
   filterPreset?: string;
+  blendMode?: BlendMode;
+  chromaKey?: ChromaKeyConfig;
+  crop?: ClipCrop;
+  cornerRadius?: number;
   effects?: ClipEffect[];
   animation?: ClipAnimation;
   textStyle?: Omit<TextStyle, 'content'>;

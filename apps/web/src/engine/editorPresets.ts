@@ -4,6 +4,7 @@ import type {
   MediaAsset,
   TextStyle,
 } from '@swave/shared';
+import { encodeWavFromChannels } from './audioExtractor';
 import { probeAndRegisterMediaFile } from './mediaProbe';
 
 export interface FilterPresetItem {
@@ -399,47 +400,6 @@ export const SFX_PRESETS: SfxPresetItem[] = [
   { id: 'synthwave', name: 'BGM Upbeat Synthwave', category: 'bgm', durationLabel: '6.0s' },
 ];
 
-function encodeStereoWav(
-  left: Float32Array,
-  right: Float32Array,
-  sampleRate: number
-): Blob {
-  const numSamples = left.length;
-  const buffer = new ArrayBuffer(44 + numSamples * 4);
-  const view = new DataView(buffer);
-
-  const writeStr = (offset: number, s: string) => {
-    for (let i = 0; i < s.length; i++) {
-      view.setUint8(offset + i, s.charCodeAt(i));
-    }
-  };
-
-  writeStr(0, 'RIFF');
-  view.setUint32(4, 36 + numSamples * 4, true);
-  writeStr(8, 'WAVE');
-  writeStr(12, 'fmt ');
-  view.setUint32(16, 16, true);
-  view.setUint16(20, 1, true);
-  view.setUint16(22, 2, true);
-  view.setUint32(24, sampleRate, true);
-  view.setUint32(28, sampleRate * 4, true);
-  view.setUint16(32, 4, true);
-  view.setUint16(34, 16, true);
-  writeStr(36, 'data');
-  view.setUint32(40, numSamples * 4, true);
-
-  let offset = 44;
-  for (let i = 0; i < numSamples; i++) {
-    const l = Math.max(-1, Math.min(1, left[i]));
-    const r = Math.max(-1, Math.min(1, right[i]));
-    view.setInt16(offset, l * 0x7fff, true);
-    view.setInt16(offset + 2, r * 0x7fff, true);
-    offset += 4;
-  }
-
-  return new Blob([buffer], { type: 'audio/wav' });
-}
-
 export async function synthesizeAudioAsset(
   presetId: SfxPresetId
 ): Promise<MediaAsset> {
@@ -532,7 +492,7 @@ export async function synthesizeAudioAsset(
     right[i] = valR;
   }
 
-  const wavBlob = encodeStereoWav(left, right, sampleRate);
+  const wavBlob = encodeWavFromChannels([left, right], sampleRate);
   return probeAndRegisterMediaFile(
     wavBlob,
     `swave_${presetId}.wav`,

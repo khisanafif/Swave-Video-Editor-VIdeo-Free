@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { MediaAsset } from '@swave/shared';
+import { encodeWavFromChannels } from '../engine/audioExtractor';
 import { usePlaybackStore } from '../stores/playbackStore';
 import { useTimelineStore } from '../stores/timelineStore';
 
@@ -236,6 +237,84 @@ describe('SWAVE Video Dual-Store & Zundo History', () => {
     expect(useTimelineStore.getState().clips[subIds[1]].textStyle?.fontSize).toBe(
       72
     );
+  });
+
+  it('supports extracted WAV audio linking, crop, blendMode, chromaKey, nudge, batch effects, replace media & WAV encoding', async () => {
+    const wavBlob = encodeWavFromChannels(
+      [new Float32Array([0.1, -0.2, 0.3]), new Float32Array([-0.1, 0.2, -0.3])],
+      44100
+    );
+    expect(wavBlob.type).toBe('audio/wav');
+    expect(wavBlob.size).toBe(44 + 3 * 4);
+    const wavBuf = await new Promise<ArrayBuffer>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as ArrayBuffer);
+      reader.onerror = () => reject(reader.error);
+      reader.readAsArrayBuffer(wavBlob);
+    });
+    const bytes = new Uint8Array(wavBuf);
+    expect(String.fromCharCode(...bytes.slice(0, 4))).toBe('RIFF');
+    expect(String.fromCharCode(...bytes.slice(8, 12))).toBe('WAVE');
+
+    const store = useTimelineStore.getState();
+    store.registerAsset(sampleVideoAsset);
+    const secondVideo: MediaAsset = {
+      ...sampleVideoAsset,
+      id: 'asset-vid-2',
+      name: 'broll.mp4',
+      duration: 6,
+    };
+    store.registerAsset(secondVideo);
+
+    const v1 = store.addClipFromAsset(sampleVideoAsset.id, 'track-1', 0)!;
+    const v2 = store.addClipFromAsset(secondVideo.id, 'track-1', 10)!;
+
+    // Extract & link WAV audio onto audio track
+    const extractedWavAsset: MediaAsset = {
+      id: 'asset-wav-1',
+      name: 'intro_audio.wav',
+      kind: 'audio',
+      mimeType: 'audio/wav',
+      size: wavBlob.size,
+      duration: 10,
+      width: 0,
+      height: 0,
+      hasAudio: true,
+      source: 'local',
+    };
+    const linkedId = useTimelineStore
+      .getState()
+      .linkExtractedAudioAsset(v1, extractedWavAsset);
+    expect(linkedId).toBeTruthy();
+    expect(useTimelineStore.getState().clips[v1].volume).toBe(0);
+    expect(useTimelineStore.getState().clips[linkedId!].assetId).toBe('asset-wav-1');
+
+    // Crop, cornerRadius, blendMode, chromaKey, temperature & nudge
+    useTimelineStore.getState().updateClipCrop(v1, { top: 10, bottom: 15, left: 5, right: 5 });
+    useTimelineStore.getState().updateClipTransform(v1, { cornerRadius: 18 });
+    useTimelineStore.getState().setClipBlendMode(v1, 'screen');
+    useTimelineStore.getState().setClipChromaKey(v1, { enabled: true, color: '#00b140', tolerance: 0.4 });
+    useTimelineStore.getState().setClipEffect(v1, 'temperature', 0.35);
+    useTimelineStore.getState().nudgeClip(v2, -0.5);
+    expect(useTimelineStore.getState().clips[v2].start).toBe(9.5);
+
+    // Apply visual style & chromaKey from v1 to v2
+    const batchCount = useTimelineStore.getState().applyEffectsToAllVisualClips(v1);
+    expect(batchCount).toBe(1);
+    expect(useTimelineStore.getState().clips[v2].blendMode).toBe('screen');
+    expect(useTimelineStore.getState().clips[v2].chromaKey?.enabled).toBe(true);
+    expect(useTimelineStore.getState().clips[v2].transforms.cornerRadius).toBe(18);
+
+    // Split v1 preserves crop and chromaKey
+    const splitId = useTimelineStore.getState().splitClipAtTime(v1, 4);
+    expect(splitId).toBeTruthy();
+    expect(useTimelineStore.getState().clips[splitId!].transforms.crop?.top).toBe(10);
+    expect(useTimelineStore.getState().clips[splitId!].chromaKey?.enabled).toBe(true);
+
+    // Replace clip asset updates name cleanly
+    const replaced = useTimelineStore.getState().replaceClipAsset(v2, sampleVideoAsset.id);
+    expect(replaced).toBe(true);
+    expect(useTimelineStore.getState().clips[v2].assetId).toBe(sampleVideoAsset.id);
   });
 });
 

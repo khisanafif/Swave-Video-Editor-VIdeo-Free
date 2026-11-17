@@ -2,13 +2,18 @@ import { create } from 'zustand';
 import { immer } from 'zustand/middleware/immer';
 import { temporal } from 'zundo';
 import {
+  DEFAULT_CHROMA_KEY,
   DEFAULT_CLIP_ANIMATION,
+  DEFAULT_CLIP_CROP,
   DEFAULT_CLIP_TRANSFORM,
   DEFAULT_TEXT_STYLE,
   PRESET_RESOLUTIONS,
+  type BlendMode,
   type CanvasResolution,
+  type ChromaKeyConfig,
   type Clip,
   type ClipAnimation,
+  type ClipCrop,
   type ClipEffect,
   type ClipEffectType,
   type ClipTransform,
@@ -102,16 +107,28 @@ export interface TimelineState {
   rippleDeleteClips: (clipIds: string[]) => void;
   closeTrackGaps: (trackId: string) => void;
   detachAudioFromClip: (clipId: string) => string | null;
+  linkExtractedAudioAsset: (
+    sourceClipId: string | null,
+    audioAsset: MediaAsset,
+    startTime?: number
+  ) => string | null;
   autoDuckAudioTracks: (duckVolume?: number) => number;
   autoCutSilenceOnClip: (
     clipId: string,
     speechSegments: Array<{ start: number; end: number }>
   ) => number;
+  nudgeClip: (clipId: string, deltaSec: number) => void;
+  replaceClipAsset: (clipId: string, newAssetId: string) => boolean;
+  applyEffectsToAllVisualClips: (sourceClipId: string) => number;
   duplicateClip: (clipId: string) => string | null;
   pasteClipStyle: (
     clipId: string,
     style: {
       filterPreset?: string;
+      blendMode?: BlendMode;
+      chromaKey?: ChromaKeyConfig;
+      crop?: ClipCrop;
+      cornerRadius?: number;
       effects?: ClipEffect[];
       animation?: ClipAnimation;
       textStyle?: Omit<TextStyle, 'content'>;
@@ -122,6 +139,9 @@ export interface TimelineState {
   clearSelection: () => void;
 
   updateClipTransform: (clipId: string, patch: Partial<ClipTransform>) => void;
+  updateClipCrop: (clipId: string, patch: Partial<ClipCrop>) => void;
+  setClipChromaKey: (clipId: string, patch: Partial<ChromaKeyConfig>) => void;
+  setClipBlendMode: (clipId: string, blendMode: BlendMode) => void;
   flipClip: (clipId: string, axis: 'h' | 'v') => void;
   rotateClip90: (clipId: string) => void;
   setClipEffect: (clipId: string, type: ClipEffectType | string, value: number) => void;
@@ -147,6 +167,13 @@ function createUid(prefix: string): string {
     return `${prefix}-${crypto.randomUUID().slice(0, 8)}`;
   }
   return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
+}
+
+function cloneTransforms(t: ClipTransform): ClipTransform {
+  return {
+    ...t,
+    crop: t.crop ? { ...t.crop } : undefined,
+  };
 }
 
 function createDefaultTracks(): {
@@ -1003,7 +1030,8 @@ export const useTimelineStore = create<TimelineState>()(
             start: Number(splitTime.toFixed(3)),
             duration: secondDuration,
             offset: Number((original.offset + firstDuration * speed).toFixed(3)),
-            transforms: { ...original.transforms },
+            transforms: cloneTransforms(original.transforms),
+            chromaKey: original.chromaKey ? { ...original.chromaKey } : undefined,
             effects: original.effects.map((e) => ({ ...e })),
             textStyle: original.textStyle ? { ...original.textStyle } : undefined,
             subtitleWords: undefined,
@@ -1049,7 +1077,8 @@ export const useTimelineStore = create<TimelineState>()(
             duration: freezeDuration,
             offset: localOffset,
             speed: 0.01,
-            transforms: { ...original.transforms },
+            transforms: cloneTransforms(original.transforms),
+            chromaKey: original.chromaKey ? { ...original.chromaKey } : undefined,
             effects: original.effects.map((e) => ({ ...e })),
             animation: original.animation ? { ...original.animation } : { ...DEFAULT_CLIP_ANIMATION },
             textStyle: original.textStyle ? { ...original.textStyle } : undefined,
@@ -1181,6 +1210,64 @@ export const useTimelineStore = create<TimelineState>()(
         return createdAudioId;
       },
 
+      linkExtractedAudioAsset: (sourceClipId, audioAsset, startTime) => {
+        get().registerAsset(audioAsset);
+        const current = get();
+        const sourceClip = sourceClipId ? current.clips[sourceClipId] : undefined;
+
+        let audioTrackId = current.trackOrder.find((tid) => {
+          const tr = current.tracks[tid];
+          return tr && !tr.isLocked && tr.type === 'audio';
+        });
+        if (!audioTrackId) {
+          audioTrackId = current.addTrack('audio', 'Audio Ekstrak');
+        }
+
+        const startAt =
+          startTime !== undefined
+            ? Math.max(0, startTime)
+            : sourceClip
+            ? sourceClip.start
+            : 0;
+        const durationSec = Math.max(
+          MIN_CLIP_DURATION,
+          audioAsset.duration || sourceClip?.duration || 5
+        );
+
+        let createdId: string | null = null;
+        set((state) => {
+          const audTrack = state.tracks[audioTrackId!];
+          if (!audTrack || audTrack.isLocked) return;
+          const newId = createUid('extaud');
+          createdId = newId;
+          state.clips[newId] = {
+            id: newId,
+            trackId: audioTrackId!,
+            assetId: audioAsset.id,
+            type: 'audio',
+            name: audioAsset.name,
+            start: Number(startAt.toFixed(3)),
+            duration: Number(durationSec.toFixed(3)),
+            offset: 0,
+            speed: 1,
+            volume: 1,
+            fadeIn: 0,
+            fadeOut: 0,
+            transforms: { ...DEFAULT_CLIP_TRANSFORM },
+            effects: [],
+          };
+          if (sourceClipId && state.clips[sourceClipId]) {
+            const srcTrack = state.tracks[state.clips[sourceClipId].trackId];
+            if (!srcTrack?.isLocked) {
+              state.clips[sourceClipId].volume = 0;
+            }
+          }
+          audTrack.clipIds.push(newId);
+          state.selectedClipIds = [newId];
+        });
+        return createdId;
+      },
+
       autoDuckAudioTracks: (duckVolume = 0.22) => {
         let updatedCount = 0;
         set((state) => {
@@ -1309,7 +1396,8 @@ export const useTimelineStore = create<TimelineState>()(
             id: newClipId,
             name: `${original.name} (Salinan)`,
             start: Number((original.start + original.duration).toFixed(3)),
-            transforms: { ...original.transforms },
+            transforms: cloneTransforms(original.transforms),
+            chromaKey: original.chromaKey ? { ...original.chromaKey } : undefined,
             effects: original.effects.map((e) => ({ ...e })),
             animation: original.animation ? { ...original.animation } : { ...DEFAULT_CLIP_ANIMATION },
             textStyle: original.textStyle ? { ...original.textStyle } : undefined,
@@ -1323,6 +1411,67 @@ export const useTimelineStore = create<TimelineState>()(
         return createdId;
       },
 
+      nudgeClip: (clipId, deltaSec) =>
+        set((state) => {
+          const clip = state.clips[clipId];
+          if (!clip) return;
+          const track = state.tracks[clip.trackId];
+          if (track?.isLocked) return;
+          clip.start = Math.max(0, Number((clip.start + deltaSec).toFixed(3)));
+        }),
+
+      replaceClipAsset: (clipId, newAssetId) => {
+        let updated = false;
+        set((state) => {
+          const clip = state.clips[clipId];
+          const newAsset = state.assets[newAssetId];
+          if (!clip || !newAsset || clip.type === 'text') return;
+          const track = state.tracks[clip.trackId];
+          if (track?.isLocked) return;
+
+          clip.assetId = newAsset.id;
+          clip.name = newAsset.name;
+          if (newAsset.kind !== 'image' && newAsset.duration > MIN_CLIP_DURATION) {
+            if (clip.offset >= newAsset.duration) {
+              clip.offset = 0;
+            }
+            const remaining = Math.max(
+              MIN_CLIP_DURATION,
+              (newAsset.duration - clip.offset) / (clip.speed || 1)
+            );
+            clip.duration = Math.min(clip.duration, Number(remaining.toFixed(3)));
+          }
+          updated = true;
+        });
+        return updated;
+      },
+
+      applyEffectsToAllVisualClips: (sourceClipId) => {
+        let updatedCount = 0;
+        set((state) => {
+          const source = state.clips[sourceClipId];
+          if (!source || (source.type !== 'video' && source.type !== 'overlay')) {
+            return;
+          }
+          for (const clip of Object.values(state.clips)) {
+            if (clip.id === source.id) continue;
+            if (clip.type !== 'video' && clip.type !== 'overlay') continue;
+            const tr = state.tracks[clip.trackId];
+            if (tr?.isLocked) continue;
+
+            clip.filterPreset = source.filterPreset;
+            clip.blendMode = source.blendMode;
+            clip.effects = source.effects.map((e) => ({ ...e }));
+            clip.chromaKey = source.chromaKey ? { ...source.chromaKey } : undefined;
+            if (source.transforms.cornerRadius !== undefined) {
+              clip.transforms.cornerRadius = source.transforms.cornerRadius;
+            }
+            updatedCount++;
+          }
+        });
+        return updatedCount;
+      },
+
       pasteClipStyle: (clipId, style) =>
         set((state) => {
           const clip = state.clips[clipId];
@@ -1331,6 +1480,18 @@ export const useTimelineStore = create<TimelineState>()(
           if (track?.isLocked) return;
           if (style.filterPreset !== undefined) {
             clip.filterPreset = style.filterPreset;
+          }
+          if (style.blendMode !== undefined) {
+            clip.blendMode = style.blendMode;
+          }
+          if (style.chromaKey !== undefined) {
+            clip.chromaKey = { ...style.chromaKey };
+          }
+          if (style.crop !== undefined) {
+            clip.transforms.crop = { ...style.crop };
+          }
+          if (style.cornerRadius !== undefined) {
+            clip.transforms.cornerRadius = style.cornerRadius;
           }
           if (style.effects) {
             clip.effects = style.effects.map((e) => ({ ...e }));
@@ -1374,6 +1535,47 @@ export const useTimelineStore = create<TimelineState>()(
           const track = state.tracks[clip.trackId];
           if (track?.isLocked) return;
           Object.assign(clip.transforms, patch);
+        }),
+
+      updateClipCrop: (clipId, patch) =>
+        set((state) => {
+          const clip = state.clips[clipId];
+          if (!clip) return;
+          const track = state.tracks[clip.trackId];
+          if (track?.isLocked) return;
+          const next = {
+            ...DEFAULT_CLIP_CROP,
+            ...(clip.transforms.crop || {}),
+            ...patch,
+          };
+          clip.transforms.crop = {
+            top: Math.max(0, Math.min(45, next.top)),
+            right: Math.max(0, Math.min(45, next.right)),
+            bottom: Math.max(0, Math.min(45, next.bottom)),
+            left: Math.max(0, Math.min(45, next.left)),
+          };
+        }),
+
+      setClipChromaKey: (clipId, patch) =>
+        set((state) => {
+          const clip = state.clips[clipId];
+          if (!clip) return;
+          const track = state.tracks[clip.trackId];
+          if (track?.isLocked) return;
+          clip.chromaKey = {
+            ...DEFAULT_CHROMA_KEY,
+            ...(clip.chromaKey || {}),
+            ...patch,
+          };
+        }),
+
+      setClipBlendMode: (clipId, blendMode) =>
+        set((state) => {
+          const clip = state.clips[clipId];
+          if (!clip) return;
+          const track = state.tracks[clip.trackId];
+          if (track?.isLocked) return;
+          clip.blendMode = blendMode;
         }),
 
       flipClip: (clipId, axis) =>
