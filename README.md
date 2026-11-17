@@ -2,12 +2,20 @@
 
 **Bahasa:** [Bahasa Indonesia](#bahasa-indonesia) · [English](#english)
 
+> [!TIP]
+> **100% Gratis, Open-Source, Tanpa Watermark & Tanpa Batas Resolusi**
+>
+> Jika **SWAVE Video** terasa bermanfaat untuk editing video, konten, atau proyek Anda, dukung pengembangannya agar tetap gratis dan terus bertambah fitur baru melalui donasi di Sawerkong:
+> 👉 **[Dukung via Sawerkong — https://sawerkong.com/donate/khisanafif](https://sawerkong.com/donate/khisanafif)**
+>
+> *(If you find **SWAVE Video** helpful, you can support ongoing development at **[sawerkong.com/donate/khisanafif](https://sawerkong.com/donate/khisanafif)**!)*
+
 ---
 
 <a id="bahasa-indonesia"></a>
 ## Bahasa Indonesia
 
-**SWAVE Video** (*Self-Hosted & Web-Native Visual Editor*) adalah editor visual dan video web 60 FPS yang **100% gratis, open-source, tanpa watermark, dan tanpa batasan resolusi**, dirancang agar mudah digunakan oleh **pemula** sekaligus lengkap untuk **editor profesional**.
+**SWAVE Video** (*Self-Hosted & Web-Native Visual Editor*) adalah editor visual dan video web 60 FPS yang **100% gratis, open-source, tanpa watermark, dan tanpa batasan resolusi (hingga 4K)**, dirancang dengan nuansa studio CapCut agar mudah digunakan oleh **pemula** sekaligus lengkap untuk **editor profesional**.
 
 Aplikasi ini mendukung **2 mode pengoperasian** yang dapat dipilih dan diganti kapan saja di bar atas editor:
 
@@ -54,9 +62,13 @@ Lalu buka **`http://localhost:3000`** di browser PC, klik **Multi-Device / QR** 
 
 ### Fitur Utama SWAVE Video
 - **Studio Audio Lengkap**: Upload langsung file musik/suara (`MP3`, `WAV`, `M4A`, `OGG`, `AAC`), **Ekstrak Audio dari Video** (pisah suara ke Track Audio atau unduh file `.WAV` mandiri), **Rekam Voiceover Mikrofon** langsung ke timeline, **Auto-Ducking BGM**, **Mute Klip 1-Klik**, Fade In/Out, serta ekspor campuran **Audio Master (.WAV)**.
-- **Dual-Mode (`Pemula` | `Pro`)**: Layar *Quick Start* 1-klik (`16:9`, `9:16`, `1:1`), **Crop Klip 4 Sisi**, **Corner Radius (Sudut Melengkung)**, **Blend Mode Layer** (`Screen`, `Multiply`, `Overlay`, `Lighten`, `Darken`), **Chroma Key (Hapus Green Screen)**, **Suhu Warna (Warm/Cool)**, **Tangkap Snapshot Frame PNG**, tombol **Isi Penuh / Pas Layar**, **Terapkan Warna ke Semua Klip**, *Split `S`*, *Trim `[` / `]`*, *Nudge `-0.1s/+0.1s`*, *Ripple Delete `Shift+Delete`*, *Freeze Frame*, *Auto-Cut Silence VAD*, *Shuttle `J/K/L`*, *Safe Zone Guides*, dan *Shader WebGL2 GLSL*.
+- **Dual-Mode (`Pemula` | `Pro`) & Fitur Visual Ala CapCut**: Layar *Quick Start* 1-klik (`16:9`, `9:16`, `1:1`) + **Resolusi Kustom (hingga 4K 60 FPS)**, **Multi-Overlay Stacking & Kontrol Z-Order** (HP & Desktop), **Hapus Latar Belakang Overlay** (**Potongan AI Otomatis MODNet**, **Hapus Latar Hitam/Putih 60 FPS Instan**, & **Polos Otomatis**), **Kunci Chroma + Pipet Kanvas Interaktif + Kurangi Spill**, **Masker Bentuk (`Lingkaran`, `Persegi`, `Belah`, `Berlian`, `Hati` + `Balik` & `Feather`)**, **Crop Klip 4 Sisi**, **Corner Radius**, **Blend Mode Layer** (`Screen`, `Multiply`, `Overlay`, `Lighten`, `Darken`), **Suhu Warna (Warm/Cool)**, **Tangkap Snapshot Frame PNG**, tombol **Isi Penuh / Pas Layar**, **Terapkan Warna ke Semua Klip**, *Split `S`*, *Trim `[` / `]`*, *Nudge `-0.1s/+0.1s`*, *Ripple Delete `Shift+Delete`*, *Freeze Frame*, *Auto-Cut Silence VAD*, *Shuttle `J/K/L`*, *Safe Zone Guides*, dan *Shader WebGL2 GLSL*.
 - **Subtitle Otomatis (AI Speech-to-Text)**: AI Whisper langsung di perangkat (`@huggingface/transformers`: `tiny` / `base`), opsional Server PC (`faster-whisper` via `pip install faster-whisper`), *Live Dikte Mikrofon*, *Sinkronisasi Naskah + VAD 100% Offline*, serta opsional BYOK *Groq/OpenAI*. Dilengkapi editor cue, *Karaoke Sorot Kata*, impor/ekspor `.srt`/`.vtt`, dan burn-in subtitle.
 - **Penyimpanan Lokal & Backup**: Auto-save offline di `localStorage` + OPFS serta ekspor/impor file proyek `.swave.json`.
+
+#### Tentang & Dukung Pengembang (Donasi)
+SWAVE Video dibuat oleh **[khisanafif](https://github.com/khisanafif)** sebagai alat editing video terbuka yang bebas iklan, bebas watermark, dan menghargai privasi (semua media diproses di perangkat atau server milik Anda sendiri). Bila aplikasi ini membantu pekerjaan, belajar, atau pembuatan konten Anda, dukungan sekecil apa pun sangat berarti:
+- 💖 **Sawerkong**: **[https://sawerkong.com/donate/khisanafif](https://sawerkong.com/donate/khisanafif)**
 
 ---
 
@@ -104,9 +116,13 @@ Open **`http://localhost:3000`** on your PC, scan the **Multi-Device / QR** code
 
 ### Key Features
 - **Complete Audio Studio**: Dedicated Audio Upload (`MP3`, `WAV`, `M4A`, `OGG`, `AAC`), **Extract Audio from Video** (both as an independent timeline track or standalone `.WAV` download), **Microphone Voiceover Recording**, **Auto-Duck BGM**, 1-click Mute & Gain presets, Fade In/Out, and full timeline **Master Audio (.WAV) Export**.
-- **Visual & Pro NLE Toolset (`Beginner` | `Pro`)**: 1-click aspect ratios (`16:9`, `9:16`, `1:1`), **4-Edge Clip Crop**, **Corner Radius**, **Layer Blend Modes** (`Screen`, `Multiply`, `Overlay`, `Lighten`, `Darken`), **Chroma Key (Green/Blue Screen removal)**, **Color Temperature (Warmth/Cool)**, **Frame Snapshot (PNG)**, **Fill / Fit** auto-framing, **Apply Color/Filter to All Clips**, **Split `S`**, **Trim `[` / `]`**, **Nudge `-0.1s/+0.1s`**, **Fit Timeline**, **Ripple Delete `Shift+Delete`**, **Freeze Frame**, **Auto-Cut Silence (VAD)**, **J/K/L Shuttle**, **Safe Zone Guides**, and **WebGL2 GLSL Shaders**.
+- **CapCut-Style Visual & Pro NLE Toolset (`Beginner` | `Pro`)**: 1-click aspect ratios + **Custom Resolution & 60 FPS up to 4K**, **Multi-Overlay Stacking & Z-Order**, **Overlay Background Removal** (**AI Auto Cutout via MODNet**, **Instant Real-Time Black/White Luma Removal**, & **Auto Solid Corner Detection**), **Chroma Key with Live Canvas Eyedropper & Spill Reduction**, **Shape Masks (`Circle`, `Rectangle`, `Split H/V`, `Diamond`, `Heart` + `Invert` & `Feather`)**, **4-Edge Clip Crop**, **Corner Radius**, **Layer Blend Modes** (`Screen`, `Multiply`, `Overlay`, `Lighten`, `Darken`), **Color Temperature**, **Frame Snapshot (PNG)**, **Fill / Fit**, **Split `S`**, **Trim `[` / `]`**, **Ripple Delete `Shift+Delete`**, **Freeze Frame**, **Auto-Cut Silence (VAD)**, **J/K/L Shuttle**, **Safe Zone Guides**, and **WebGL2 GLSL Shaders**.
 - **Free AI Auto-Subtitles**: Browser Web Worker Whisper (`@huggingface/transformers`), optional local PC `faster-whisper` (`pip install faster-whisper`), live microphone dictation, offline script+VAD sync, optional BYOK Groq/OpenAI, word-level Karaoke highlighting, `.srt`/`.vtt` import/export, and burned-in MP4/ASS export.
 - **Offline Storage & Portable Project Files**: Automatic OPFS + `localStorage` persistence plus `.swave.json` project export/import.
+
+#### About & Support the Creator
+**SWAVE Video** is maintained by **[khisanafif](https://github.com/khisanafif)** and kept **100% free with zero watermarks**. If it helps your editing workflow or content creation, consider supporting development:
+- 💖 **Donate via Sawerkong**: **[https://sawerkong.com/donate/khisanafif](https://sawerkong.com/donate/khisanafif)**
 
 ---
 

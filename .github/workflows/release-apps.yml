@@ -13,8 +13,8 @@ permissions:
   id-token: write
 
 concurrency:
-  group: swave-video-release-apps
-  cancel-in-progress: false
+  group: swave-video-release-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
 
 jobs:
   build-standalone-web:
@@ -111,6 +111,7 @@ jobs:
 
   build-ios-ipa:
     runs-on: macos-latest
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
 
@@ -156,27 +157,56 @@ jobs:
           path: artifacts/SWAVE-Video-iOS-Unsigned.ipa
 
   publish-release:
-    needs: [build-standalone-web, build-android-apk, build-ios-ipa]
-    if: ${{ always() && (needs.build-standalone-web.result == 'success' || needs.build-android-apk.result == 'success' || needs.build-ios-ipa.result == 'success') }}
+    needs: [build-standalone-web, build-android-apk]
+    if: ${{ !cancelled() && (needs.build-standalone-web.result == 'success' || needs.build-android-apk.result == 'success') }}
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/download-artifact@v4
-        continue-on-error: true
+      - name: Prepare release folder
+        run: mkdir -p release-files
+
+      - if: ${{ needs.build-standalone-web.result == 'success' }}
+        uses: actions/download-artifact@v4
         with:
           name: portable-web-zip
           path: release-files
 
-      - uses: actions/download-artifact@v4
-        continue-on-error: true
+      - if: ${{ needs.build-android-apk.result == 'success' }}
+        uses: actions/download-artifact@v4
         with:
           name: android-apk
           path: release-files
 
-      - uses: actions/download-artifact@v4
-        continue-on-error: true
-        with:
-          name: ios-ipa
-          path: release-files
+      - name: Clean stale or case-conflicting release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          TAG_NAME: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || 'latest-standalone' }}
+        run: |
+          ls -lh release-files
+          if ! gh release view "$TAG_NAME" --repo "$REPO" >/dev/null 2>&1; then
+            echo "Release $TAG_NAME not created yet; skipping pre-clean."
+            exit 0
+          fi
+
+          UPLOAD_NAMES=$(find release-files -maxdepth 2 -type f -exec basename {} \; | tr '[:upper:]' '[:lower:]')
+          gh api --paginate "repos/$REPO/releases/tags/$TAG_NAME" --jq '(.assets // [])[] | "\(.id)\t\(.name)"' | while IFS=$'\t' read -r ASSET_ID ASSET_NAME; do
+            LOWER_NAME=$(echo "$ASSET_NAME" | tr '[:upper:]' '[:lower:]')
+            SHOULD_DELETE=false
+            for UP in $UPLOAD_NAMES; do
+              if [ "$LOWER_NAME" = "$UP" ]; then
+                SHOULD_DELETE=true
+              fi
+            done
+            case "$ASSET_NAME" in
+              artifact.tar|VeloCut-Studio-*|SWAVE-VIDEO-*)
+                SHOULD_DELETE=true
+                ;;
+            esac
+            if [ "$SHOULD_DELETE" = "true" ]; then
+              echo "Deleting stale/conflicting release asset: $ASSET_NAME ($ASSET_ID)"
+              gh api -X DELETE "repos/$REPO/releases/assets/$ASSET_ID" || true
+            fi
+          done
 
       - name: Publish GitHub Release Assets
         uses: softprops/action-gh-release@v2
@@ -184,6 +214,8 @@ jobs:
           tag_name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || 'latest-standalone' }}
           name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || 'SWAVE Video — Standalone Apps (Android · iOS · Portable)' }}
           make_latest: true
+          overwrite_files: true
+          fail_on_unmatched_files: false
           generate_release_notes: true
           body: |
             ## SWAVE Video — Self-Hosted & Web-Native Visual Editor (100% Free, No Watermark)
@@ -194,5 +226,41 @@ jobs:
             - **Android (`.apk`)**: `SWAVE-Video-Android.apk` — install directly on Android devices.
             - **iPhone / iPad (`iOS .ipa`)**: `SWAVE-Video-iOS-Unsigned.ipa` — install via **AltStore / Sideloadly / TrollStore** *(or open GitHub Pages in iOS Safari → Share → Add to Home Screen)*.
             - **Portable Desktop (`.zip`)**: `SWAVE-Video-OnDevice-Portable.zip` — extract and run `Jalankan-Di-Perangkat.bat` (Windows) or `./jalankan-di-perangkat.sh` (Linux/macOS).
+
+            > **Dukung SWAVE Video**: Jika aplikasi ini terasa bermanfaat, Anda bisa berdonasi melalui **[Sawerkong (khisanafif)](https://sawerkong.com/donate/khisanafif)** agar pengembangan fitur terus berlanjut dan tetap 100% gratis tanpa watermark.
           files: |
             release-files/*
+
+  publish-ios-release:
+    needs: [build-ios-ipa, publish-release]
+    if: ${{ !cancelled() && needs.build-ios-ipa.result == 'success' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Prepare release folder
+        run: mkdir -p release-files
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: ios-ipa
+          path: release-files
+
+      - name: Upload iOS IPA Asset to Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          TAG_NAME: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || 'latest-standalone' }}
+          RELEASE_TITLE: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || 'SWAVE Video — Standalone Apps (Android · iOS · Portable)' }}
+        run: |
+          if ! gh release view "$TAG_NAME" --repo "$REPO" >/dev/null 2>&1; then
+            gh release create "$TAG_NAME" --repo "$REPO" --title "$RELEASE_TITLE" --latest
+          fi
+
+          gh api --paginate "repos/$REPO/releases/tags/$TAG_NAME" --jq '(.assets // [])[] | "\(.id)\t\(.name)"' | while IFS=$'\t' read -r ASSET_ID ASSET_NAME; do
+            LOWER_NAME=$(echo "$ASSET_NAME" | tr '[:upper:]' '[:lower:]')
+            if [ "$LOWER_NAME" = "swave-video-ios-unsigned.ipa" ]; then
+              echo "Deleting previous iOS release asset: $ASSET_NAME ($ASSET_ID)"
+              gh api -X DELETE "repos/$REPO/releases/assets/$ASSET_ID" || true
+            fi
+          done
+
+          gh release upload "$TAG_NAME" release-files/SWAVE-Video-iOS-Unsigned.ipa --repo "$REPO" --clobber
