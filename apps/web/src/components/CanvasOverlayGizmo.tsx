@@ -80,6 +80,7 @@ export function CanvasOverlayGizmo({
   resolution,
 }: CanvasOverlayGizmoProps) {
   const clips = useTimelineStore((s) => s.clips);
+  const assets = useTimelineStore((s) => s.assets);
   const tracks = useTimelineStore((s) => s.tracks);
   const trackOrder = useTimelineStore((s) => s.trackOrder);
   const selectedClipIds = useTimelineStore((s) => s.selectedClipIds);
@@ -277,7 +278,6 @@ export function CanvasOverlayGizmo({
     window.addEventListener('pointercancel', onUp);
   };
 
-  // Quick position preset helper (Atas, Tengah, Subtitle Bawah)
   const applyQuickPosition = (
     clip: Clip,
     preset: 'top' | 'center' | 'bottom'
@@ -291,6 +291,25 @@ export function CanvasOverlayGizmo({
     useTimelineStore
       .getState()
       .updateClipTransform(clip.id, { x: 0, y: yVal, rotation: 0 });
+    mediaRuntime.renderFrameAt(
+      usePlaybackStore.getState().currentTime,
+      usePlaybackStore.getState().isPlaying
+    );
+  };
+
+  const applyFitOrFill = (clip: Clip, mode: 'fit' | 'fill') => {
+    const asset = assets[clip.assetId];
+    const sw = asset?.width || cw;
+    const sh = asset?.height || ch;
+    let nextScale = 1;
+    if (mode === 'fill' && sw > 0 && sh > 0) {
+      const fitRatio = Math.min(cw / sw, ch / sh);
+      const fillRatio = Math.max(cw / sw, ch / sh);
+      nextScale = Number(Math.max(1, fillRatio / Math.max(0.01, fitRatio)).toFixed(2));
+    }
+    useTimelineStore
+      .getState()
+      .updateClipTransform(clip.id, { x: 0, y: 0, scale: nextScale, rotation: 0 });
     mediaRuntime.renderFrameAt(
       usePlaybackStore.getState().currentTime,
       usePlaybackStore.getState().isPlaying
@@ -439,7 +458,7 @@ export function CanvasOverlayGizmo({
                 onPointerDown={(e) => e.stopPropagation()}
                 className="pointer-events-auto absolute top-2 left-1/2 z-30 flex max-w-[96%] -translate-x-1/2 flex-wrap items-center justify-center gap-1 rounded-full border border-zinc-700/90 bg-zinc-950/90 px-2.5 py-1 text-[11px] shadow-xl backdrop-blur-md"
               >
-                {activeVisualClip.type === 'text' && (
+                {activeVisualClip.type === 'text' ? (
                   <button
                     type="button"
                     onClick={() => setIsInlineEditing((v) => !v)}
@@ -452,6 +471,25 @@ export function CanvasOverlayGizmo({
                     <Pencil className="h-3 w-3" />
                     <span>{isInlineEditing ? 'Selesai Ketik' : 'Ketik / Edit Teks'}</span>
                   </button>
+                ) : (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => applyFitOrFill(activeVisualClip, 'fill')}
+                      className="inline-flex items-center gap-0.5 rounded-full bg-cyan-500 px-2.5 py-0.5 font-bold text-zinc-950 hover:bg-cyan-400"
+                      title="Perbesar otomatis agar penuh layar tanpa garis hitam (cocok 9:16 TikTok)"
+                    >
+                      <span>Isi Penuh</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => applyFitOrFill(activeVisualClip, 'fit')}
+                      className="inline-flex items-center gap-0.5 rounded-full bg-zinc-800 px-2 py-0.5 text-zinc-200 hover:bg-zinc-700"
+                      title="Kembalikan ukuran pas layar"
+                    >
+                      <span>Pas Layar</span>
+                    </button>
+                  </>
                 )}
 
                 <button

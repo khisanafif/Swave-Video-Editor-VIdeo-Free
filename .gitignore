@@ -1,0 +1,29 @@
+# Dependencies (re-installed per OS via `npm install`)
+node_modules/
+apps/*/node_modules/
+packages/*/node_modules/
+
+# Build outputs & TypeScript incremental cache
+dist/
+apps/*/dist/
+packages/*/dist/
+*.tsbuildinfo
+
+# Runtime local storage, SQLite DBs & user uploaded media/renders
+apps/server/storage/
+storage/
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+
+# Logs, caches & test artifacts
+*.log
+npm-debug.log*
+.vite/
+coverage/
+
+# OS & environment files
+.DS_Store
+Thumbs.db
+.env
+.env.local

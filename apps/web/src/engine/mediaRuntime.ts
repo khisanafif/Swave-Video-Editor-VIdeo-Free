@@ -193,7 +193,9 @@ class StudioMediaRuntime {
             clip.id,
             clip.textStyle,
             cw,
-            ch
+            ch,
+            clip.subtitleWords,
+            localTime
           );
           layers.push({
             clip,
@@ -256,7 +258,7 @@ class StudioMediaRuntime {
               node.element.currentTime = mediaTime;
             }
             if (node.element.paused) {
-              void node.element.play().catch(() => {});
+              void node.element.play().catch(() => { });
             }
           } else {
             if (!node.element.paused) node.element.pause();

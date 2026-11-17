@@ -61,6 +61,10 @@ async function mixAudioTrackBuffer(
     start: number;
     duration: number;
     offset: number;
+    speed: number;
+    volume: number;
+    fadeIn: number;
+    fadeOut: number;
     asset: MediaAsset;
   }> = [];
 
@@ -76,6 +80,10 @@ async function mixAudioTrackBuffer(
         start: clip.start,
         duration: clip.duration,
         offset: clip.offset,
+        speed: Math.max(0.25, Math.min(4, clip.speed || 1)),
+        volume: clip.volume ?? 1,
+        fadeIn: clip.fadeIn ?? 0,
+        fadeOut: clip.fadeOut ?? 0,
         asset,
       });
     }
@@ -105,8 +113,31 @@ async function mixAudioTrackBuffer(
       const decoded = await offline.decodeAudioData(buffer.slice(0));
       const src = offline.createBufferSource();
       src.buffer = decoded;
-      src.connect(offline.destination);
-      src.start(item.start, item.offset, item.duration);
+      src.playbackRate.value = item.speed;
+
+      const gain = offline.createGain();
+      const baseVol = Math.max(0, Math.min(2, item.volume));
+      const startT = Math.max(0, item.start);
+      const endT = startT + item.duration;
+      const fadeInDur = Math.min(item.duration / 2, Math.max(0, item.fadeIn));
+      const fadeOutDur = Math.min(item.duration / 2, Math.max(0, item.fadeOut));
+
+      if (fadeInDur > 0.01) {
+        gain.gain.setValueAtTime(0.0001, startT);
+        gain.gain.linearRampToValueAtTime(baseVol, startT + fadeInDur);
+      } else {
+        gain.gain.setValueAtTime(baseVol, startT);
+      }
+
+      if (fadeOutDur > 0.01) {
+        const fadeOutStart = Math.max(startT + fadeInDur, endT - fadeOutDur);
+        gain.gain.setValueAtTime(baseVol, fadeOutStart);
+        gain.gain.linearRampToValueAtTime(0.0001, endT);
+      }
+
+      src.connect(gain);
+      gain.connect(offline.destination);
+      src.start(startT, item.offset, item.duration * item.speed);
       decodedAny = true;
     } catch {
       // Skip clips without decodable audio track
@@ -142,7 +173,9 @@ async function buildLayersAtTime(
           clip.id,
           clip.textStyle,
           width,
-          height
+          height,
+          clip.subtitleWords,
+          localTime
         );
         layers.push({
           clip,
@@ -210,6 +243,7 @@ async function exportViaMediaRecorderFallback(options: {
     width,
     height,
     fps,
+    totalDuration,
     totalFrames,
     videoElements,
     imageElements,
@@ -228,10 +262,40 @@ async function exportViaMediaRecorderFallback(options: {
   offscreenCanvas.height = height;
   const compositor = new WebGLCompositor(offscreenCanvas);
 
+  let liveAudioCtx: AudioContext | null = null;
+  let audioDest: MediaStreamAudioDestinationNode | null = null;
+  let audioSourceNode: AudioBufferSourceNode | null = null;
+
   try {
     const stream = offscreenCanvas.captureStream(fps);
+
+    // Attach mixed audio track to MediaRecorder stream so LAN HTTP exports keep audio!
+    try {
+      const mixedAudio = await mixAudioTrackBuffer(project, totalDuration, 44100);
+      const AudioCtx =
+        window.AudioContext ||
+        (window as unknown as { webkitAudioContext: typeof AudioContext })
+          .webkitAudioContext;
+      if (mixedAudio && AudioCtx) {
+        liveAudioCtx = new AudioCtx({ sampleRate: 44100 });
+        if (typeof liveAudioCtx.createMediaStreamDestination === 'function') {
+          audioDest = liveAudioCtx.createMediaStreamDestination();
+          audioSourceNode = liveAudioCtx.createBufferSource();
+          audioSourceNode.buffer = mixedAudio;
+          audioSourceNode.connect(audioDest);
+          for (const track of audioDest.stream.getAudioTracks()) {
+            stream.addTrack(track);
+          }
+        }
+      }
+    } catch {
+      // Continue video-only if browser audio destination is unavailable
+    }
+
     const mimeCandidates = [
       'video/mp4',
+      'video/webm;codecs=vp9,opus',
+      'video/webm;codecs=vp8,opus',
       'video/webm;codecs=vp9',
       'video/webm;codecs=vp8',
       'video/webm',
@@ -257,6 +321,13 @@ async function exportViaMediaRecorderFallback(options: {
     });
 
     recorder.start(100);
+    if (audioSourceNode) {
+      try {
+        audioSourceNode.start(0);
+      } catch {
+        // Ignore if autoplay restricted
+      }
+    }
 
     for (let frameIdx = 0; frameIdx < totalFrames; frameIdx++) {
       if (signal?.aborted) {
@@ -290,11 +361,21 @@ async function exportViaMediaRecorderFallback(options: {
       currentFrame: totalFrames,
       totalFrames,
     });
+    if (audioSourceNode) {
+      try {
+        audioSourceNode.stop();
+      } catch {
+        // Ignore
+      }
+    }
     recorder.stop();
     await stopped;
 
     return new Blob(chunks, { type: selectedMime || 'video/webm' });
   } finally {
+    if (liveAudioCtx) {
+      void liveAudioCtx.close().catch(() => {});
+    }
     compositor.dispose();
   }
 }

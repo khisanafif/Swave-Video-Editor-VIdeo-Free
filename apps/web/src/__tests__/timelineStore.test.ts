@@ -130,9 +130,14 @@ describe('VeloCut Dual-Store & Zundo History', () => {
     expect(useTimelineStore.getState().clips[vidId].speed).toBe(2);
     expect(useTimelineStore.getState().clips[vidId].duration).toBe(5);
 
-    // 0.5x Speed doubles original duration to 20s
+    // 0.5x Speed doubles original duration to 20s and allows trimming across full 20s timeline span
     useTimelineStore.getState().setClipSpeed(vidId, 0.5);
     expect(useTimelineStore.getState().clips[vidId].duration).toBe(20);
+    useTimelineStore.getState().trimClip(vidId, 'right', 16);
+    expect(useTimelineStore.getState().clips[vidId].duration).toBe(16);
+    useTimelineStore.getState().trimClip(vidId, 'left', 2);
+    expect(useTimelineStore.getState().clips[vidId].start).toBe(2);
+    expect(useTimelineStore.getState().clips[vidId].offset).toBe(1);
 
     // Mirror H & Rotate 90°
     useTimelineStore.getState().flipClip(vidId, 'h');
@@ -161,6 +166,76 @@ describe('VeloCut Dual-Store & Zundo History', () => {
     const stickerId = useTimelineStore.getState().addStickerClip('🔥', 'Api Hype', 0);
     expect(stickerId).toBeTruthy();
     expect(useTimelineStore.getState().clips[stickerId!].textStyle?.content).toBe('🔥');
+  });
+
+  it('supports Pro & Subtitle workflows: addSubtitleCues, split/merge/batch-style subtitles, rippleDelete, detachAudio, autoDuck & autoCutSilence', () => {
+    const store = useTimelineStore.getState();
+    store.registerAsset(sampleVideoAsset);
+    store.registerAsset(sampleAudioAsset);
+
+    const v1 = store.addClipFromAsset(sampleVideoAsset.id, 'track-1', 0)!;
+    const v2 = store.addClipFromAsset(sampleVideoAsset.id, 'track-1', 12)!;
+    const audId = store.addClipFromAsset(sampleAudioAsset.id, 'track-3', 0)!;
+
+    // Ripple delete v1 -> v2 shifts left from 12s to 2s
+    useTimelineStore.getState().rippleDeleteClips([v1]);
+    expect(useTimelineStore.getState().clips[v1]).toBeUndefined();
+    expect(useTimelineStore.getState().clips[v2].start).toBe(2);
+
+    // Close track gaps -> v2 moves to 0s
+    useTimelineStore.getState().closeTrackGaps('track-1');
+    expect(useTimelineStore.getState().clips[v2].start).toBe(0);
+
+    // Auto-duck BGM lowers audio track volume
+    const ducked = useTimelineStore.getState().autoDuckAudioTracks(0.2);
+    expect(ducked).toBe(1);
+    expect(useTimelineStore.getState().clips[audId].volume).toBe(0.2);
+
+    // Detach audio from v2 mutes video clip and creates new audio clip
+    const detachedId = useTimelineStore.getState().detachAudioFromClip(v2);
+    expect(detachedId).toBeTruthy();
+    expect(useTimelineStore.getState().clips[v2].volume).toBe(0);
+    expect(useTimelineStore.getState().clips[detachedId!].type).toBe('audio');
+
+    // Auto-cut silence keeps only spoken segments
+    const kept = useTimelineStore.getState().autoCutSilenceOnClip(v2, [
+      { start: 0.5, end: 2.0 },
+      { start: 4.0, end: 6.5 },
+    ]);
+    expect(kept).toBe(2);
+
+    // Add subtitle cues, split, merge, and batch-style all
+    const subIds = useTimelineStore.getState().addSubtitleCues(
+      [
+        { start: 0, end: 2, text: 'Halo semua teman' },
+        { start: 2, end: 4, text: 'Ayo belajar edit' },
+      ],
+      'hormozi-karaoke',
+      { replaceExisting: true }
+    );
+    expect(subIds).toHaveLength(2);
+
+    const splitSubId = useTimelineStore.getState().splitSubtitleCue(subIds[0]);
+    expect(splitSubId).toBeTruthy();
+    expect(useTimelineStore.getState().clips[subIds[0]].textStyle?.content).toBe(
+      'Halo semua'
+    );
+
+    const mergedId = useTimelineStore.getState().mergeSubtitleWithNext(subIds[0]);
+    expect(mergedId).toBe(subIds[0]);
+    expect(useTimelineStore.getState().clips[subIds[0]].textStyle?.content).toBe(
+      'Halo semua teman'
+    );
+
+    useTimelineStore
+      .getState()
+      .applySubtitleStyleToAll({ color: '#22d3ee', fontSize: 72 });
+    expect(useTimelineStore.getState().clips[subIds[0]].textStyle?.color).toBe(
+      '#22d3ee'
+    );
+    expect(useTimelineStore.getState().clips[subIds[1]].textStyle?.fontSize).toBe(
+      72
+    );
   });
 });
 

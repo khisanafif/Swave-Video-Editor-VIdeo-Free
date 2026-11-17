@@ -14,6 +14,7 @@ import {
   type ClipTransform,
   type MediaAsset,
   type ProjectDocument,
+  type SubtitleCue,
   type TextStyle,
   type Track,
   type TrackType,
@@ -39,6 +40,7 @@ export interface TimelineState {
   setResolution: (resolution: CanvasResolution) => void;
   setCanvasBackground: (bg: string) => void;
   addTrack: (type: TrackType, name?: string) => string;
+  renameTrack: (trackId: string, name: string) => void;
   toggleTrackMute: (trackId: string) => void;
   toggleTrackLock: (trackId: string) => void;
   deleteTrack: (trackId: string) => void;
@@ -71,12 +73,50 @@ export interface TimelineState {
     scriptText: string,
     presetId?: string
   ) => string[];
+  addSubtitleCues: (
+    cues: SubtitleCue[],
+    presetId?: string,
+    options?: { replaceExisting?: boolean; trackId?: string }
+  ) => string[];
+  updateSubtitleCue: (
+    clipId: string,
+    patch: { text?: string; start?: number; duration?: number }
+  ) => void;
+  mergeSubtitleWithNext: (clipId: string) => string | null;
+  splitSubtitleCue: (clipId: string) => string | null;
+  applySubtitleStyleToAll: (
+    stylePatch: Partial<TextStyle>,
+    transformPatch?: Partial<ClipTransform>,
+    animationPatch?: Partial<ClipAnimation>
+  ) => void;
   moveClip: (clipId: string, newTrackId: string, newStart: number) => void;
   trimClip: (clipId: string, edge: 'left' | 'right', targetTime: number) => void;
+  trimClipToPlayhead: (
+    clipId: string,
+    edge: 'left' | 'right',
+    playheadTime: number
+  ) => void;
   splitClipAtTime: (clipId: string, splitTime: number) => string | null;
   freezeClipAtTime: (clipId: string, freezeTime: number) => string | null;
   deleteClips: (clipIds: string[]) => void;
+  rippleDeleteClips: (clipIds: string[]) => void;
+  closeTrackGaps: (trackId: string) => void;
+  detachAudioFromClip: (clipId: string) => string | null;
+  autoDuckAudioTracks: (duckVolume?: number) => number;
+  autoCutSilenceOnClip: (
+    clipId: string,
+    speechSegments: Array<{ start: number; end: number }>
+  ) => number;
   duplicateClip: (clipId: string) => string | null;
+  pasteClipStyle: (
+    clipId: string,
+    style: {
+      filterPreset?: string;
+      effects?: ClipEffect[];
+      animation?: ClipAnimation;
+      textStyle?: Omit<TextStyle, 'content'>;
+    }
+  ) => void;
 
   selectClip: (clipId: string, multi?: boolean) => void;
   clearSelection: () => void;
@@ -229,6 +269,14 @@ export const useTimelineStore = create<TimelineState>()(
         return id;
       },
 
+      renameTrack: (trackId, name) =>
+        set((state) => {
+          const track = state.tracks[trackId];
+          if (track && name.trim()) {
+            track.name = name.trim().slice(0, 32);
+          }
+        }),
+
       toggleTrackMute: (trackId) =>
         set((state) => {
           const track = state.tracks[trackId];
@@ -301,8 +349,8 @@ export const useTimelineStore = create<TimelineState>()(
           asset.kind === 'audio'
             ? 'audio'
             : asset.kind === 'image'
-            ? 'overlay'
-            : 'video';
+              ? 'overlay'
+              : 'video';
 
         let resolvedTrackId = targetTrackId;
         if (resolvedTrackId) {
@@ -616,6 +664,7 @@ export const useTimelineStore = create<TimelineState>()(
                 ...preset.style,
                 content: phrase,
               },
+              isSubtitle: true,
             };
             track.clipIds.push(cid);
             cursor += stepDur;
@@ -627,6 +676,237 @@ export const useTimelineStore = create<TimelineState>()(
 
         return createdIds;
       },
+
+      addSubtitleCues: (cues, presetId = 'capcut-yellow', options) => {
+        if (!cues || cues.length === 0) return [];
+        const current = get();
+        const preset =
+          TEXT_PRESETS.find((p) => p.id === presetId) || TEXT_PRESETS[0];
+
+        let resolvedTrackId = options?.trackId;
+        if (resolvedTrackId) {
+          const cand = current.tracks[resolvedTrackId];
+          if (!cand || cand.isLocked || cand.type !== 'text') {
+            resolvedTrackId = undefined;
+          }
+        }
+        if (!resolvedTrackId) {
+          resolvedTrackId = current.trackOrder.find((tid) => {
+            const tr = current.tracks[tid];
+            return tr && !tr.isLocked && tr.type === 'text';
+          });
+        }
+        if (!resolvedTrackId) {
+          resolvedTrackId = current.addTrack('text', 'Subtitle (CC)');
+        }
+
+        const createdIds: string[] = [];
+        set((state) => {
+          const track = state.tracks[resolvedTrackId!];
+          if (!track) return;
+
+          if (options?.replaceExisting) {
+            const subIds = Object.values(state.clips)
+              .filter((c) => c.isSubtitle)
+              .map((c) => c.id);
+            for (const sid of subIds) {
+              const old = state.clips[sid];
+              if (!old) continue;
+              const oldTrack = state.tracks[old.trackId];
+              if (oldTrack && !oldTrack.isLocked) {
+                oldTrack.clipIds = oldTrack.clipIds.filter((id) => id !== sid);
+                delete state.clips[sid];
+              }
+            }
+          }
+
+          for (const cue of cues) {
+            const text = (cue.text || '').trim();
+            if (!text) continue;
+            const start = Math.max(0, Number(cue.start.toFixed(3)));
+            const duration = Math.max(
+              MIN_CLIP_DURATION,
+              Number((cue.end - cue.start).toFixed(3))
+            );
+            const cid = createUid('sub');
+            createdIds.push(cid);
+            state.clips[cid] = {
+              id: cid,
+              trackId: resolvedTrackId!,
+              assetId: 'text',
+              type: 'text',
+              name: `CC: ${text.slice(0, 18)}`,
+              start,
+              duration,
+              offset: 0,
+              speed: 1,
+              volume: 1,
+              fadeIn: 0,
+              fadeOut: 0,
+              filterPreset: 'normal',
+              animation: {
+                ...DEFAULT_CLIP_ANIMATION,
+                in: preset.defaultAnimation,
+                inDuration: 0.2,
+              },
+              transforms: {
+                ...DEFAULT_CLIP_TRANSFORM,
+                y: preset.defaultY,
+              },
+              effects: [],
+              textStyle: {
+                ...preset.style,
+                content: text,
+              },
+              isSubtitle: true,
+              subtitleWords: cue.words ? cue.words.map((w) => ({ ...w })) : undefined,
+            };
+            track.clipIds.push(cid);
+          }
+
+          if (createdIds.length > 0) {
+            state.selectedClipIds = [createdIds[0]];
+          }
+        });
+
+        return createdIds;
+      },
+
+      updateSubtitleCue: (clipId, patch) =>
+        set((state) => {
+          const clip = state.clips[clipId];
+          if (!clip || clip.type !== 'text') return;
+          const track = state.tracks[clip.trackId];
+          if (track?.isLocked) return;
+          if (patch.text !== undefined) {
+            if (!clip.textStyle) {
+              clip.textStyle = { ...DEFAULT_TEXT_STYLE };
+            }
+            clip.textStyle.content = patch.text;
+            clip.name = `CC: ${patch.text.slice(0, 18) || 'Subtitle'}`;
+          }
+          if (patch.start !== undefined) {
+            clip.start = Math.max(0, Number(patch.start.toFixed(3)));
+          }
+          if (patch.duration !== undefined) {
+            clip.duration = Math.max(
+              MIN_CLIP_DURATION,
+              Number(patch.duration.toFixed(3))
+            );
+          }
+        }),
+
+      mergeSubtitleWithNext: (clipId) => {
+        let mergedInto: string | null = null;
+        set((state) => {
+          const current = state.clips[clipId];
+          if (!current || current.type !== 'text') return;
+          const track = state.tracks[current.trackId];
+          if (!track || track.isLocked) return;
+
+          const ordered = track.clipIds
+            .map((id) => state.clips[id])
+            .filter((c): c is Clip => Boolean(c && c.type === 'text'))
+            .sort((a, b) => a.start - b.start);
+          const idx = ordered.findIndex((c) => c.id === clipId);
+          if (idx < 0 || idx >= ordered.length - 1) return;
+
+          const next = ordered[idx + 1];
+          const combinedText = `${current.textStyle?.content || ''} ${next.textStyle?.content || ''
+            }`.trim();
+          const newEnd = Math.max(
+            current.start + current.duration,
+            next.start + next.duration
+          );
+          if (current.textStyle) {
+            current.textStyle.content = combinedText;
+          }
+          current.name = `CC: ${combinedText.slice(0, 18)}`;
+          current.duration = Number(
+            Math.max(MIN_CLIP_DURATION, newEnd - current.start).toFixed(3)
+          );
+          current.subtitleWords = undefined;
+
+          track.clipIds = track.clipIds.filter((id) => id !== next.id);
+          delete state.clips[next.id];
+          state.selectedClipIds = [current.id];
+          mergedInto = current.id;
+        });
+        return mergedInto;
+      },
+
+      splitSubtitleCue: (clipId) => {
+        let secondId: string | null = null;
+        set((state) => {
+          const original = state.clips[clipId];
+          if (!original || original.type !== 'text' || !original.textStyle) return;
+          const track = state.tracks[original.trackId];
+          if (!track || track.isLocked) return;
+
+          const words = original.textStyle.content.trim().split(/\s+/).filter(Boolean);
+          if (words.length < 2 || original.duration < MIN_CLIP_DURATION * 2) return;
+
+          const midWord = Math.ceil(words.length / 2);
+          const firstText = words.slice(0, midWord).join(' ');
+          const secondText = words.slice(midWord).join(' ');
+          const firstDur = Number((original.duration * (midWord / words.length)).toFixed(3));
+          const secondDur = Number((original.duration - firstDur).toFixed(3));
+          if (firstDur < MIN_CLIP_DURATION || secondDur < MIN_CLIP_DURATION) return;
+
+          const newId = createUid('sub');
+          secondId = newId;
+          original.textStyle.content = firstText;
+          original.name = `CC: ${firstText.slice(0, 18)}`;
+          original.duration = firstDur;
+          original.subtitleWords = undefined;
+
+          state.clips[newId] = {
+            ...original,
+            id: newId,
+            name: `CC: ${secondText.slice(0, 18)}`,
+            start: Number((original.start + firstDur).toFixed(3)),
+            duration: secondDur,
+            transforms: { ...original.transforms },
+            effects: original.effects.map((e) => ({ ...e })),
+            animation: original.animation ? { ...original.animation } : undefined,
+            textStyle: { ...original.textStyle, content: secondText },
+            isSubtitle: original.isSubtitle,
+            subtitleWords: undefined,
+          };
+          track.clipIds.push(newId);
+          state.selectedClipIds = [newId];
+        });
+        return secondId;
+      },
+
+      applySubtitleStyleToAll: (stylePatch, transformPatch, animationPatch) =>
+        set((state) => {
+          const allTextClips = Object.values(state.clips).filter(
+            (c) => c.type === 'text' && (c.isSubtitle || c.name.startsWith('CC:'))
+          );
+          const targets =
+            allTextClips.length > 0
+              ? allTextClips
+              : Object.values(state.clips).filter((c) => c.type === 'text');
+
+          for (const clip of targets) {
+            const track = state.tracks[clip.trackId];
+            if (track?.isLocked) continue;
+            if (!clip.textStyle) {
+              clip.textStyle = { ...DEFAULT_TEXT_STYLE };
+            }
+            Object.assign(clip.textStyle, stylePatch);
+            if (transformPatch) {
+              Object.assign(clip.transforms, transformPatch);
+            }
+            if (animationPatch) {
+              if (!clip.animation) {
+                clip.animation = { ...DEFAULT_CLIP_ANIMATION };
+              }
+              Object.assign(clip.animation, animationPatch);
+            }
+          }
+        }),
 
       moveClip: (clipId, newTrackId, newStart) =>
         set((state) => {
@@ -659,11 +939,12 @@ export const useTimelineStore = create<TimelineState>()(
           if (!track || track.isLocked) return;
 
           const asset = state.assets[clip.assetId];
+          const speed = Math.max(0.01, clip.speed || 1);
           const hasMediaDuration =
             asset && (asset.kind === 'video' || asset.kind === 'audio') && asset.duration > 0;
 
           if (edge === 'left') {
-            const minStart = Math.max(0, clip.start - clip.offset);
+            const minStart = Math.max(0, clip.start - clip.offset / speed);
             const maxStart = clip.start + clip.duration - MIN_CLIP_DURATION;
             const clampedStart = Math.max(
               minStart,
@@ -671,13 +952,14 @@ export const useTimelineStore = create<TimelineState>()(
             );
             const delta = clampedStart - clip.start;
             clip.start = Number(clampedStart.toFixed(3));
-            clip.offset = Number(Math.max(0, clip.offset + delta).toFixed(3));
+            clip.offset = Number(Math.max(0, clip.offset + delta * speed).toFixed(3));
             clip.duration = Number(
               Math.max(MIN_CLIP_DURATION, clip.duration - delta).toFixed(3)
             );
           } else {
             const maxEnd = hasMediaDuration
-              ? clip.start + Math.max(MIN_CLIP_DURATION, asset.duration - clip.offset)
+              ? clip.start +
+              Math.max(MIN_CLIP_DURATION, (asset.duration - clip.offset) / speed)
               : Number.POSITIVE_INFINITY;
             const minEnd = clip.start + MIN_CLIP_DURATION;
             const clampedEnd = Math.max(minEnd, Math.min(maxEnd, targetTime));
@@ -686,6 +968,10 @@ export const useTimelineStore = create<TimelineState>()(
             );
           }
         }),
+
+      trimClipToPlayhead: (clipId, edge, playheadTime) => {
+        get().trimClip(clipId, edge, playheadTime);
+      },
 
       splitClipAtTime: (clipId, splitTime) => {
         let createdId: string | null = null;
@@ -712,18 +998,21 @@ export const useTimelineStore = create<TimelineState>()(
 
           const newClipId = createUid(`${clipId}_part`);
           createdId = newClipId;
+          const speed = original.speed || 1;
 
           state.clips[newClipId] = {
             ...original,
             id: newClipId,
             start: Number(splitTime.toFixed(3)),
             duration: secondDuration,
-            offset: Number((original.offset + firstDuration).toFixed(3)),
+            offset: Number((original.offset + firstDuration * speed).toFixed(3)),
             transforms: { ...original.transforms },
             effects: original.effects.map((e) => ({ ...e })),
             textStyle: original.textStyle ? { ...original.textStyle } : undefined,
+            subtitleWords: undefined,
           };
           original.duration = firstDuration;
+          original.subtitleWords = undefined;
 
           const idx = track.clipIds.indexOf(clipId);
           if (idx >= 0) {
@@ -793,6 +1082,221 @@ export const useTimelineStore = create<TimelineState>()(
           );
         }),
 
+      rippleDeleteClips: (clipIds) =>
+        set((state) => {
+          if (clipIds.length === 0) return;
+          const byTrack = new Map<string, Array<{ start: number; duration: number }>>();
+
+          for (const cid of clipIds) {
+            const clip = state.clips[cid];
+            if (!clip) continue;
+            const track = state.tracks[clip.trackId];
+            if (!track || track.isLocked) continue;
+            const list = byTrack.get(track.id) || [];
+            list.push({ start: clip.start, duration: clip.duration });
+            byTrack.set(track.id, list);
+
+            track.clipIds = track.clipIds.filter((id) => id !== cid);
+            delete state.clips[cid];
+          }
+
+          for (const [trackId, removedRanges] of byTrack.entries()) {
+            const track = state.tracks[trackId];
+            if (!track) continue;
+            removedRanges.sort((a, b) => b.start - a.start);
+            for (const removed of removedRanges) {
+              for (const remId of track.clipIds) {
+                const c = state.clips[remId];
+                if (c && c.start >= removed.start) {
+                  c.start = Math.max(
+                    0,
+                    Number((c.start - removed.duration).toFixed(3))
+                  );
+                }
+              }
+            }
+          }
+
+          state.selectedClipIds = state.selectedClipIds.filter(
+            (id) => Boolean(state.clips[id])
+          );
+        }),
+
+      closeTrackGaps: (trackId) =>
+        set((state) => {
+          const track = state.tracks[trackId];
+          if (!track || track.isLocked) return;
+          const ordered = track.clipIds
+            .map((id) => state.clips[id])
+            .filter((c): c is Clip => Boolean(c))
+            .sort((a, b) => a.start - b.start);
+
+          let cursor = 0;
+          for (const clip of ordered) {
+            clip.start = Number(cursor.toFixed(3));
+            cursor += clip.duration;
+          }
+        }),
+
+      detachAudioFromClip: (clipId) => {
+        const current = get();
+        const sourceClip = current.clips[clipId];
+        if (!sourceClip || sourceClip.type !== 'video') return null;
+
+        let audioTrackId = current.trackOrder.find((tid) => {
+          const tr = current.tracks[tid];
+          return tr && !tr.isLocked && tr.type === 'audio';
+        });
+        if (!audioTrackId) {
+          audioTrackId = current.addTrack('audio', 'Audio Terpisah');
+        }
+
+        let createdAudioId: string | null = null;
+        set((state) => {
+          const clip = state.clips[clipId];
+          if (!clip) return;
+          const srcTrack = state.tracks[clip.trackId];
+          const audTrack = state.tracks[audioTrackId!];
+          if (!audTrack || audTrack.isLocked || srcTrack?.isLocked) return;
+
+          const newId = createUid('aud');
+          createdAudioId = newId;
+          state.clips[newId] = {
+            id: newId,
+            trackId: audioTrackId!,
+            assetId: clip.assetId,
+            type: 'audio',
+            name: `Audio: ${clip.name}`,
+            start: clip.start,
+            duration: clip.duration,
+            offset: clip.offset,
+            speed: clip.speed || 1,
+            volume: clip.volume ?? 1,
+            fadeIn: clip.fadeIn ?? 0,
+            fadeOut: clip.fadeOut ?? 0,
+            transforms: { ...DEFAULT_CLIP_TRANSFORM },
+            effects: [],
+          };
+          clip.volume = 0;
+          audTrack.clipIds.push(newId);
+          state.selectedClipIds = [newId];
+        });
+        return createdAudioId;
+      },
+
+      autoDuckAudioTracks: (duckVolume = 0.22) => {
+        let updatedCount = 0;
+        set((state) => {
+          const speechWindows: Array<{ start: number; end: number }> = [];
+          for (const tid of state.trackOrder) {
+            const tr = state.tracks[tid];
+            if (!tr || tr.isMuted || tr.type !== 'video') continue;
+            for (const cid of tr.clipIds) {
+              const c = state.clips[cid];
+              if (c && (c.volume ?? 1) > 0.05) {
+                speechWindows.push({ start: c.start, end: c.start + c.duration });
+              }
+            }
+          }
+
+          for (const tid of state.trackOrder) {
+            const tr = state.tracks[tid];
+            if (!tr || tr.isLocked || tr.type !== 'audio') continue;
+            for (const cid of tr.clipIds) {
+              const c = state.clips[cid];
+              if (!c) continue;
+              const overlaps = speechWindows.some(
+                (w) => c.start < w.end && c.start + c.duration > w.start
+              );
+              if (overlaps || speechWindows.length === 0) {
+                c.volume = Number(Math.max(0.05, Math.min(1, duckVolume)).toFixed(2));
+                if ((c.fadeIn ?? 0) === 0) c.fadeIn = 0.4;
+                if ((c.fadeOut ?? 0) === 0) c.fadeOut = 0.6;
+                updatedCount++;
+              }
+            }
+          }
+        });
+        return updatedCount;
+      },
+
+      autoCutSilenceOnClip: (clipId, speechSegments) => {
+        let keptCount = 0;
+        set((state) => {
+          const original = state.clips[clipId];
+          if (!original || speechSegments.length === 0) return;
+          const track = state.tracks[original.trackId];
+          if (!track || track.isLocked) return;
+
+          const speed = original.speed || 1;
+          const validSegs = speechSegments
+            .map((s) => ({
+              start: Math.max(0, s.start),
+              end: Math.min(original.duration, s.end),
+            }))
+            .filter((s) => s.end - s.start >= MIN_CLIP_DURATION)
+            .sort((a, b) => a.start - b.start);
+
+          if (validSegs.length === 0) return;
+
+          const idx = track.clipIds.indexOf(clipId);
+          let timelineCursor = original.start;
+          const replacementIds: string[] = [];
+
+          validSegs.forEach((seg, segIdx) => {
+            const segDur = Number((seg.end - seg.start).toFixed(3));
+            const newId = segIdx === 0 ? clipId : createUid('cut');
+            replacementIds.push(newId);
+
+            state.clips[newId] = {
+              ...original,
+              id: newId,
+              name:
+                validSegs.length > 1
+                  ? `${original.name} #${segIdx + 1}`
+                  : original.name,
+              start: Number(timelineCursor.toFixed(3)),
+              duration: segDur,
+              offset: Number((original.offset + seg.start * speed).toFixed(3)),
+              transforms: { ...original.transforms },
+              effects: original.effects.map((e) => ({ ...e })),
+              animation: original.animation
+                ? { ...original.animation }
+                : undefined,
+              textStyle: original.textStyle
+                ? { ...original.textStyle }
+                : undefined,
+            };
+            timelineCursor += segDur;
+          });
+
+          const totalNewDur = timelineCursor - original.start;
+          const shiftDelta = original.duration - totalNewDur;
+          if (shiftDelta > 0.05) {
+            const originalEnd = original.start + original.duration;
+            for (const cid of track.clipIds) {
+              if (cid === clipId) continue;
+              const other = state.clips[cid];
+              if (other && other.start >= originalEnd - 0.01) {
+                other.start = Math.max(
+                  0,
+                  Number((other.start - shiftDelta).toFixed(3))
+                );
+              }
+            }
+          }
+
+          if (idx >= 0) {
+            track.clipIds.splice(idx, 1, ...replacementIds);
+          } else {
+            track.clipIds.push(...replacementIds);
+          }
+          state.selectedClipIds = replacementIds.slice(0, 1);
+          keptCount = replacementIds.length;
+        });
+        return keptCount;
+      },
+
       duplicateClip: (clipId) => {
         let createdId: string | null = null;
         set((state) => {
@@ -812,12 +1316,38 @@ export const useTimelineStore = create<TimelineState>()(
             effects: original.effects.map((e) => ({ ...e })),
             animation: original.animation ? { ...original.animation } : { ...DEFAULT_CLIP_ANIMATION },
             textStyle: original.textStyle ? { ...original.textStyle } : undefined,
+            subtitleWords: original.subtitleWords
+              ? original.subtitleWords.map((w) => ({ ...w }))
+              : undefined,
           };
           track.clipIds.push(newClipId);
           state.selectedClipIds = [newClipId];
         });
         return createdId;
       },
+
+      pasteClipStyle: (clipId, style) =>
+        set((state) => {
+          const clip = state.clips[clipId];
+          if (!clip) return;
+          const track = state.tracks[clip.trackId];
+          if (track?.isLocked) return;
+          if (style.filterPreset !== undefined) {
+            clip.filterPreset = style.filterPreset;
+          }
+          if (style.effects) {
+            clip.effects = style.effects.map((e) => ({ ...e }));
+          }
+          if (style.animation) {
+            clip.animation = { ...style.animation };
+          }
+          if (style.textStyle && clip.type === 'text') {
+            clip.textStyle = {
+              ...style.textStyle,
+              content: clip.textStyle?.content || DEFAULT_TEXT_STYLE.content,
+            };
+          }
+        }),
 
       selectClip: (clipId, multi = false) =>
         set((state) => {

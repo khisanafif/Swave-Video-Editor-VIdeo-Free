@@ -4,7 +4,10 @@ import {
   DEFAULT_TEXT_STYLE,
   type ProjectDocument,
 } from '@velocut/shared';
-import { buildFfmpegRenderPlan } from '../worker/ffmpegPlanner.js';
+import {
+  buildAssSubtitleDocument,
+  buildFfmpegRenderPlan,
+} from '../worker/ffmpegPlanner.js';
 
 function createSampleProject(): ProjectDocument {
   return {
@@ -164,6 +167,38 @@ describe('buildFfmpegRenderPlan', () => {
     });
 
     expect(plan.missingAssets).toEqual(['asset-v1', 'asset-a1']);
+  });
+
+  it('generates ASS subtitle documents and plans speed/volume/fade/ass filters cleanly', () => {
+    const project = createSampleProject();
+    project.canvasBackground = '#0f172a';
+    project.clips['c-vid'].speed = 1.5;
+    project.clips['c-aud'].volume = 0.25;
+    project.clips['c-aud'].fadeIn = 0.5;
+    project.clips['c-aud'].fadeOut = 0.5;
+
+    const assDoc = buildAssSubtitleDocument(project, [project.clips['c-txt']]);
+    expect(assDoc).toContain('PlayResX: 1920');
+    expect(assDoc).toContain('Style: Boxed');
+    expect(assDoc).toContain('Dialogue:');
+    expect(assDoc).toContain('\\1c&HFFFFFF&');
+    expect(assDoc).toContain('Hello: VeloCut');
+
+    const plan = buildFfmpegRenderPlan({
+      project,
+      encoder: 'libx264',
+      quality: 'high',
+      outputPath: '/tmp/out.mp4',
+      assFilePath: '/tmp/subs.ass',
+      resolveAssetPath: (id) =>
+        id === 'asset-v1' ? '/tmp/v1.mp4' : '/tmp/a1.mp3',
+    });
+
+    expect(plan.commandPreview).toContain('color=c=0x0f172a');
+    expect(plan.commandPreview).toContain('atempo=1.500');
+    expect(plan.commandPreview).toContain('volume=0.25');
+    expect(plan.commandPreview).toContain('afade=t=in');
+    expect(plan.commandPreview).toContain("ass='/tmp/subs.ass'");
   });
 });
 

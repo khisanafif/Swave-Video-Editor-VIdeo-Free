@@ -9,6 +9,7 @@ import { registerMediaRoutes } from './routes/media.js';
 import { registerNetworkRoutes } from './routes/network.js';
 import { registerProjectRoutes } from './routes/projects.js';
 import { registerRenderRoutes } from './routes/render.js';
+import { registerSubtitleRoutes } from './routes/subtitles.js';
 import { registerUploadRoutes } from './routes/upload.js';
 import { resolveSafeStoragePath } from './utils/pathSecurity.js';
 
@@ -105,6 +106,7 @@ export async function createServerApp(options: ServerAppOptions = {}): Promise<{
   registerMediaRoutes(app, db, storageDir);
   registerProjectRoutes(app, db);
   registerRenderRoutes(app, db, storageDir);
+  registerSubtitleRoutes(app, db, storageDir);
 
   // Serve built Frontend Web App (apps/web/dist) with SPA fallback so any device
   // on the WiFi/LAN can open http://<PC-IP>:3000 directly without needing Nginx.

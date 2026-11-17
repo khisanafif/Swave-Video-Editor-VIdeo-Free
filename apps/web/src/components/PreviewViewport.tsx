@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import {
+  Captions,
   ChevronLeft,
   ChevronRight,
   Grid,
@@ -7,16 +8,23 @@ import {
   Play,
   Repeat,
   SkipBack,
+  Sparkles,
+  Upload,
   Volume2,
   VolumeX,
 } from 'lucide-react';
 import { PRESET_RESOLUTIONS } from '@velocut/shared';
+import {
+  generateSyntheticDemoMedia,
+  probeAndRegisterMediaFile,
+} from '../engine/mediaProbe';
 import { mediaRuntime } from '../engine/mediaRuntime';
 import { usePlaybackStore } from '../stores/playbackStore';
 import {
   getTimelineDuration,
   useTimelineStore,
 } from '../stores/timelineStore';
+import { type SafeGuideMode, useUiStore } from '../stores/uiStore';
 import { formatTimecode } from '../utils/format';
 import { CanvasOverlayGizmo } from './CanvasOverlayGizmo';
 
@@ -37,8 +45,14 @@ function TimecodeReadout({ fps }: { fps: number }) {
 export function PreviewViewport() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const stageBoxRef = useRef<HTMLDivElement>(null);
-  const [showSafeGrid, setShowSafeGrid] = useState(false);
+  const quickImportRef = useRef<HTMLInputElement>(null);
   const [backendLabel, setBackendLabel] = useState<'webgl2' | 'canvas2d' | 'none'>('none');
+  const [isQuickBusy, setIsQuickBusy] = useState(false);
+
+  const experienceMode = useUiStore((s) => s.experienceMode);
+  const safeGuideMode = useUiStore((s) => s.safeGuideMode);
+  const setSafeGuideMode = useUiStore((s) => s.setSafeGuideMode);
+  const setActiveMediaCategory = useUiStore((s) => s.setActiveMediaCategory);
 
   const resolution = useTimelineStore((s) => s.resolution);
   const canvasBackground = useTimelineStore((s) => s.canvasBackground);
@@ -51,6 +65,7 @@ export function PreviewViewport() {
   const isLooping = usePlaybackStore((s) => s.isLooping);
   const isMuted = usePlaybackStore((s) => s.isMuted);
   const volume = usePlaybackStore((s) => s.volume);
+  const playbackRate = usePlaybackStore((s) => s.playbackRate);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -73,13 +88,57 @@ export function PreviewViewport() {
   const fps = resolution.fps || 30;
   const maxDur = getTimelineDuration(clips, 10);
 
+  const handleQuickImportFiles = async (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    setIsQuickBusy(true);
+    try {
+      for (const file of Array.from(files)) {
+        const asset = await probeAndRegisterMediaFile(file, file.name, file.type);
+        useTimelineStore.getState().registerAsset(asset);
+        useTimelineStore.getState().addClipFromAsset(asset.id);
+      }
+    } finally {
+      setIsQuickBusy(false);
+    }
+  };
+
+  const handleQuickDemo = async () => {
+    setIsQuickBusy(true);
+    try {
+      const { visualAsset, audioAsset } = await generateSyntheticDemoMedia();
+      const store = useTimelineStore.getState();
+      store.registerAsset(visualAsset);
+      store.registerAsset(audioAsset);
+      store.addClipFromAsset(visualAsset.id, 'track-1', 0);
+      store.addTextClip(
+        'VeloCut Hybrid-Edge Studio\nSubtitle Otomatis + 60 FPS',
+        0.4,
+        'track-2'
+      );
+      store.addClipFromAsset(audioAsset.id, 'track-3', 0);
+      usePlaybackStore.getState().seekTo(0);
+    } finally {
+      setIsQuickBusy(false);
+    }
+  };
+
+  const cycleSafeGuide = () => {
+    const order: SafeGuideMode[] = ['none', 'thirds', 'tiktok', 'youtube'];
+    const idx = order.indexOf(safeGuideMode);
+    setSafeGuideMode(order[(idx + 1) % order.length]);
+  };
+
   return (
     <main className="flex min-h-[195px] min-w-0 shrink-0 flex-col bg-[#09090c] max-lg:h-[34dvh] sm:max-lg:h-[38dvh] lg:min-h-0 lg:flex-1">
       {/* Stage Top Bar */}
       <div className="flex items-center justify-between border-b border-zinc-800/80 px-2.5 py-1.5 lg:px-4 lg:py-2">
         <div className="flex items-center gap-2">
           <span className="rounded bg-zinc-800/90 px-1.5 py-0.5 font-mono text-[10px] uppercase text-cyan-300">
-            {backendLabel === 'webgl2' ? 'WebGL2 GLSL' : 'Canvas2D'}
+            {experienceMode === 'pro'
+              ? backendLabel === 'webgl2'
+                ? 'WebGL2 GLSL'
+                : 'Canvas2D'
+              : 'Pratinjau'}
           </span>
           <span className="hidden text-xs text-zinc-400 sm:inline">
             {resolution.width} × {resolution.height} @ {fps}fps
@@ -110,15 +169,18 @@ export function PreviewViewport() {
 
           <button
             type="button"
-            onClick={() => setShowSafeGrid((v) => !v)}
-            className={`rounded p-1.5 transition-colors ${
-              showSafeGrid
+            onClick={cycleSafeGuide}
+            className={`inline-flex items-center gap-1 rounded px-2 py-1 text-[10px] font-medium transition-colors ${
+              safeGuideMode !== 'none'
                 ? 'bg-cyan-500/20 text-cyan-300'
                 : 'text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100'
             }`}
-            title="Toggle Safe Area Grid"
+            title="Ganti Panduan Bingkai / Zona Aman (Grid 3x3 / TikTok / YouTube)"
           >
             <Grid className="h-3.5 w-3.5" />
+            {safeGuideMode !== 'none' && (
+              <span className="hidden uppercase sm:inline">{safeGuideMode}</span>
+            )}
           </button>
         </div>
       </div>
@@ -155,20 +217,110 @@ export function PreviewViewport() {
             resolution={resolution}
           />
 
-          {showSafeGrid && (
+          {/* Visual Safe Area Guides */}
+          {safeGuideMode === 'thirds' && (
+            <div className="pointer-events-none absolute inset-0 grid grid-cols-3 grid-rows-3">
+              {Array.from({ length: 9 }).map((_, i) => (
+                <div key={i} className="border border-cyan-400/20" />
+              ))}
+            </div>
+          )}
+
+          {safeGuideMode === 'tiktok' && (
+            <div className="pointer-events-none absolute inset-0">
+              <div className="absolute top-6 right-2 bottom-20 w-10 rounded-lg border border-dashed border-rose-400/40 bg-rose-500/5" />
+              <div className="absolute right-14 bottom-3 left-3 h-16 rounded-lg border border-dashed border-amber-400/40 bg-amber-500/5" />
+              <span className="absolute top-2 left-2 rounded bg-black/70 px-1.5 py-0.5 text-[9px] font-semibold text-amber-300">
+                Zona Aman TikTok / Reels
+              </span>
+            </div>
+          )}
+
+          {safeGuideMode === 'youtube' && (
             <div className="pointer-events-none absolute inset-0 border-[10px] border-cyan-500/15">
               <div className="h-full w-full border border-dashed border-cyan-400/35" />
             </div>
           )}
 
+          {/* Friendly Quick-Start Card when timeline is empty */}
           {Object.keys(clips).length === 0 && (
-            <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center bg-zinc-950/60 px-3 text-center">
-              <p className="text-xs font-medium text-zinc-300 sm:text-sm">
-                Kanvas Pratinjau Kosong
+            <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-zinc-950/75 px-3 text-center backdrop-blur-[2px]">
+              <input
+                ref={quickImportRef}
+                type="file"
+                multiple
+                accept="video/*,audio/*,image/*"
+                className="hidden"
+                onChange={(e) => {
+                  void handleQuickImportFiles(e.target.files);
+                  e.target.value = '';
+                }}
+              />
+              <p className="text-xs font-bold text-white sm:text-sm">
+                Mulai Proyek Video Anda
               </p>
-              <p className="mt-0.5 text-[11px] text-zinc-500 sm:text-xs">
-                Ketuk &ldquo;Media&rdquo; atau &ldquo;Muat Demo&rdquo; untuk memulai
+              <p className="mt-0.5 hidden text-[11px] text-zinc-400 sm:block">
+                Impor video atau foto, tambahkan subtitle otomatis dalam 1 klik, lalu ekspor MP4 tanpa watermark.
               </p>
+
+              <div className="mt-2.5 flex flex-wrap items-center justify-center gap-1.5">
+                <button
+                  type="button"
+                  disabled={isQuickBusy}
+                  onClick={() => quickImportRef.current?.click()}
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-cyan-500 px-3 py-1.5 text-[11px] font-bold text-zinc-950 shadow-md hover:bg-cyan-400 disabled:opacity-50"
+                >
+                  <Upload className="h-3.5 w-3.5" />
+                  <span>{isQuickBusy ? 'Memuat...' : 'Impor Video / Foto'}</span>
+                </button>
+
+                <button
+                  type="button"
+                  disabled={isQuickBusy}
+                  onClick={() => void handleQuickDemo()}
+                  className="inline-flex items-center gap-1 rounded-lg border border-zinc-700 bg-zinc-900 px-2.5 py-1.5 text-[11px] font-semibold text-zinc-200 hover:border-cyan-400"
+                >
+                  <Sparkles className="h-3.5 w-3.5 text-cyan-400" />
+                  <span>Muat Demo</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setActiveMediaCategory('subtitle')}
+                  className="hidden items-center gap-1 rounded-lg border border-violet-500/40 bg-violet-500/15 px-2.5 py-1.5 text-[11px] font-semibold text-violet-200 hover:bg-violet-500/25 sm:inline-flex"
+                >
+                  <Captions className="h-3.5 w-3.5" />
+                  <span>Subtitle AI</span>
+                </button>
+              </div>
+
+              <div className="mt-2 hidden items-center gap-1.5 sm:flex">
+                <span className="text-[10px] text-zinc-500">Format cepat:</span>
+                {[
+                  { label: '16:9 YouTube', idx: 0 },
+                  { label: '9:16 TikTok', idx: 1 },
+                  { label: '1:1 Feed', idx: 2 },
+                ].map((fmt) => {
+                  const preset = PRESET_RESOLUTIONS[fmt.idx];
+                  const isCurrent =
+                    resolution.width === preset.width &&
+                    resolution.height === preset.height;
+                  return (
+                    <button
+                      key={fmt.label}
+                      type="button"
+                      onClick={() => useTimelineStore.getState().setResolution(preset)}
+                      className={`rounded border px-2 py-0.5 text-[10px] font-medium transition ${
+                        isCurrent
+                          ? 'border-cyan-400 bg-cyan-500/20 text-cyan-200'
+                          : 'border-zinc-800 bg-zinc-900 text-zinc-400 hover:text-zinc-200'
+                      }`}
+                    >
+                      {fmt.label}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           )}
         </div>
@@ -247,6 +399,23 @@ export function PreviewViewport() {
           >
             <Repeat className="h-3.5 w-3.5" />
           </button>
+
+          {experienceMode === 'pro' && (
+            <button
+              type="button"
+              onClick={() => {
+                const rates = [0.5, 1, 1.5, 2];
+                const idx = rates.indexOf(playbackRate);
+                usePlaybackStore
+                  .getState()
+                  .setPlaybackRate(rates[(idx + 1) % rates.length]);
+              }}
+              className="hidden rounded border border-zinc-800 bg-zinc-900 px-1.5 py-0.5 font-mono text-[10px] font-semibold text-cyan-300 hover:border-cyan-400 sm:inline-block"
+              title="Kecepatan Preview Shuttle (J / K / L)"
+            >
+              {playbackRate}x
+            </button>
+          )}
         </div>
 
         <div className="flex items-center gap-1.5">

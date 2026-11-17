@@ -3,13 +3,23 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { VideoEditorPage } from '../components/VideoEditorPage';
 import { usePlaybackStore } from '../stores/playbackStore';
 import { useTimelineStore } from '../stores/timelineStore';
+import { useUiStore } from '../stores/uiStore';
 import { generateQrMatrix } from '../utils/qrCode';
 
 describe('VideoEditorPage UI Integration (Desktop, Tablet, Android & Multi-Device Hub)', () => {
   beforeEach(() => {
+    localStorage.clear();
     useTimelineStore.getState().resetProject();
     useTimelineStore.temporal.getState().clear();
     usePlaybackStore.setState({ currentTime: 0, isPlaying: false });
+    useUiStore.setState({
+      experienceMode: 'beginner',
+      safeGuideMode: 'none',
+      activeMediaCategory: 'media',
+      clipboardStyle: null,
+      showExportModal: false,
+      showHelpModal: false,
+    });
 
     vi.stubGlobal(
       'fetch',
@@ -157,5 +167,50 @@ describe('VideoEditorPage UI Integration (Desktop, Tablet, Android & Multi-Devic
     expect(
       screen.getByText(/Animasi Masuk & Keluar \(CapCut\)/i)
     ).toBeInTheDocument();
+  });
+
+  it('supports Dual-Mode (Pemula vs Pro), Dedicated Subtitle AI Studio tab, Export Modal, and Help Shortcuts Modal', async () => {
+    render(<VideoEditorPage />);
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    // Starts in Pemula mode without technical clutter
+    expect(
+      screen.queryByTitle(/Diagnostik Runtime V-HESA/i)
+    ).not.toBeInTheDocument();
+
+    // Switch to Pro mode -> exposes Runtime Diagnostics & Pro tools
+    fireEvent.click(screen.getByRole('button', { name: /^Pro$/i }));
+    expect(useUiStore.getState().experienceMode).toBe('pro');
+    expect(
+      screen.getByTitle(/Diagnostik Runtime V-HESA/i)
+    ).toBeInTheDocument();
+
+    // Switch to Subtitle (CC) Studio tab
+    fireEvent.click(screen.getByTitle(/Kategori Subtitle/i));
+    expect(
+      screen.getByText(/Subtitle Otomatis \(AI Speech-to-Text\)/i)
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: /Generate Subtitle Otomatis/i })
+    ).toBeInTheDocument();
+
+    // Open Top-Bar Export Modal
+    fireEvent.click(screen.getByRole('button', { name: /Ekspor MP4/i }));
+    expect(
+      screen.getByRole('dialog', { name: /Ekspor Video Studio/i })
+    ).toBeInTheDocument();
+    expect(screen.getByText(/TikTok \/ Reels/i)).toBeInTheDocument();
+
+    // Open Help & Shortcuts Modal with '?' key
+    fireEvent.keyDown(window, { key: '?' });
+    expect(
+      screen.getByRole('dialog', { name: /Panduan dan Shortcut Studio/i })
+    ).toBeInTheDocument();
+    fireEvent.click(
+      screen.getByRole('button', { name: /Shortcut Keyboard \(Pro\)/i })
+    );
+    expect(screen.getByText(/Shift \+ Delete/i)).toBeInTheDocument();
   });
 });

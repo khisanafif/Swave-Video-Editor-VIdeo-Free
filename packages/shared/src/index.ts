@@ -43,6 +43,20 @@ export interface ClipAnimation {
   outDuration: number;
 }
 
+export interface SubtitleWord {
+  word: string;
+  start: number;
+  end: number;
+}
+
+export interface SubtitleCue {
+  id?: string;
+  start: number;
+  end: number;
+  text: string;
+  words?: SubtitleWord[];
+}
+
 export interface TextStyle {
   content: string;
   fontFamily: string;
@@ -54,6 +68,7 @@ export interface TextStyle {
   shadow: boolean;
   strokeColor?: string;
   strokeWidth?: number;
+  highlightColor?: string;
   presetId?: string;
 }
 
@@ -75,6 +90,8 @@ export interface Clip {
   transforms: ClipTransform;
   effects: ClipEffect[];
   textStyle?: TextStyle;
+  isSubtitle?: boolean;
+  subtitleWords?: SubtitleWord[];
 }
 
 export interface Track {
@@ -102,6 +119,7 @@ export interface MediaAsset {
   serverUrl?: string;
   uploadProgress?: number;
   waveform?: number[];
+  thumbnailUrl?: string;
 }
 
 export interface CanvasResolution {
@@ -177,9 +195,27 @@ export interface ServerCapabilities {
   ffmpegVersion: string | null;
   availableEncoders: ServerEncoderCapability[];
   preferredEncoder: ServerEncoderCapability | null;
+  whisperAvailable?: boolean;
+  whisperEngine?: string | null;
   maxChunkSizeBytes: number;
   recommendedChunkSizeBytes: number;
   storageDir: string;
+}
+
+export interface ServerTranscribeRequest {
+  assetId?: string;
+  audioBase64?: string;
+  language?: string;
+  provider?: 'auto' | 'local-whisper' | 'openai' | 'groq' | 'vad';
+  apiKey?: string;
+  model?: string;
+}
+
+export interface ServerTranscribeResponse {
+  engine: string;
+  language: string;
+  cues: SubtitleCue[];
+  warning?: string;
 }
 
 export interface NetworkEndpointInfo {

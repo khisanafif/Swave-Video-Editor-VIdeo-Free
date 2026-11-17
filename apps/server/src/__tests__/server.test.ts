@@ -293,5 +293,57 @@ describe('VeloCut Local Server API', () => {
     expect(finalJob.progress).toBe(100);
     expect(finalJob.outputUrl).toContain(`/media/renders/${jobId}.mp4`);
   }, 15000);
+
+  it('exposes subtitle transcription capabilities and detects speech bursts via server VAD', async () => {
+    const { app } = await createTestServer();
+
+    const capsRes = await app.inject({
+      method: 'GET',
+      url: '/api/subtitles/capabilities',
+    });
+    expect(capsRes.statusCode).toBe(200);
+    expect(Array.isArray(capsRes.json().providers)).toBe(true);
+
+    // Create a valid 2.5s 16kHz mono PCM WAV with speech burst from 0.4s..1.4s
+    const sampleRate = 16000;
+    const numSamples = Math.floor(sampleRate * 2.5);
+    const wav = Buffer.alloc(44 + numSamples * 2);
+    wav.write('RIFF', 0);
+    wav.writeUInt32LE(36 + numSamples * 2, 4);
+    wav.write('WAVE', 8);
+    wav.write('fmt ', 12);
+    wav.writeUInt32LE(16, 16);
+    wav.writeUInt16LE(1, 20);
+    wav.writeUInt16LE(1, 22);
+    wav.writeUInt32LE(sampleRate, 24);
+    wav.writeUInt32LE(sampleRate * 2, 28);
+    wav.writeUInt16LE(2, 32);
+    wav.writeUInt16LE(16, 34);
+    wav.write('data', 36);
+    wav.writeUInt32LE(numSamples * 2, 40);
+
+    for (let i = Math.floor(0.4 * sampleRate); i < Math.floor(1.4 * sampleRate); i++) {
+      const sample = Math.round(
+        0.5 * 32767 * Math.sin((2 * Math.PI * 220 * i) / sampleRate)
+      );
+      wav.writeInt16LE(sample, 44 + i * 2);
+    }
+
+    const sttRes = await app.inject({
+      method: 'POST',
+      url: '/api/subtitles/transcribe',
+      payload: {
+        audioBase64: wav.toString('base64'),
+        provider: 'vad',
+        language: 'id',
+      },
+    });
+    expect(sttRes.statusCode).toBe(200);
+    const body = sttRes.json();
+    expect(body.engine).toBe('server-vad');
+    expect(body.cues.length).toBeGreaterThanOrEqual(1);
+    expect(body.cues[0].start).toBeGreaterThanOrEqual(0.3);
+    expect(body.cues[0].end).toBeGreaterThan(body.cues[0].start);
+  });
 });
 

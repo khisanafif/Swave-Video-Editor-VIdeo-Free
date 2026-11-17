@@ -4,6 +4,9 @@ import {
   AlignLeft,
   AlignRight,
   Bold,
+  Check,
+  ClipboardPaste,
+  Copy,
   Cpu,
   Download,
   FlipHorizontal2,
@@ -14,6 +17,7 @@ import {
   Move,
   Palette,
   RotateCw,
+  Scissors,
   Server,
   SlidersHorizontal,
   Snowflake,
@@ -27,6 +31,10 @@ import {
   type RenderMode,
   type ServerCapabilities,
 } from '@velocut/shared';
+import {
+  detectSpeechSegmentsVad,
+  extractProjectAudioPcm16k,
+} from '../engine/audioExtractor';
 import {
   ANIMATION_PRESETS,
   CANVAS_BG_PRESETS,
@@ -50,6 +58,7 @@ import {
 } from '../engine/serverOffloadClient';
 import { usePlaybackStore } from '../stores/playbackStore';
 import { useTimelineStore } from '../stores/timelineStore';
+import { useUiStore } from '../stores/uiStore';
 
 const CAPCUT_TEXT_SWATCHES = [
   { label: 'Putih', color: '#ffffff' },
@@ -143,6 +152,12 @@ export function InspectorPanel({
   const [exportError, setExportError] = useState<string | null>(null);
   const [isExporting, setIsExporting] = useState(false);
   const [serverJob, setServerJob] = useState<RenderJobRecord | null>(null);
+  const [actionNotice, setActionNotice] = useState<string | null>(null);
+  const [isCuttingSilence, setIsCuttingSilence] = useState(false);
+
+  const experienceMode = useUiStore((s) => s.experienceMode);
+  const clipboardStyle = useUiStore((s) => s.clipboardStyle);
+  const setClipboardStyle = useUiStore((s) => s.setClipboardStyle);
 
   const selectedClipIds = useTimelineStore((s) => s.selectedClipIds);
   const clips = useTimelineStore((s) => s.clips);
@@ -173,6 +188,41 @@ export function InspectorPanel({
   const refreshCanvasPreview = () => {
     const pb = usePlaybackStore.getState();
     mediaRuntime.renderFrameAt(pb.currentTime, pb.isPlaying);
+  };
+
+  const showNotice = (msg: string) => {
+    setActionNotice(msg);
+    setTimeout(() => setActionNotice(null), 2600);
+  };
+
+  const handleAutoCutSilence = async () => {
+    if (!selectedClip) return;
+    setIsCuttingSilence(true);
+    try {
+      const doc = useTimelineStore.getState().exportProjectDocument();
+      const extracted = await extractProjectAudioPcm16k(doc, selectedClip.id);
+      const segs = detectSpeechSegmentsVad(extracted.pcm, extracted.sampleRate, {
+        minSpeechSec: 0.25,
+        minSilenceSec: 0.35,
+      });
+      if (segs.length === 0) {
+        showNotice('Tidak ada suara terdeteksi pada klip ini.');
+        return;
+      }
+      const kept = useTimelineStore
+        .getState()
+        .autoCutSilenceOnClip(selectedClip.id, segs);
+      showNotice(
+        kept > 0
+          ? `Bagian hening dipotong! Tersisa ${kept} klip bicara rapat.`
+          : 'Klip sudah bersih tanpa jeda panjang.'
+      );
+      refreshCanvasPreview();
+    } catch (err) {
+      showNotice((err as Error).message);
+    } finally {
+      setIsCuttingSilence(false);
+    }
   };
 
   // 9-Grid CapCut Quick Placement helper
@@ -684,6 +734,56 @@ export function InspectorPanel({
                       ))}
                     </div>
                   </div>
+
+                  {/* Karaoke Word Highlight + Apply Style to All Subtitles */}
+                  <div className="space-y-2 border-t border-violet-500/20 pt-2.5">
+                    <div className="flex items-center justify-between text-[10px]">
+                      <span className="text-zinc-300">Sorot Kata Aktif (Karaoke):</span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          useTimelineStore
+                            .getState()
+                            .updateClipTextStyle(selectedClip.id, {
+                              highlightColor: selectedClip.textStyle?.highlightColor
+                                ? undefined
+                                : '#facc15',
+                            });
+                          refreshCanvasPreview();
+                        }}
+                        className={`rounded border px-2 py-0.5 font-semibold ${
+                          selectedClip.textStyle.highlightColor
+                            ? 'border-yellow-400 bg-yellow-500/20 text-yellow-200'
+                            : 'border-zinc-700 bg-zinc-900 text-zinc-400'
+                        }`}
+                      >
+                        {selectedClip.textStyle.highlightColor ? 'Aktif' : 'Nonaktif'}
+                      </button>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const { content: _c, ...styleWithoutContent } =
+                          selectedClip.textStyle!;
+                        useTimelineStore.getState().applySubtitleStyleToAll(
+                          styleWithoutContent,
+                          {
+                            x: selectedClip.transforms.x,
+                            y: selectedClip.transforms.y,
+                            scale: selectedClip.transforms.scale,
+                          },
+                          selectedClip.animation
+                        );
+                        refreshCanvasPreview();
+                        showNotice('Gaya & posisi diterapkan ke semua subtitle!');
+                      }}
+                      className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-cyan-500/40 bg-cyan-500/15 py-1.5 text-[11px] font-bold text-cyan-200 hover:bg-cyan-500/25"
+                    >
+                      <Check className="h-3.5 w-3.5" />
+                      <span>Terapkan Gaya ke Semua Subtitle</span>
+                    </button>
+                  </div>
                 </div>
               )}
 
@@ -768,6 +868,88 @@ export function InspectorPanel({
                       <span>Freeze</span>
                     </button>
                   </div>
+                )}
+
+                {/* Smart Creator / Pro Actions: Auto-Cut Silence, Detach Audio, Copy/Paste Style */}
+                <div className="flex flex-wrap gap-1.5 pt-1">
+                  {selectedClip.type !== 'text' && (
+                    <button
+                      type="button"
+                      disabled={isCuttingSilence}
+                      onClick={() => void handleAutoCutSilence()}
+                      className="inline-flex flex-1 items-center justify-center gap-1 rounded border border-violet-500/40 bg-violet-500/15 px-2 py-1 text-[10px] font-semibold text-violet-200 hover:bg-violet-500/25 disabled:opacity-50"
+                      title="Potong jeda diam/hening otomatis dengan deteksi suara (VAD)"
+                    >
+                      <Scissors className="h-3 w-3" />
+                      <span>
+                        {isCuttingSilence ? 'Menganalisis...' : 'Potong Hening'}
+                      </span>
+                    </button>
+                  )}
+
+                  {selectedClip.type === 'video' && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const audId = useTimelineStore
+                          .getState()
+                          .detachAudioFromClip(selectedClip.id);
+                        if (audId) showNotice('Audio berhasil dipisah ke Track Audio!');
+                      }}
+                      className="inline-flex flex-1 items-center justify-center gap-1 rounded border border-emerald-500/40 bg-emerald-500/15 px-2 py-1 text-[10px] font-semibold text-emerald-200 hover:bg-emerald-500/25"
+                      title="Pisahkan suara video ke track audio terpisah (J-Cut / L-Cut)"
+                    >
+                      <Volume2 className="h-3 w-3" />
+                      <span>Pisah Audio</span>
+                    </button>
+                  )}
+
+                  {experienceMode === 'pro' && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const { content: _c, ...restText } =
+                            selectedClip.textStyle || ({} as NonNullable<typeof selectedClip.textStyle>);
+                          setClipboardStyle({
+                            filterPreset: selectedClip.filterPreset,
+                            effects: selectedClip.effects.map((e) => ({ ...e })),
+                            animation: selectedClip.animation
+                              ? { ...selectedClip.animation }
+                              : undefined,
+                            textStyle: selectedClip.textStyle ? restText : undefined,
+                          });
+                          showNotice('Gaya klip disalin!');
+                        }}
+                        className="inline-flex items-center gap-1 rounded border border-zinc-700 bg-zinc-950 px-2 py-1 text-[10px] text-zinc-300 hover:border-cyan-400"
+                      >
+                        <Copy className="h-3 w-3" />
+                        <span>Salin Gaya</span>
+                      </button>
+                      {clipboardStyle && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            useTimelineStore
+                              .getState()
+                              .pasteClipStyle(selectedClip.id, clipboardStyle);
+                            refreshCanvasPreview();
+                            showNotice('Gaya ditempel!');
+                          }}
+                          className="inline-flex items-center gap-1 rounded border border-cyan-500/40 bg-cyan-500/15 px-2 py-1 text-[10px] font-semibold text-cyan-200"
+                        >
+                          <ClipboardPaste className="h-3 w-3" />
+                          <span>Tempel</span>
+                        </button>
+                      )}
+                    </>
+                  )}
+                </div>
+
+                {actionNotice && (
+                  <p className="rounded bg-cyan-950/60 px-2 py-1 text-[10px] text-cyan-200">
+                    {actionNotice}
+                  </p>
                 )}
               </div>
 
@@ -946,91 +1128,15 @@ export function InspectorPanel({
                 </div>
               )}
 
-              {/* Transform Controls */}
-              {selectedClip.type !== 'audio' && (
-                <div className="space-y-3 border-b border-zinc-800 pb-4">
-                  <h3 className="text-[11px] font-semibold tracking-wider text-zinc-400 uppercase">
-                    Transformasi Presisi
-                  </h3>
-                  <SliderRow
-                    label="Posisi X"
-                    value={selectedClip.transforms.x}
-                    min={-960}
-                    max={960}
-                    step={1}
-                    suffix="px"
-                    onChange={(x) => {
-                      useTimelineStore
-                        .getState()
-                        .updateClipTransform(selectedClip.id, { x });
-                      refreshCanvasPreview();
-                    }}
-                  />
-                  <SliderRow
-                    label="Posisi Y"
-                    value={selectedClip.transforms.y}
-                    min={-540}
-                    max={540}
-                    step={1}
-                    suffix="px"
-                    onChange={(y) => {
-                      useTimelineStore
-                        .getState()
-                        .updateClipTransform(selectedClip.id, { y });
-                      refreshCanvasPreview();
-                    }}
-                  />
-                  <SliderRow
-                    label="Skala"
-                    value={selectedClip.transforms.scale}
-                    min={0.1}
-                    max={3}
-                    step={0.05}
-                    suffix="x"
-                    onChange={(scale) => {
-                      useTimelineStore
-                        .getState()
-                        .updateClipTransform(selectedClip.id, { scale });
-                      refreshCanvasPreview();
-                    }}
-                  />
-                  <SliderRow
-                    label="Rotasi"
-                    value={selectedClip.transforms.rotation}
-                    min={-180}
-                    max={180}
-                    step={1}
-                    suffix="°"
-                    onChange={(rotation) => {
-                      useTimelineStore
-                        .getState()
-                        .updateClipTransform(selectedClip.id, { rotation });
-                      refreshCanvasPreview();
-                    }}
-                  />
-                  <SliderRow
-                    label="Opasitas"
-                    value={selectedClip.transforms.opacity}
-                    min={0}
-                    max={1}
-                    step={0.02}
-                    onChange={(opacity) => {
-                      useTimelineStore
-                        .getState()
-                        .updateClipTransform(selectedClip.id, { opacity });
-                      refreshCanvasPreview();
-                    }}
-                  />
-                </div>
-              )}
-
-              {/* WebGL2 GLSL Color & Filter Shaders (For Video & Image Overlays) */}
+              {/* Filter Presets (Always Visible & Easy for All Users) */}
               {selectedClip.type !== 'audio' && selectedClip.type !== 'text' && (
-                <div className="space-y-3">
+                <div className="space-y-2.5 border-b border-zinc-800 pb-4">
                   <div className="flex items-center gap-1.5">
                     <Sparkles className="h-3.5 w-3.5 text-cyan-400" />
-                    <h3 className="text-[11px] font-semibold tracking-wider text-zinc-400 uppercase">
-                      Filter LUT & WebGL2 Shaders
+                    <h3 className="text-[11px] font-semibold tracking-wider text-zinc-300 uppercase">
+                      {experienceMode === 'pro'
+                        ? 'Filter LUT & WebGL2 Shaders'
+                        : 'Preset Filter Warna'}
                     </h3>
                   </div>
 
@@ -1059,125 +1165,215 @@ export function InspectorPanel({
                       </button>
                     ))}
                   </div>
-
-                  <SliderRow
-                    label="Brightness"
-                    value={getEffect('brightness', 0)}
-                    min={-0.6}
-                    max={0.6}
-                    step={0.02}
-                    onChange={(val) => {
-                      useTimelineStore
-                        .getState()
-                        .setClipEffect(selectedClip.id, 'brightness', val);
-                      refreshCanvasPreview();
-                    }}
-                  />
-                  <SliderRow
-                    label="Contrast"
-                    value={getEffect('contrast', 1)}
-                    min={0.2}
-                    max={2}
-                    step={0.02}
-                    onChange={(val) => {
-                      useTimelineStore
-                        .getState()
-                        .setClipEffect(selectedClip.id, 'contrast', val);
-                      refreshCanvasPreview();
-                    }}
-                  />
-                  <SliderRow
-                    label="Saturation"
-                    value={getEffect('saturation', 1)}
-                    min={0}
-                    max={2}
-                    step={0.02}
-                    onChange={(val) => {
-                      useTimelineStore
-                        .getState()
-                        .setClipEffect(selectedClip.id, 'saturation', val);
-                      refreshCanvasPreview();
-                    }}
-                  />
-                  <SliderRow
-                    label="Grayscale"
-                    value={getEffect('grayscale', 0)}
-                    min={0}
-                    max={1}
-                    step={0.05}
-                    onChange={(val) => {
-                      useTimelineStore
-                        .getState()
-                        .setClipEffect(selectedClip.id, 'grayscale', val);
-                      refreshCanvasPreview();
-                    }}
-                  />
-                  <SliderRow
-                    label="Sepia Vintage"
-                    value={getEffect('sepia', 0)}
-                    min={0}
-                    max={1}
-                    step={0.05}
-                    onChange={(val) => {
-                      useTimelineStore
-                        .getState()
-                        .setClipEffect(selectedClip.id, 'sepia', val);
-                      refreshCanvasPreview();
-                    }}
-                  />
-                  <SliderRow
-                    label="Vignette"
-                    value={getEffect('vignette', 0)}
-                    min={0}
-                    max={1}
-                    step={0.05}
-                    onChange={(val) => {
-                      useTimelineStore
-                        .getState()
-                        .setClipEffect(selectedClip.id, 'vignette', val);
-                      refreshCanvasPreview();
-                    }}
-                  />
-                  <SliderRow
-                    label="RGB Glitch (Chromatic)"
-                    value={getEffect('chromab', 0)}
-                    min={0}
-                    max={1}
-                    step={0.05}
-                    onChange={(val) => {
-                      useTimelineStore
-                        .getState()
-                        .setClipEffect(selectedClip.id, 'chromab', val);
-                      refreshCanvasPreview();
-                    }}
-                  />
-                  <SliderRow
-                    label="Blur Halus"
-                    value={getEffect('blur', 0)}
-                    min={0}
-                    max={1}
-                    step={0.05}
-                    onChange={(val) => {
-                      useTimelineStore
-                        .getState()
-                        .setClipEffect(selectedClip.id, 'blur', val);
-                      refreshCanvasPreview();
-                    }}
-                  />
-                  <SliderRow
-                    label="Mosaic Pixelate"
-                    value={getEffect('pixelate', 0)}
-                    min={0}
-                    max={1}
-                    step={0.05}
-                    onChange={(val) => {
-                      useTimelineStore
-                        .getState()
-                        .setClipEffect(selectedClip.id, 'pixelate', val);
-                      refreshCanvasPreview();
-                    }}
-                  />
                 </div>
+              )}
+
+              {/* Precision Transform & Shader Controls (Expanded in Pro, Collapsible in Beginner) */}
+              {selectedClip.type !== 'audio' && (
+                <details
+                  open={experienceMode === 'pro'}
+                  className="rounded-lg border border-zinc-800/80 bg-zinc-900/30 p-2.5"
+                >
+                  <summary className="cursor-pointer text-[11px] font-semibold text-zinc-300 select-none">
+                    {experienceMode === 'pro'
+                      ? 'Transformasi Presisi & Color Grading'
+                      : 'Pengaturan Lanjutan (Posisi, Opasitas, & Warna)'}
+                  </summary>
+
+                  <div className="mt-3 space-y-3">
+                    <SliderRow
+                      label="Posisi X"
+                      value={selectedClip.transforms.x}
+                      min={-960}
+                      max={960}
+                      step={1}
+                      suffix="px"
+                      onChange={(x) => {
+                        useTimelineStore
+                          .getState()
+                          .updateClipTransform(selectedClip.id, { x });
+                        refreshCanvasPreview();
+                      }}
+                    />
+                    <SliderRow
+                      label="Posisi Y"
+                      value={selectedClip.transforms.y}
+                      min={-540}
+                      max={540}
+                      step={1}
+                      suffix="px"
+                      onChange={(y) => {
+                        useTimelineStore
+                          .getState()
+                          .updateClipTransform(selectedClip.id, { y });
+                        refreshCanvasPreview();
+                      }}
+                    />
+                    <SliderRow
+                      label="Skala"
+                      value={selectedClip.transforms.scale}
+                      min={0.1}
+                      max={5}
+                      step={0.05}
+                      suffix="x"
+                      onChange={(scale) => {
+                        useTimelineStore
+                          .getState()
+                          .updateClipTransform(selectedClip.id, { scale });
+                        refreshCanvasPreview();
+                      }}
+                    />
+                    <SliderRow
+                      label="Rotasi"
+                      value={selectedClip.transforms.rotation}
+                      min={-180}
+                      max={180}
+                      step={1}
+                      suffix="°"
+                      onChange={(rotation) => {
+                        useTimelineStore
+                          .getState()
+                          .updateClipTransform(selectedClip.id, { rotation });
+                        refreshCanvasPreview();
+                      }}
+                    />
+                    <SliderRow
+                      label="Opasitas"
+                      value={selectedClip.transforms.opacity}
+                      min={0}
+                      max={1}
+                      step={0.02}
+                      onChange={(opacity) => {
+                        useTimelineStore
+                          .getState()
+                          .updateClipTransform(selectedClip.id, { opacity });
+                        refreshCanvasPreview();
+                      }}
+                    />
+
+                    {selectedClip.type !== 'text' && (
+                      <div className="space-y-3 border-t border-zinc-800 pt-3">
+                        <SliderRow
+                          label="Brightness"
+                          value={getEffect('brightness', 0)}
+                          min={-0.6}
+                          max={0.6}
+                          step={0.02}
+                          onChange={(val) => {
+                            useTimelineStore
+                              .getState()
+                              .setClipEffect(selectedClip.id, 'brightness', val);
+                            refreshCanvasPreview();
+                          }}
+                        />
+                        <SliderRow
+                          label="Contrast"
+                          value={getEffect('contrast', 1)}
+                          min={0.2}
+                          max={2}
+                          step={0.02}
+                          onChange={(val) => {
+                            useTimelineStore
+                              .getState()
+                              .setClipEffect(selectedClip.id, 'contrast', val);
+                            refreshCanvasPreview();
+                          }}
+                        />
+                        <SliderRow
+                          label="Saturation"
+                          value={getEffect('saturation', 1)}
+                          min={0}
+                          max={2}
+                          step={0.02}
+                          onChange={(val) => {
+                            useTimelineStore
+                              .getState()
+                              .setClipEffect(selectedClip.id, 'saturation', val);
+                            refreshCanvasPreview();
+                          }}
+                        />
+                        <SliderRow
+                          label="Grayscale"
+                          value={getEffect('grayscale', 0)}
+                          min={0}
+                          max={1}
+                          step={0.05}
+                          onChange={(val) => {
+                            useTimelineStore
+                              .getState()
+                              .setClipEffect(selectedClip.id, 'grayscale', val);
+                            refreshCanvasPreview();
+                          }}
+                        />
+                        <SliderRow
+                          label="Sepia Vintage"
+                          value={getEffect('sepia', 0)}
+                          min={0}
+                          max={1}
+                          step={0.05}
+                          onChange={(val) => {
+                            useTimelineStore
+                              .getState()
+                              .setClipEffect(selectedClip.id, 'sepia', val);
+                            refreshCanvasPreview();
+                          }}
+                        />
+                        <SliderRow
+                          label="Vignette"
+                          value={getEffect('vignette', 0)}
+                          min={0}
+                          max={1}
+                          step={0.05}
+                          onChange={(val) => {
+                            useTimelineStore
+                              .getState()
+                              .setClipEffect(selectedClip.id, 'vignette', val);
+                            refreshCanvasPreview();
+                          }}
+                        />
+                        <SliderRow
+                          label="RGB Glitch (Chromatic)"
+                          value={getEffect('chromab', 0)}
+                          min={0}
+                          max={1}
+                          step={0.05}
+                          onChange={(val) => {
+                            useTimelineStore
+                              .getState()
+                              .setClipEffect(selectedClip.id, 'chromab', val);
+                            refreshCanvasPreview();
+                          }}
+                        />
+                        <SliderRow
+                          label="Blur Halus"
+                          value={getEffect('blur', 0)}
+                          min={0}
+                          max={1}
+                          step={0.05}
+                          onChange={(val) => {
+                            useTimelineStore
+                              .getState()
+                              .setClipEffect(selectedClip.id, 'blur', val);
+                            refreshCanvasPreview();
+                          }}
+                        />
+                        <SliderRow
+                          label="Mosaic Pixelate"
+                          value={getEffect('pixelate', 0)}
+                          min={0}
+                          max={1}
+                          step={0.05}
+                          onChange={(val) => {
+                            useTimelineStore
+                              .getState()
+                              .setClipEffect(selectedClip.id, 'pixelate', val);
+                            refreshCanvasPreview();
+                          }}
+                        />
+                      </div>
+                    )}
+                  </div>
+                </details>
               )}
             </div>
           )

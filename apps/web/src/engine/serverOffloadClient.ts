@@ -11,6 +11,8 @@ import {
   type ServerCapabilities,
   type ServerEncoderCapability,
   type ServerNetworkInfo,
+  type ServerTranscribeRequest,
+  type ServerTranscribeResponse,
 } from '@velocut/shared';
 
 const SERVER_URL_STORAGE_KEY = 'velocut_server_base_url';
@@ -262,4 +264,39 @@ export async function fetchRenderJobStatus(
     job.outputUrl = resolveServerUrl(job.outputUrl);
   }
   return job;
+}
+
+export async function fetchSubtitleCapabilities(): Promise<{
+  ffmpegAvailable: boolean;
+  whisperAvailable: boolean;
+  whisperEngine: string | null;
+  providers: string[];
+} | null> {
+  try {
+    const res = await fetch(resolveServerUrl('/api/subtitles/capabilities'));
+    if (!res.ok) return null;
+    return (await res.json()) as {
+      ffmpegAvailable: boolean;
+      whisperAvailable: boolean;
+      whisperEngine: string | null;
+      providers: string[];
+    };
+  } catch {
+    return null;
+  }
+}
+
+export async function transcribeOnServer(
+  req: ServerTranscribeRequest
+): Promise<ServerTranscribeResponse> {
+  const res = await fetch(resolveServerUrl('/api/subtitles/transcribe'), {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(req),
+  });
+  if (!res.ok) {
+    const errText = await res.text();
+    throw new Error(`Transkripsi server gagal (${res.status}): ${errText}`);
+  }
+  return (await res.json()) as ServerTranscribeResponse;
 }

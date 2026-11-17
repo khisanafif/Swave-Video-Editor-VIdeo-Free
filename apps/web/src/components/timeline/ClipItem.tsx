@@ -219,6 +219,11 @@ export function ClipItem({ clip, isLocked }: ClipItemProps) {
       {/* Header */}
       <div className="relative z-10 flex items-center gap-1.5 px-2 pt-1 text-[11px] font-medium text-zinc-100">
         <Icon className={`h-3 w-3 shrink-0 ${theme.accent}`} />
+        {clip.isSubtitle && (
+          <span className="shrink-0 rounded bg-yellow-400/25 px-1 font-mono text-[9px] font-extrabold text-yellow-200">
+            CC
+          </span>
+        )}
         <span className="truncate">{clip.name}</span>
         {clip.speed && Math.abs(clip.speed - 1) > 0.02 && (
           <span className="shrink-0 rounded bg-cyan-500/25 px-1 py-0.2 font-mono text-[9px] font-bold text-cyan-200">
@@ -249,6 +254,14 @@ export function ClipItem({ clip, isLocked }: ClipItemProps) {
             />
           ))}
         </div>
+      ) : asset?.thumbnailUrl ? (
+        <div
+          className="pointer-events-none mx-1 mb-1 h-4 rounded-xs bg-repeat-x opacity-60"
+          style={{
+            backgroundImage: `url(${asset.thumbnailUrl})`,
+            backgroundSize: 'auto 100%',
+          }}
+        />
       ) : (
         <div className="pointer-events-none px-2 pb-1 text-[10px] text-zinc-400/80 truncate">
           {clip.type === 'text'

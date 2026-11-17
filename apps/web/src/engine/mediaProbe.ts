@@ -50,6 +50,28 @@ export async function extractWaveformPeaks(
   }
 }
 
+function captureThumbnailDataUrl(
+  source: HTMLVideoElement | HTMLImageElement,
+  srcW: number,
+  srcH: number
+): string | undefined {
+  try {
+    if (typeof document === 'undefined' || srcW <= 0 || srcH <= 0) return undefined;
+    const canvas = document.createElement('canvas');
+    const maxW = 160;
+    const maxH = 90;
+    const scale = Math.min(maxW / srcW, maxH / srcH, 1);
+    canvas.width = Math.max(16, Math.round(srcW * scale));
+    canvas.height = Math.max(16, Math.round(srcH * scale));
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return undefined;
+    ctx.drawImage(source, 0, 0, canvas.width, canvas.height);
+    return canvas.toDataURL('image/jpeg', 0.65);
+  } catch {
+    return undefined;
+  }
+}
+
 export async function probeAndRegisterMediaFile(
   file: File | Blob,
   name: string,
@@ -71,29 +93,48 @@ export async function probeAndRegisterMediaFile(
   let width = 1280;
   let height = 720;
   let hasAudio = kind === 'audio';
+  let thumbnailUrl: string | undefined;
 
   if (kind === 'video') {
     const meta = await new Promise<{
       duration: number;
       width: number;
       height: number;
+      thumbnailUrl?: string;
     }>((resolve) => {
       const video = document.createElement('video');
       video.preload = 'metadata';
       video.muted = true;
+      video.playsInline = true;
       video.src = objectUrl;
-      video.onloadedmetadata = () => {
+      let settled = false;
+      const finish = (thumb?: string) => {
+        if (settled) return;
+        settled = true;
         resolve({
-          duration: Number.isFinite(video.duration) && video.duration > 0 ? video.duration : 5,
+          duration:
+            Number.isFinite(video.duration) && video.duration > 0
+              ? video.duration
+              : 5,
           width: video.videoWidth || 1280,
           height: video.videoHeight || 720,
+          thumbnailUrl: thumb,
         });
       };
-      video.onerror = () => resolve({ duration: 5, width: 1280, height: 720 });
+      video.onloadeddata = () => {
+        const w = video.videoWidth || 1280;
+        const h = video.videoHeight || 720;
+        finish(captureThumbnailDataUrl(video, w, h));
+      };
+      video.onloadedmetadata = () => {
+        setTimeout(() => finish(), 350);
+      };
+      video.onerror = () => finish();
     });
     duration = meta.duration;
     width = meta.width;
     height = meta.height;
+    thumbnailUrl = meta.thumbnailUrl;
     hasAudio = true;
   } else if (kind === 'audio') {
     duration = await new Promise<number>((resolve) => {
@@ -106,14 +147,27 @@ export async function probeAndRegisterMediaFile(
       audio.onerror = () => resolve(5);
     });
   } else if (kind === 'image') {
-    const dims = await new Promise<{ width: number; height: number }>((resolve) => {
+    const dims = await new Promise<{
+      width: number;
+      height: number;
+      thumbnailUrl?: string;
+    }>((resolve) => {
       const img = new Image();
       img.src = objectUrl;
-      img.onload = () => resolve({ width: img.naturalWidth || 1280, height: img.naturalHeight || 720 });
+      img.onload = () => {
+        const w = img.naturalWidth || 1280;
+        const h = img.naturalHeight || 720;
+        resolve({
+          width: w,
+          height: h,
+          thumbnailUrl: captureThumbnailDataUrl(img, w, h),
+        });
+      };
       img.onerror = () => resolve({ width: 1280, height: 720 });
     });
     width = dims.width;
     height = dims.height;
+    thumbnailUrl = dims.thumbnailUrl;
     hasAudio = false;
   }
 
@@ -136,6 +190,7 @@ export async function probeAndRegisterMediaFile(
     source: 'local',
     opfsPath,
     waveform,
+    thumbnailUrl,
   };
 }
 

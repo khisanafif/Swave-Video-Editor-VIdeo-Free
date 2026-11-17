@@ -1,4 +1,5 @@
 import {
+  AlignHorizontalSpaceAround,
   Copy,
   FlipHorizontal2,
   Lock,
@@ -12,6 +13,7 @@ import {
   Undo2,
   Volume2,
   VolumeX,
+  X,
   ZoomIn,
   ZoomOut,
 } from 'lucide-react';
@@ -21,6 +23,7 @@ import {
   getTimelineDuration,
   useTimelineStore,
 } from '../../stores/timelineStore';
+import { useUiStore } from '../../stores/uiStore';
 import { ClipItem } from './ClipItem';
 import { Playhead } from './Playhead';
 import { TimeRuler } from './TimeRuler';
@@ -28,6 +31,7 @@ import { TimeRuler } from './TimeRuler';
 const TRACK_ROW_HEIGHT = 54;
 
 export function TimelineContainer() {
+  const experienceMode = useUiStore((s) => s.experienceMode);
   const tracks = useTimelineStore((s) => s.tracks);
   const trackOrder = useTimelineStore((s) => s.trackOrder);
   const clips = useTimelineStore((s) => s.clips);
@@ -49,8 +53,8 @@ export function TimelineContainer() {
       state.selectedClipIds.length > 0
         ? state.selectedClipIds
         : Object.values(state.clips)
-            .filter((c) => playhead > c.start && playhead < c.start + c.duration)
-            .map((c) => c.id);
+          .filter((c) => playhead > c.start && playhead < c.start + c.duration)
+          .map((c) => c.id);
 
     for (const cid of targetIds) {
       state.splitClipAtTime(cid, playhead);
@@ -96,6 +100,44 @@ export function TimelineContainer() {
           >
             <Scissors className="h-3.5 w-3.5 text-cyan-400" />
             <span>Split</span>
+          </button>
+
+          <button
+            type="button"
+            disabled={selectedClipIds.length !== 1}
+            onClick={() =>
+              selectedClipIds[0] &&
+              useTimelineStore
+                .getState()
+                .trimClipToPlayhead(
+                  selectedClipIds[0],
+                  'left',
+                  usePlaybackStore.getState().currentTime
+                )
+            }
+            className="hidden items-center gap-0.5 rounded px-1.5 py-1 font-mono text-[11px] text-zinc-200 hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-35 sm:inline-flex"
+            title="Pangkas Awal Klip ke Playhead ([)"
+          >
+            <span>[ Trim</span>
+          </button>
+
+          <button
+            type="button"
+            disabled={selectedClipIds.length !== 1}
+            onClick={() =>
+              selectedClipIds[0] &&
+              useTimelineStore
+                .getState()
+                .trimClipToPlayhead(
+                  selectedClipIds[0],
+                  'right',
+                  usePlaybackStore.getState().currentTime
+                )
+            }
+            className="hidden items-center gap-0.5 rounded px-1.5 py-1 font-mono text-[11px] text-zinc-200 hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-35 sm:inline-flex"
+            title="Pangkas Akhir Klip ke Playhead (])"
+          >
+            <span>Trim ]</span>
           </button>
 
           <button
@@ -158,16 +200,44 @@ export function TimelineContainer() {
             <span className="hidden sm:inline">Hapus</span>
           </button>
 
+          <button
+            type="button"
+            disabled={selectedClipIds.length === 0}
+            onClick={() =>
+              useTimelineStore.getState().rippleDeleteClips(selectedClipIds)
+            }
+            className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs text-amber-300 hover:bg-amber-950/50 active:bg-amber-900/50 disabled:cursor-not-allowed disabled:opacity-35"
+            title="Hapus & Rapatkan celah otomatis (Shift+Delete)"
+          >
+            <AlignHorizontalSpaceAround className="h-3.5 w-3.5" />
+            <span className="hidden md:inline">Rapatkan</span>
+          </button>
+
+          {experienceMode === 'pro' && selectedClipIds.length === 1 && (
+            <button
+              type="button"
+              onClick={() => {
+                const c = clips[selectedClipIds[0]];
+                if (c) {
+                  useTimelineStore.getState().closeTrackGaps(c.trackId);
+                }
+              }}
+              className="hidden items-center gap-1 rounded px-2 py-1 text-xs text-zinc-200 hover:bg-zinc-800 lg:inline-flex"
+              title="Tutup semua celah kosong di track klip terpilih"
+            >
+              <span>Tutup Celah</span>
+            </button>
+          )}
+
           <div className="mx-1 h-4 w-px bg-zinc-800" />
 
           <button
             type="button"
             onClick={() => useTimelineStore.getState().toggleSnap()}
-            className={`inline-flex items-center gap-1 rounded px-2 py-1 text-xs transition-colors ${
-              snapEnabled
-                ? 'bg-cyan-500/20 text-cyan-300'
-                : 'text-zinc-400 hover:bg-zinc-800'
-            }`}
+            className={`inline-flex items-center gap-1 rounded px-2 py-1 text-xs transition-colors ${snapEnabled
+              ? 'bg-cyan-500/20 text-cyan-300'
+              : 'text-zinc-400 hover:bg-zinc-800'
+              }`}
             title="Toggle Magnetic Snap"
           >
             <Magnet className="h-3.5 w-3.5" />
@@ -259,8 +329,8 @@ export function TimelineContainer() {
                 track.type === 'audio'
                   ? 'bg-emerald-400'
                   : track.type === 'text'
-                  ? 'bg-violet-400'
-                  : 'bg-sky-400';
+                    ? 'bg-violet-400'
+                    : 'bg-sky-400';
 
               return (
                 <div
@@ -270,7 +340,26 @@ export function TimelineContainer() {
                 >
                   <div className="flex min-w-0 items-center gap-1.5">
                     <span className={`h-2.5 w-1 shrink-0 rounded-full ${badgeColor}`} />
-                    <span className="truncate text-[11px] font-medium text-zinc-200 lg:text-xs">
+                    <span
+                      onDoubleClick={() => {
+                        if (experienceMode !== 'pro') return;
+                        const nextName = window.prompt(
+                          'Ubah nama track:',
+                          track.name
+                        );
+                        if (nextName) {
+                          useTimelineStore
+                            .getState()
+                            .renameTrack(track.id, nextName);
+                        }
+                      }}
+                      title={
+                        experienceMode === 'pro'
+                          ? `${track.name} (Klik ganda untuk ganti nama)`
+                          : track.name
+                      }
+                      className="truncate text-[11px] font-medium text-zinc-200 lg:text-xs"
+                    >
                       {track.name}
                     </span>
                   </div>
@@ -280,11 +369,10 @@ export function TimelineContainer() {
                       onClick={() =>
                         useTimelineStore.getState().toggleTrackMute(track.id)
                       }
-                      className={`rounded p-1 ${
-                        track.isMuted
-                          ? 'bg-amber-500/20 text-amber-300'
-                          : 'text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200'
-                      }`}
+                      className={`rounded p-1 ${track.isMuted
+                        ? 'bg-amber-500/20 text-amber-300'
+                        : 'text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200'
+                        }`}
                       title={track.isMuted ? 'Unmute track' : 'Mute track'}
                     >
                       {track.isMuted ? (
@@ -298,11 +386,10 @@ export function TimelineContainer() {
                       onClick={() =>
                         useTimelineStore.getState().toggleTrackLock(track.id)
                       }
-                      className={`rounded p-1 ${
-                        track.isLocked
-                          ? 'bg-rose-500/20 text-rose-300'
-                          : 'text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200'
-                      }`}
+                      className={`rounded p-1 ${track.isLocked
+                        ? 'bg-rose-500/20 text-rose-300'
+                        : 'text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200'
+                        }`}
                       title={track.isLocked ? 'Unlock track' : 'Lock track'}
                     >
                       {track.isLocked ? (
@@ -311,6 +398,18 @@ export function TimelineContainer() {
                         <Unlock className="h-3 w-3 lg:h-3.5 lg:w-3.5" />
                       )}
                     </button>
+                    {trackOrder.length > 1 && !track.isLocked && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          useTimelineStore.getState().deleteTrack(track.id)
+                        }
+                        className="inline-flex rounded p-1 text-zinc-500 hover:bg-zinc-800 hover:text-rose-400"
+                        title="Hapus track"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    )}
                   </div>
                 </div>
               );
@@ -349,9 +448,8 @@ export function TimelineContainer() {
                         useTimelineStore.getState().clearSelection();
                       }
                     }}
-                    className={`relative border-b border-zinc-800/70 ${
-                      track.isMuted ? 'bg-zinc-950/80 opacity-60' : 'bg-zinc-900/20'
-                    }`}
+                    className={`relative border-b border-zinc-800/70 ${track.isMuted ? 'bg-zinc-950/80 opacity-60' : 'bg-zinc-900/20'
+                      }`}
                   >
                     {track.clipIds.map((cid) => {
                       const clip = clips[cid];

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import {
+  Captions,
   CloudUpload,
   CheckCircle2,
   Film,
@@ -37,24 +38,26 @@ import {
 } from '../engine/serverOffloadClient';
 import { usePlaybackStore } from '../stores/playbackStore';
 import { useTimelineStore } from '../stores/timelineStore';
+import { useUiStore, type MediaBinCategory } from '../stores/uiStore';
 import { formatBytes } from '../utils/format';
+import { SubtitleStudioTab } from './SubtitleStudioTab';
 
 interface MediaBinPanelProps {
   mode?: 'sidebar' | 'sheet';
   onClipAdded?: () => void;
 }
 
-type CreativeCategory = 'media' | 'audio' | 'text' | 'sticker' | 'effects';
-
 export function MediaBinPanel({
   mode = 'sidebar',
   onClipAdded,
 }: MediaBinPanelProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [activeCategory, setActiveCategory] = useState<CreativeCategory>('media');
+  const activeCategory = useUiStore((s) => s.activeMediaCategory);
+  const setActiveCategory = useUiStore((s) => s.setActiveMediaCategory);
   const [isImporting, setIsImporting] = useState(false);
   const [isGeneratingDemo, setIsGeneratingDemo] = useState(false);
   const [busySfxId, setBusySfxId] = useState<string | null>(null);
+  const [duckFeedback, setDuckFeedback] = useState<string | null>(null);
   const [captionScript, setCaptionScript] = useState(
     'Halo semuanya! Selamat datang di VeloCut Studio.\nEdit video gaya CapCut 100% gratis tanpa watermark!'
   );
@@ -234,7 +237,7 @@ export function MediaBinPanel({
   const containerClass =
     mode === 'sheet'
       ? 'flex h-full w-full flex-col bg-zinc-950'
-      : 'flex w-76 shrink-0 flex-col border-r border-zinc-800 bg-zinc-950';
+      : 'flex w-80 shrink-0 flex-col border-r border-zinc-800 bg-zinc-950';
 
   return (
     <aside className={containerClass}>
@@ -260,15 +263,20 @@ export function MediaBinPanel({
       </div>
 
       {/* CapCut Creative Category Bar */}
-      <div className="grid grid-cols-5 border-b border-zinc-800/80 bg-zinc-900/50 p-1">
+      <div className="grid grid-cols-6 border-b border-zinc-800/80 bg-zinc-900/50 p-1">
         {(
           [
             { id: 'media', label: 'Media', icon: Film },
+            { id: 'subtitle', label: 'Subtitle', icon: Captions },
             { id: 'audio', label: 'Audio', icon: Volume2 },
             { id: 'text', label: 'Teks', icon: Type },
             { id: 'sticker', label: 'Stiker', icon: Smile },
             { id: 'effects', label: 'Efek', icon: Wand2 },
-          ] as const
+          ] as ReadonlyArray<{
+            id: MediaBinCategory;
+            label: string;
+            icon: typeof Film;
+          }>
         ).map((tab) => {
           const Icon = tab.icon;
           const active = activeCategory === tab.id;
@@ -278,11 +286,10 @@ export function MediaBinPanel({
               type="button"
               title={`Kategori ${tab.label}`}
               onClick={() => setActiveCategory(tab.id)}
-              className={`flex flex-col items-center justify-center gap-0.5 rounded py-1.5 text-[10px] font-medium transition ${
-                active
-                  ? 'bg-cyan-500/20 text-cyan-300 shadow-xs'
-                  : 'text-zinc-400 hover:bg-zinc-800/60 hover:text-zinc-200'
-              }`}
+              className={`flex flex-col items-center justify-center gap-0.5 rounded py-1.5 text-[10px] font-medium transition ${active
+                ? 'bg-cyan-500/20 text-cyan-300 shadow-xs'
+                : 'text-zinc-400 hover:bg-zinc-800/60 hover:text-zinc-200'
+                }`}
             >
               <Icon className="h-3.5 w-3.5" />
               <span>{tab.label}</span>
@@ -376,8 +383,8 @@ export function MediaBinPanel({
                     asset.kind === 'audio'
                       ? Music
                       : asset.kind === 'image'
-                      ? ImageIcon
-                      : Film;
+                        ? ImageIcon
+                        : Film;
 
                   return (
                     <div
@@ -386,9 +393,17 @@ export function MediaBinPanel({
                     >
                       <div className="flex items-start justify-between gap-2">
                         <div className="flex min-w-0 items-center gap-2">
-                          <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded bg-zinc-800 text-cyan-400">
-                            <Icon className="h-3.5 w-3.5" />
-                          </div>
+                          {asset.thumbnailUrl ? (
+                            <img
+                              src={asset.thumbnailUrl}
+                              alt={asset.name}
+                              className="h-9 w-12 shrink-0 rounded border border-zinc-700 object-cover"
+                            />
+                          ) : (
+                            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded bg-zinc-800 text-cyan-400">
+                              <Icon className="h-3.5 w-3.5" />
+                            </div>
+                          )}
                           <div className="min-w-0">
                             <p className="truncate text-xs font-medium text-zinc-100">
                               {asset.name}
@@ -428,7 +443,7 @@ export function MediaBinPanel({
                             <CloudUpload className="h-3 w-3" />
                             <span>
                               {asset.uploadProgress !== undefined &&
-                              asset.uploadProgress < 100
+                                asset.uploadProgress < 100
                                 ? `${asset.uploadProgress}%`
                                 : 'Sync ke Server PC'}
                             </span>
@@ -512,7 +527,12 @@ export function MediaBinPanel({
         </>
       )}
 
-      {/* Tab 2: AUDIO & SFX (CapCut Built-in Sound Library) */}
+      {/* Tab 2: DEDICATED AI AUTO-SUBTITLE STUDIO */}
+      {activeCategory === 'subtitle' && (
+        <SubtitleStudioTab onClipAdded={onClipAdded} />
+      )}
+
+      {/* Tab 3: AUDIO & SFX (CapCut Built-in Sound Library) */}
       {activeCategory === 'audio' && (
         <div className="flex-1 space-y-3 overflow-y-auto p-3">
           <div className="rounded-lg border border-emerald-500/30 bg-emerald-950/20 p-2.5 text-[11px] text-emerald-200">
@@ -520,6 +540,26 @@ export function MediaBinPanel({
             <p className="mt-0.5 text-[10px] text-emerald-300/80">
               Bebas hak cipta (synthesized). Klik untuk langsung masuk ke Track Audio.
             </p>
+            <button
+              type="button"
+              onClick={() => {
+                const count = useTimelineStore
+                  .getState()
+                  .autoDuckAudioTracks(0.22);
+                setDuckFeedback(
+                  count > 0
+                    ? `Volume ${count} musik latar diturunkan otomatis ke 22% agar suara utama jelas!`
+                    : 'Tambahkan musik ke Track Audio terlebih dahulu.'
+                );
+                setTimeout(() => setDuckFeedback(null), 3000);
+              }}
+              className="mt-2 w-full rounded-md border border-emerald-400/40 bg-emerald-500/20 py-1.5 text-[10px] font-bold text-emerald-200 hover:bg-emerald-500/30"
+            >
+              Auto-Duck BGM (Pelankan Musik Saat Bicara)
+            </button>
+            {duckFeedback && (
+              <p className="mt-1.5 text-[10px] text-cyan-200">{duckFeedback}</p>
+            )}
           </div>
 
           <div className="space-y-1.5">
@@ -531,11 +571,10 @@ export function MediaBinPanel({
                 <div className="min-w-0">
                   <div className="flex items-center gap-1.5">
                     <span
-                      className={`rounded px-1.5 py-0.5 text-[9px] font-bold uppercase ${
-                        sfx.category === 'bgm'
-                          ? 'bg-violet-500/20 text-violet-300'
-                          : 'bg-emerald-500/20 text-emerald-300'
-                      }`}
+                      className={`rounded px-1.5 py-0.5 text-[9px] font-bold uppercase ${sfx.category === 'bgm'
+                        ? 'bg-violet-500/20 text-violet-300'
+                        : 'bg-emerald-500/20 text-emerald-300'
+                        }`}
                     >
                       {sfx.category}
                     </span>
@@ -570,9 +609,13 @@ export function MediaBinPanel({
               <span className="text-xs font-bold text-violet-300">
                 Auto-Caption / Subtitle Otomatis
               </span>
-              <span className="rounded bg-violet-500/20 px-1.5 py-0.5 text-[9px] font-semibold text-violet-200">
-                Gaya CapCut
-              </span>
+              <button
+                type="button"
+                onClick={() => setActiveCategory('subtitle')}
+                className="rounded bg-cyan-500/20 px-1.5 py-0.5 text-[9px] font-bold text-cyan-300 hover:bg-cyan-500/30"
+              >
+                Studio AI Whisper &rarr;
+              </button>
             </div>
             <p className="text-[10px] text-zinc-400">
               Tempel naskah/transkrip suara. Otomatis dipecah per kalimat dan dipasang berurutan di Timeline lengkap dengan animasi Pop!
@@ -726,11 +769,10 @@ export function MediaBinPanel({
                           );
                         onClipAdded?.();
                       }}
-                      className={`flex flex-col justify-between rounded-xl border p-2.5 text-left transition active:scale-95 ${
-                        isSelected
-                          ? 'border-cyan-400 bg-cyan-950/40 ring-1 ring-cyan-400/40'
-                          : 'border-zinc-800 bg-zinc-900/70 hover:border-zinc-700'
-                      }`}
+                      className={`flex flex-col justify-between rounded-xl border p-2.5 text-left transition active:scale-95 ${isSelected
+                        ? 'border-cyan-400 bg-cyan-950/40 ring-1 ring-cyan-400/40'
+                        : 'border-zinc-800 bg-zinc-900/70 hover:border-zinc-700'
+                        }`}
                     >
                       <div
                         className={`mb-2 h-8 w-full rounded-md bg-gradient-to-r ${preset.badgeColor}`}

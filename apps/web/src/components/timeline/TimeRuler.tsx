@@ -23,7 +23,7 @@ export function TimeRuler({ totalDuration }: TimeRulerProps) {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const dpr = window.devicePixelRatio || 1;
-    const height = 28;
+    const height = 32;
     canvas.width = width * dpr;
     canvas.height = height * dpr;
     canvas.style.width = `${width}px`;

@@ -354,9 +354,26 @@ export class WebGLCompositor {
     clipId: string,
     style: TextStyle,
     canvasWidth: number,
-    canvasHeight: number
+    canvasHeight: number,
+    subtitleWords?: Array<{ word: string; start: number; end: number }>,
+    localTime?: number
   ): HTMLCanvasElement {
-    const cacheKey = JSON.stringify({ style, canvasWidth, canvasHeight });
+    let activeWordIdx = -1;
+    if (subtitleWords && subtitleWords.length > 0 && localTime !== undefined) {
+      activeWordIdx = subtitleWords.findIndex(
+        (w) => localTime >= w.start && localTime < w.end
+      );
+      if (activeWordIdx < 0 && localTime >= subtitleWords[subtitleWords.length - 1].start) {
+        activeWordIdx = subtitleWords.length - 1;
+      }
+    }
+
+    const cacheKey = JSON.stringify({
+      style,
+      canvasWidth,
+      canvasHeight,
+      activeWordIdx: style.highlightColor ? activeWordIdx : -1,
+    });
     const cached = this.textCanvasCache.get(clipId);
     if (cached && cached.key === cacheKey) {
       return cached.canvas;
@@ -371,15 +388,55 @@ export class WebGLCompositor {
       const weight = style.bold ? '700' : '400';
       const size = Math.max(14, style.fontSize);
       ctx.font = `${weight} ${size}px ${style.fontFamily}`;
-      ctx.textAlign = style.align || 'center';
       ctx.textBaseline = 'middle';
 
-      const lines = (style.content || '').split('\n');
+      const maxLineWidth = Math.max(220, canvasWidth * 0.86);
+
+      // Tokenize paragraphs into wrapped lines while keeping word indices for karaoke highlight
+      type WordToken = { text: string; wordIdx: number };
+      const wrappedLines: WordToken[][] = [];
+      let globalWordCounter = 0;
+
+      const paragraphs = (style.content || '').split('\n');
+      for (const para of paragraphs) {
+        const rawWords = para.trim().split(/\s+/).filter(Boolean);
+        if (rawWords.length === 0) {
+          wrappedLines.push([]);
+          continue;
+        }
+        let currentLine: WordToken[] = [];
+        for (const w of rawWords) {
+          const token: WordToken = { text: w, wordIdx: globalWordCounter++ };
+          const candidateStr = [...currentLine, token]
+            .map((t) => t.text)
+            .join(' ');
+          if (
+            currentLine.length > 0 &&
+            ctx.measureText(candidateStr).width > maxLineWidth
+          ) {
+            wrappedLines.push(currentLine);
+            currentLine = [token];
+          } else {
+            currentLine.push(token);
+          }
+        }
+        if (currentLine.length > 0) {
+          wrappedLines.push(currentLine);
+        }
+      }
+
+      if (wrappedLines.length === 0) {
+        wrappedLines.push([]);
+      }
+
+      const lineStrings = wrappedLines.map((tokens) =>
+        tokens.map((t) => t.text).join(' ')
+      );
       const lineHeight = size * 1.28;
-      const totalH = lines.length * lineHeight;
+      const totalH = lineStrings.length * lineHeight;
       const maxW = Math.max(
         100,
-        ...lines.map((line) => ctx.measureText(line).width)
+        ...lineStrings.map((line) => ctx.measureText(line).width)
       );
 
       const centerX = canvasWidth / 2;
@@ -408,26 +465,84 @@ export class WebGLCompositor {
         ctx.shadowBlur = 0;
       }
 
-      ctx.fillStyle = style.color || '#ffffff';
-      const anchorX =
-        style.align === 'left'
-          ? centerX - maxW / 2
-          : style.align === 'right'
-          ? centerX + maxW / 2
-          : centerX;
-
       const strokeW = style.strokeWidth || 0;
-      lines.forEach((line, idx) => {
-        const y = centerY - totalH / 2 + lineHeight * (idx + 0.5);
-        if (strokeW > 0 && typeof ctx.strokeText === 'function') {
-          ctx.lineJoin = 'round';
-          ctx.miterLimit = 2;
-          ctx.lineWidth = strokeW;
-          ctx.strokeStyle = style.strokeColor || '#000000';
-          ctx.strokeText(line, anchorX, y);
-        }
-        ctx.fillText(line, anchorX, y);
-      });
+      const useWordHighlight =
+        Boolean(style.highlightColor) &&
+        subtitleWords &&
+        subtitleWords.length > 0 &&
+        activeWordIdx >= 0;
+
+      if (!useWordHighlight) {
+        ctx.textAlign = style.align || 'center';
+        ctx.fillStyle = style.color || '#ffffff';
+        const anchorX =
+          style.align === 'left'
+            ? centerX - maxW / 2
+            : style.align === 'right'
+            ? centerX + maxW / 2
+            : centerX;
+
+        lineStrings.forEach((line, idx) => {
+          const y = centerY - totalH / 2 + lineHeight * (idx + 0.5);
+          if (strokeW > 0 && typeof ctx.strokeText === 'function') {
+            ctx.lineJoin = 'round';
+            ctx.miterLimit = 2;
+            ctx.lineWidth = strokeW;
+            ctx.strokeStyle = style.strokeColor || '#000000';
+            ctx.strokeText(line, anchorX, y);
+          }
+          ctx.fillText(line, anchorX, y);
+        });
+      } else {
+        ctx.textAlign = 'left';
+        const spaceW = ctx.measureText(' ').width;
+        wrappedLines.forEach((tokens, lineIdx) => {
+          const lineStr = lineStrings[lineIdx];
+          const lineW = ctx.measureText(lineStr).width;
+          const y = centerY - totalH / 2 + lineHeight * (lineIdx + 0.5);
+          let cursorX =
+            style.align === 'left'
+              ? centerX - maxW / 2
+              : style.align === 'right'
+              ? centerX + maxW / 2 - lineW
+              : centerX - lineW / 2;
+
+          for (const tok of tokens) {
+            const wordW = ctx.measureText(tok.text).width;
+            const isActive = tok.wordIdx === activeWordIdx;
+
+            if (isActive && style.highlightColor) {
+              ctx.save();
+              ctx.shadowBlur = 0;
+              ctx.fillStyle = style.highlightColor;
+              ctx.beginPath();
+              ctx.roundRect(
+                cursorX - 6,
+                y - size * 0.56,
+                wordW + 12,
+                size * 1.12,
+                10
+              );
+              ctx.fill();
+              ctx.restore();
+            }
+
+            if (strokeW > 0 && typeof ctx.strokeText === 'function' && !isActive) {
+              ctx.lineJoin = 'round';
+              ctx.miterLimit = 2;
+              ctx.lineWidth = strokeW;
+              ctx.strokeStyle = style.strokeColor || '#000000';
+              ctx.strokeText(tok.text, cursorX, y);
+            }
+
+            ctx.fillStyle = isActive
+              ? '#09090b'
+              : style.color || '#ffffff';
+            ctx.fillText(tok.text, cursorX, y);
+            cursorX += wordW + spaceW;
+          }
+        });
+      }
     }
 
     this.textCanvasCache.set(clipId, { key: cacheKey, canvas: offscreen });

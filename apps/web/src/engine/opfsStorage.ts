@@ -11,7 +11,7 @@ class MediaBlobRegistry {
   ): Promise<{ objectUrl: string; opfsPath?: string }> {
     this.blobMap.set(assetId, file);
     const prevUrl = this.urlMap.get(assetId);
-    if (prevUrl) {
+    if (prevUrl && prevUrl.startsWith('blob:')) {
       URL.revokeObjectURL(prevUrl);
     }
     const objectUrl = URL.createObjectURL(file);
@@ -37,6 +37,37 @@ class MediaBlobRegistry {
     }
 
     return { objectUrl };
+  }
+
+  async restoreAssetFromOpfs(
+    assetId: string,
+    opfsPath?: string
+  ): Promise<string | undefined> {
+    const existing = this.urlMap.get(assetId);
+    if (existing) return existing;
+    if (
+      !opfsPath ||
+      typeof navigator === 'undefined' ||
+      !navigator.storage ||
+      typeof navigator.storage.getDirectory !== 'function'
+    ) {
+      return undefined;
+    }
+    try {
+      const parts = opfsPath.split('/');
+      const filename = parts.pop();
+      if (!filename) return undefined;
+      const root = await navigator.storage.getDirectory();
+      const dir = await root.getDirectoryHandle(OPFS_FOLDER);
+      const fileHandle = await dir.getFileHandle(filename);
+      const file = await fileHandle.getFile();
+      this.blobMap.set(assetId, file);
+      const objectUrl = URL.createObjectURL(file);
+      this.urlMap.set(assetId, objectUrl);
+      return objectUrl;
+    } catch {
+      return undefined;
+    }
   }
 
   getObjectUrl(assetId: string): string | undefined {
@@ -79,4 +110,3 @@ class MediaBlobRegistry {
 }
 
 export const mediaRegistry = new MediaBlobRegistry();
-

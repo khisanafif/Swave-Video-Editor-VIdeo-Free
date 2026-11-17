@@ -1,12 +1,14 @@
 import { useEffect, useState } from 'react';
 import {
   Activity,
+  Captions,
   Check,
   ChevronDown,
   Download,
   Film,
   FolderOpen,
   FolderPlus,
+  HelpCircle,
   Monitor,
   QrCode,
   RotateCcw,
@@ -22,6 +24,12 @@ import {
   X,
 } from 'lucide-react';
 import type { ServerCapabilities } from '@velocut/shared';
+import {
+  clearLocalProjectSnapshot,
+  hydrateProjectMediaAssets,
+  loadLocalProjectSnapshot,
+  saveProjectLocally,
+} from '../engine/localPersistence';
 import { mediaRegistry } from '../engine/opfsStorage';
 import {
   detectRuntimeCapabilities,
@@ -37,6 +45,9 @@ import { useEditorShortcuts } from '../hooks/useEditorShortcuts';
 import { usePwaInstall } from '../hooks/usePwaInstall';
 import { usePlaybackStore } from '../stores/playbackStore';
 import { useTimelineStore } from '../stores/timelineStore';
+import { useUiStore } from '../stores/uiStore';
+import { ExportModal } from './ExportModal';
+import { HelpShortcutsModal } from './HelpShortcutsModal';
 import { InspectorPanel } from './InspectorPanel';
 import { MediaBinPanel } from './MediaBinPanel';
 import { MultiDeviceHubModal } from './MultiDeviceHubModal';
@@ -95,17 +106,31 @@ export function VideoEditorPage() {
   );
 
   const pwa = usePwaInstall();
+  const experienceMode = useUiStore((s) => s.experienceMode);
+  const setExperienceMode = useUiStore((s) => s.setExperienceMode);
+  const showExportModal = useUiStore((s) => s.showExportModal);
+  const setShowExportModal = useUiStore((s) => s.setShowExportModal);
+  const showHelpModal = useUiStore((s) => s.showHelpModal);
+  const setShowHelpModal = useUiStore((s) => s.setShowHelpModal);
 
   useEffect(() => {
     setCaps(detectRuntimeCapabilities());
+    const params = new URLSearchParams(window.location.search);
+    const requestedProjectId = params.get('project');
+
+    if (!requestedProjectId) {
+      const localDoc = loadLocalProjectSnapshot();
+      if (localDoc && Object.keys(localDoc.clips || {}).length > 0) {
+        void hydrateProjectMediaAssets(localDoc).then(() => {
+          useTimelineStore.getState().loadProjectDocument(localDoc);
+        });
+      }
+    }
+
     void fetchServerCapabilities().then(async (sc) => {
       setServerCaps(sc);
       if (!sc) return;
 
-      // If opened via ?project=<id> (e.g. scanned from QR code on phone/tablet),
-      // automatically hydrate that project from the PC Server!
-      const params = new URLSearchParams(window.location.search);
-      const requestedProjectId = params.get('project');
       if (requestedProjectId) {
         try {
           const doc = await loadProjectFromServer(requestedProjectId);
@@ -132,21 +157,24 @@ export function VideoEditorPage() {
     return () => window.removeEventListener('resize', onResize);
   }, []);
 
-  // Debounced Live Auto-Save to PC Server when editing across devices
+  // Debounced Live Auto-Save (Local Offline Browser Storage + PC Server)
   useEffect(() => {
-    if (!autoSaveEnabled || serverCaps?.status !== 'online') return;
     if (Object.keys(clips).length === 0 && Object.keys(assets).length === 0) {
       return;
     }
 
     const timer = setTimeout(() => {
       const doc = useTimelineStore.getState().exportProjectDocument();
-      void saveProjectToServer(doc)
-        .then(() => {
-          setSaveFeedback('Auto-Synced');
-          setTimeout(() => setSaveFeedback(null), 1500);
-        })
-        .catch(() => {});
+      saveProjectLocally(doc);
+
+      if (autoSaveEnabled && serverCaps?.status === 'online') {
+        void saveProjectToServer(doc)
+          .then(() => {
+            setSaveFeedback('Auto-Synced');
+            setTimeout(() => setSaveFeedback(null), 1500);
+          })
+          .catch(() => { });
+      }
     }, 1200);
 
     return () => clearTimeout(timer);
@@ -197,8 +225,8 @@ export function VideoEditorPage() {
               <span className="text-sm font-bold tracking-tight text-white">
                 VeloCut
               </span>
-              <span className="ml-1.5 hidden rounded bg-cyan-500/15 px-1.5 py-0.5 font-mono text-[10px] font-semibold text-cyan-300 sm:inline">
-                V-HESA
+              <span className="ml-1.5 hidden rounded bg-emerald-500/20 px-1.5 py-0.5 font-mono text-[9px] font-bold text-emerald-300 sm:inline">
+                100% GRATIS
               </span>
             </div>
           </div>
@@ -227,6 +255,36 @@ export function VideoEditorPage() {
         </div>
 
         <div className="flex shrink-0 items-center gap-1.5 lg:gap-2">
+          {/* Amateur (Pemula) vs Professional (Pro) Experience Mode Switcher */}
+          <div
+            role="group"
+            aria-label="Mode Pengalaman Editor"
+            className="inline-flex items-center rounded-md border border-zinc-800 bg-zinc-900 p-0.5 text-[11px]"
+          >
+            <button
+              type="button"
+              onClick={() => setExperienceMode('beginner')}
+              className={`rounded px-2 py-0.5 font-semibold transition ${experienceMode === 'beginner'
+                ? 'bg-cyan-500 text-zinc-950'
+                : 'text-zinc-400 hover:text-zinc-200'
+                }`}
+              title="Mode Pemula: Tampilan simpel, istilah mudah, preset 1-klik"
+            >
+              Pemula
+            </button>
+            <button
+              type="button"
+              onClick={() => setExperienceMode('pro')}
+              className={`rounded px-2 py-0.5 font-semibold transition ${experienceMode === 'pro'
+                ? 'bg-violet-500 text-zinc-950'
+                : 'text-zinc-400 hover:text-zinc-200'
+                }`}
+              title="Mode Pro (100% Gratis): Kontrol NLE penuh, color shader presisi, ripple & shortcuts"
+            >
+              Pro
+            </button>
+          </div>
+
           {/* Multi-Device Connect (QR Code & LAN Link) */}
           <button
             type="button"
@@ -242,11 +300,10 @@ export function VideoEditorPage() {
           <button
             type="button"
             onClick={cycleLayoutMode}
-            className={`inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs transition ${
-              layoutMode !== 'desktop'
-                ? 'border-cyan-500/40 bg-cyan-500/15 text-cyan-300'
-                : 'border-zinc-800 bg-zinc-900 text-zinc-300 hover:border-zinc-700'
-            }`}
+            className={`inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs transition ${layoutMode !== 'desktop'
+              ? 'border-cyan-500/40 bg-cyan-500/15 text-cyan-300'
+              : 'border-zinc-800 bg-zinc-900 text-zinc-300 hover:border-zinc-700'
+              }`}
             title="Beralih antara Tampilan Studio Android (Mobile), Tablet, dan Desktop"
           >
             {layoutMode === 'mobile' ? (
@@ -277,48 +334,59 @@ export function VideoEditorPage() {
                 setShowAndroidModal(true);
               }
             }}
-            className="inline-flex items-center gap-1 rounded-md border border-emerald-500/35 bg-emerald-500/15 px-2 py-1 text-xs font-medium text-emerald-300 hover:bg-emerald-500/25"
+            className="hidden items-center gap-1 rounded-md border border-emerald-500/35 bg-emerald-500/15 px-2 py-1 text-xs font-medium text-emerald-300 hover:bg-emerald-500/25 sm:inline-flex"
             title="Instal sebagai Aplikasi Android (PWA / APK)"
           >
             <Smartphone className="h-3.5 w-3.5" />
-            <span className="hidden lg:inline">
+            <span className="hidden xl:inline">
               {pwa.isStandalone
                 ? 'App Aktif'
                 : pwa.canInstall
-                ? 'Instal App'
-                : 'App Android'}
+                  ? 'Instal App'
+                  : 'App Android'}
             </span>
           </button>
+
+          {experienceMode === 'pro' && (
+            <button
+              type="button"
+              onClick={() => setShowDiagnostics((v) => !v)}
+              className={`inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs transition ${caps.crossOriginIsolated && caps.hasWebCodecs
+                ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300'
+                : 'border-amber-500/30 bg-amber-500/10 text-amber-300'
+                }`}
+              title="Diagnostik Runtime V-HESA (COOP/COEP, WebCodecs, WebGL2, Server)"
+            >
+              {caps.crossOriginIsolated ? (
+                <ShieldCheck className="h-3.5 w-3.5" />
+              ) : (
+                <ShieldAlert className="h-3.5 w-3.5" />
+              )}
+            </button>
+          )}
+
+          {experienceMode === 'pro' && (
+            <div className="hidden items-center gap-1.5 rounded-md border border-zinc-800 bg-zinc-900/70 px-2.5 py-1 text-xs xl:flex">
+              <Activity
+                className={`h-3.5 w-3.5 ${serverCaps?.status === 'online'
+                  ? 'text-emerald-400'
+                  : 'text-zinc-500'
+                  }`}
+              />
+              <span className="text-zinc-300">
+                {serverCaps?.status === 'online' ? 'Server PC Aktif' : 'Lokal Saja'}
+              </span>
+            </div>
+          )}
 
           <button
             type="button"
-            onClick={() => setShowDiagnostics((v) => !v)}
-            className={`inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs transition ${
-              caps.crossOriginIsolated && caps.hasWebCodecs
-                ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300'
-                : 'border-amber-500/30 bg-amber-500/10 text-amber-300'
-            }`}
-            title="Diagnostik Runtime V-HESA (COOP/COEP, WebCodecs, WebGL2, Server)"
+            onClick={() => setShowHelpModal(true)}
+            className="inline-flex items-center gap-1 rounded-md border border-zinc-800 bg-zinc-900 p-1.5 text-xs text-zinc-300 hover:border-cyan-500/50 hover:text-cyan-300"
+            title="Panduan Cepat & Daftar Shortcut Keyboard (?)"
           >
-            {caps.crossOriginIsolated ? (
-              <ShieldCheck className="h-3.5 w-3.5" />
-            ) : (
-              <ShieldAlert className="h-3.5 w-3.5" />
-            )}
+            <HelpCircle className="h-3.5 w-3.5" />
           </button>
-
-          <div className="hidden items-center gap-1.5 rounded-md border border-zinc-800 bg-zinc-900/70 px-2.5 py-1 text-xs xl:flex">
-            <Activity
-              className={`h-3.5 w-3.5 ${
-                serverCaps?.status === 'online'
-                  ? 'text-emerald-400'
-                  : 'text-zinc-500'
-              }`}
-            />
-            <span className="text-zinc-300">
-              {serverCaps?.status === 'online' ? 'Server PC Aktif' : 'Lokal Saja'}
-            </span>
-          </div>
 
           <button
             type="button"
@@ -331,14 +399,28 @@ export function VideoEditorPage() {
             ) : (
               <Save className="h-3.5 w-3.5 text-cyan-400" />
             )}
-            <span className="hidden sm:inline">
-              {saveFeedback || 'Simpan Proyek'}
+            <span className="hidden lg:inline">
+              {saveFeedback || 'Simpan'}
             </span>
+          </button>
+
+          {/* Prominent 1-Click Export CTA */}
+          <button
+            type="button"
+            onClick={() => setShowExportModal(true)}
+            className="inline-flex items-center gap-1 rounded-md bg-gradient-to-r from-emerald-500 to-cyan-500 px-2.5 py-1 text-xs font-bold text-zinc-950 shadow-sm hover:brightness-110"
+            title="Ekspor Video MP4 Tanpa Watermark"
+          >
+            <Download className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">Ekspor MP4</span>
           </button>
 
           <button
             type="button"
-            onClick={() => useTimelineStore.getState().resetProject()}
+            onClick={() => {
+              clearLocalProjectSnapshot();
+              useTimelineStore.getState().resetProject();
+            }}
             className="inline-flex items-center gap-1 rounded-md border border-zinc-800 bg-zinc-900 p-1.5 text-xs text-zinc-400 hover:text-zinc-100"
             title="Reset Proyek Baru"
           >
@@ -478,8 +560,8 @@ export function VideoEditorPage() {
                     {mobileSheet === 'media'
                       ? 'Media Bin & Pustaka Server PC'
                       : mobileSheet === 'export'
-                      ? 'Hybrid Export (Client / Server)'
-                      : 'Inspektor Klip & Shader GLSL'}
+                        ? 'Hybrid Export (Client / Server)'
+                        : 'Inspektor Klip & Shader GLSL'}
                   </span>
                 </div>
                 <button
@@ -512,19 +594,33 @@ export function VideoEditorPage() {
           {/* 4. Android Bottom Tool Dock */}
           <nav
             aria-label="Navigasi Studio Android"
-            className="z-50 grid h-14 shrink-0 grid-cols-5 border-t border-zinc-800 bg-zinc-950 px-1"
+            className="z-50 grid h-14 shrink-0 grid-cols-6 border-t border-zinc-800 bg-zinc-950 px-1"
           >
             <button
               type="button"
-              onClick={() => toggleMobileSheet('media')}
-              className={`flex flex-col items-center justify-center gap-0.5 rounded-lg transition ${
-                mobileSheet === 'media'
-                  ? 'text-cyan-400'
-                  : 'text-zinc-400 hover:text-zinc-200'
-              }`}
+              onClick={() => {
+                useUiStore.getState().setActiveMediaCategory('media');
+                toggleMobileSheet('media');
+              }}
+              className={`flex flex-col items-center justify-center gap-0.5 rounded-lg transition ${mobileSheet === 'media'
+                ? 'text-cyan-400'
+                : 'text-zinc-400 hover:text-zinc-200'
+                }`}
             >
               <FolderPlus className="h-4 w-4" />
               <span className="text-[10px] font-medium">Media</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                useUiStore.getState().setActiveMediaCategory('subtitle');
+                setMobileSheet('media');
+              }}
+              className="flex flex-col items-center justify-center gap-0.5 rounded-lg text-zinc-400 transition hover:text-cyan-300 active:scale-95"
+            >
+              <Captions className="h-4 w-4 text-cyan-400" />
+              <span className="text-[10px] font-medium">Subtitle</span>
             </button>
 
             <button
@@ -547,27 +643,25 @@ export function VideoEditorPage() {
             <button
               type="button"
               onClick={() => toggleMobileSheet('inspector')}
-              className={`relative flex flex-col items-center justify-center gap-0.5 rounded-lg transition ${
-                mobileSheet === 'inspector'
-                  ? 'text-cyan-400'
-                  : 'text-zinc-400 hover:text-zinc-200'
-              }`}
+              className={`relative flex flex-col items-center justify-center gap-0.5 rounded-lg transition ${mobileSheet === 'inspector'
+                ? 'text-cyan-400'
+                : 'text-zinc-400 hover:text-zinc-200'
+                }`}
             >
               <SlidersHorizontal className="h-4 w-4" />
               <span className="text-[10px] font-medium">Efek & Edit</span>
               {selectedClip && (
-                <span className="absolute top-1.5 right-4 h-2 w-2 rounded-full bg-cyan-400" />
+                <span className="absolute top-1.5 right-3 h-2 w-2 rounded-full bg-cyan-400" />
               )}
             </button>
 
             <button
               type="button"
               onClick={() => toggleMobileSheet('export')}
-              className={`flex flex-col items-center justify-center gap-0.5 rounded-lg transition ${
-                mobileSheet === 'export'
-                  ? 'text-emerald-400'
-                  : 'text-zinc-400 hover:text-zinc-200'
-              }`}
+              className={`flex flex-col items-center justify-center gap-0.5 rounded-lg transition ${mobileSheet === 'export'
+                ? 'text-emerald-400'
+                : 'text-zinc-400 hover:text-zinc-200'
+                }`}
             >
               <Download className="h-4 w-4 text-emerald-400" />
               <span className="text-[10px] font-medium">Export</span>
@@ -599,22 +693,20 @@ export function VideoEditorPage() {
                 <button
                   type="button"
                   onClick={() => setTabletSideTab('media')}
-                  className={`py-2 text-xs font-semibold ${
-                    tabletSideTab === 'media'
-                      ? 'border-b-2 border-cyan-400 text-cyan-300'
-                      : 'text-zinc-400'
-                  }`}
+                  className={`py-2 text-xs font-semibold ${tabletSideTab === 'media'
+                    ? 'border-b-2 border-cyan-400 text-cyan-300'
+                    : 'text-zinc-400'
+                    }`}
                 >
                   Media Bin
                 </button>
                 <button
                   type="button"
                   onClick={() => setTabletSideTab('inspector')}
-                  className={`py-2 text-xs font-semibold ${
-                    tabletSideTab === 'inspector'
-                      ? 'border-b-2 border-cyan-400 text-cyan-300'
-                      : 'text-zinc-400'
-                  }`}
+                  className={`py-2 text-xs font-semibold ${tabletSideTab === 'inspector'
+                    ? 'border-b-2 border-cyan-400 text-cyan-300'
+                    : 'text-zinc-400'
+                    }`}
                 >
                   Inspektor & Export
                 </button>
@@ -642,13 +734,29 @@ export function VideoEditorPage() {
       )}
 
       {/* Multi-Device Hub Modal (QR Code, LAN IP, Shared Projects) */}
-      <MultiDeviceHubModal
-        isOpen={hubModalState.open}
-        initialTab={hubModalState.tab}
-        autoSaveEnabled={autoSaveEnabled}
-        onToggleAutoSave={setAutoSaveEnabled}
-        onClose={() => setHubModalState((s) => ({ ...s, open: false }))}
-      />
+      {hubModalState.open && (
+        <MultiDeviceHubModal
+          isOpen={hubModalState.open}
+          initialTab={hubModalState.tab}
+          autoSaveEnabled={autoSaveEnabled}
+          onToggleAutoSave={setAutoSaveEnabled}
+          onClose={() => setHubModalState((s) => ({ ...s, open: false }))}
+        />
+      )}
+
+      {showExportModal && (
+        <ExportModal
+          isOpen={showExportModal}
+          onClose={() => setShowExportModal(false)}
+        />
+      )}
+
+      {showHelpModal && (
+        <HelpShortcutsModal
+          isOpen={showHelpModal}
+          onClose={() => setShowHelpModal(false)}
+        />
+      )}
 
       {/* Modal Panduan & Instalasi Aplikasi Android (PWA WebAPK & Native Capacitor APK) */}
       {showAndroidModal && (
@@ -739,7 +847,7 @@ export function VideoEditorPage() {
                   Opsi 2: Build File .APK Native (Capacitor / TWA Android)
                 </h3>
                 <pre className="mt-2 overflow-x-auto rounded bg-zinc-900 p-2 font-mono text-[10px] text-cyan-300">
-{`npm run build
+                  {`npm run build
 npm --workspace=@velocut/web run android:init
 npm --workspace=@velocut/web run android:sync`}
                 </pre>

@@ -4,6 +4,7 @@ import { createRequire } from 'node:module';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import type {
+  Clip,
   ProjectDocument,
   ServerCapabilities,
   ServerEncoderCapability,
@@ -14,12 +15,15 @@ import {
 } from '@velocut/shared';
 import type { VeloCutDatabase } from '../db/database.js';
 import { resolveSafeStoragePath } from '../utils/pathSecurity.js';
-import { buildFfmpegRenderPlan } from './ffmpegPlanner.js';
+import {
+  buildAssSubtitleDocument,
+  buildFfmpegRenderPlan,
+} from './ffmpegPlanner.js';
 
 const execFileAsync = promisify(execFile);
 const requireModule = createRequire(import.meta.url);
 
-function resolveFfmpegBinary(): string {
+export function resolveFfmpegBinary(): string {
   if (process.env.FFMPEG_PATH && fs.existsSync(process.env.FFMPEG_PATH)) {
     return process.env.FFMPEG_PATH;
   }
@@ -84,12 +88,41 @@ async function fileHasAudioStream(
   }
 }
 
+export async function detectLocalWhisperEngine(): Promise<string | null> {
+  try {
+    await execFileAsync('whisper-cli', ['--help'], { timeout: 1500 });
+    return 'whisper-cli';
+  } catch {
+    // Not installed
+  }
+  try {
+    await execFileAsync(
+      'python3',
+      ['-c', 'import faster_whisper; print("ok")'],
+      { timeout: 2000 }
+    );
+    return 'python-faster-whisper';
+  } catch {
+    // Not installed
+  }
+  try {
+    await execFileAsync('whisper', ['--help'], { timeout: 2000 });
+    return 'openai-whisper-cli';
+  } catch {
+    // Not installed
+  }
+  return null;
+}
+
 let cachedProbe: {
   checkedAt: number;
   ffmpegBin: string;
   ffmpegAvailable: boolean;
   ffmpegVersion: string | null;
   availableEncoders: ServerEncoderCapability[];
+  supportsDrawtext: boolean;
+  supportsAss: boolean;
+  whisperEngine: string | null;
 } | null = null;
 
 export async function probeFfmpegCapabilities(
@@ -102,7 +135,10 @@ export async function probeFfmpegCapabilities(
     | 'maxChunkSizeBytes'
     | 'recommendedChunkSizeBytes'
     | 'storageDir'
-  >
+  > & {
+    supportsDrawtext: boolean;
+    supportsAss: boolean;
+  }
 > {
   const now = Date.now();
   if (!force && cachedProbe && now - cachedProbe.checkedAt < 30_000) {
@@ -111,10 +147,15 @@ export async function probeFfmpegCapabilities(
       ffmpegVersion: cachedProbe.ffmpegVersion,
       availableEncoders: cachedProbe.availableEncoders,
       preferredEncoder: cachedProbe.availableEncoders[0] ?? null,
+      whisperAvailable: Boolean(cachedProbe.whisperEngine),
+      whisperEngine: cachedProbe.whisperEngine,
+      supportsDrawtext: cachedProbe.supportsDrawtext,
+      supportsAss: cachedProbe.supportsAss,
     };
   }
 
   const ffmpegBin = resolveFfmpegBinary();
+  const whisperEngine = await detectLocalWhisperEngine();
 
   try {
     const { stdout: versionOut } = await execFileAsync(
@@ -126,11 +167,13 @@ export async function probeFfmpegCapabilities(
     );
     const firstLine = versionOut.split(/\r?\n/)[0] ?? 'ffmpeg available';
 
-    const { stdout: encodersOut } = await execFileAsync(
-      ffmpegBin,
-      ['-hide_banner', '-encoders'],
-      { timeout: 4000 }
-    );
+    const [{ stdout: encodersOut }, { stdout: filtersOut }] = await Promise.all([
+      execFileAsync(ffmpegBin, ['-hide_banner', '-encoders'], { timeout: 4000 }),
+      execFileAsync(ffmpegBin, ['-hide_banner', '-filters'], { timeout: 4000 }),
+    ]);
+
+    const supportsDrawtext = /\bdrawtext\b/.test(filtersOut);
+    const supportsAss = /\bass\b/.test(filtersOut);
 
     const priorityOrder: ServerEncoderCapability[] = [
       'h264_nvenc',
@@ -158,6 +201,9 @@ export async function probeFfmpegCapabilities(
       ffmpegAvailable: true,
       ffmpegVersion: firstLine.trim(),
       availableEncoders: verifiedEncoders,
+      supportsDrawtext,
+      supportsAss,
+      whisperEngine,
     };
   } catch {
     cachedProbe = {
@@ -166,6 +212,9 @@ export async function probeFfmpegCapabilities(
       ffmpegAvailable: false,
       ffmpegVersion: null,
       availableEncoders: [],
+      supportsDrawtext: false,
+      supportsAss: false,
+      whisperEngine,
     };
   }
 
@@ -174,6 +223,10 @@ export async function probeFfmpegCapabilities(
     ffmpegVersion: cachedProbe.ffmpegVersion,
     availableEncoders: cachedProbe.availableEncoders,
     preferredEncoder: cachedProbe.availableEncoders[0] ?? null,
+    whisperAvailable: Boolean(cachedProbe.whisperEngine),
+    whisperEngine: cachedProbe.whisperEngine,
+    supportsDrawtext: cachedProbe.supportsDrawtext,
+    supportsAss: cachedProbe.supportsAss,
   };
 }
 
@@ -183,8 +236,13 @@ export async function getServerCapabilities(
   const probe = await probeFfmpegCapabilities();
   return {
     status: 'online',
-    version: '0.1.0',
-    ...probe,
+    version: '0.2.0',
+    ffmpegAvailable: probe.ffmpegAvailable,
+    ffmpegVersion: probe.ffmpegVersion,
+    availableEncoders: probe.availableEncoders,
+    preferredEncoder: probe.preferredEncoder,
+    whisperAvailable: probe.whisperAvailable,
+    whisperEngine: probe.whisperEngine,
     maxChunkSizeBytes: MAX_CLOUDFLARE_CHUNK_BYTES,
     recommendedChunkSizeBytes: DEFAULT_CHUNK_SIZE_BYTES,
     storageDir,
@@ -212,8 +270,6 @@ export async function enqueueServerRenderJob(options: {
   const outputFullPath = resolveSafeStoragePath(storageDir, outputRelativePath);
   fs.mkdirSync(path.dirname(outputFullPath), { recursive: true });
 
-  // Clone project and verify actual audio streams on disk so video-only files
-  // never cause FFmpeg ":a matches no streams" errors
   const sanitizedProject: ProjectDocument = structuredClone(project);
   if (probe.ffmpegAvailable) {
     for (const asset of Object.values(sanitizedProject.assets)) {
@@ -229,11 +285,32 @@ export async function enqueueServerRenderJob(options: {
     }
   }
 
+  // Collect unmuted text/subtitle clips
+  const activeTextClips: Clip[] = [];
+  for (const tid of sanitizedProject.trackOrder) {
+    const tr = sanitizedProject.tracks[tid];
+    if (!tr || tr.isMuted) continue;
+    for (const cid of tr.clipIds) {
+      const clip = sanitizedProject.clips[cid];
+      if (clip && clip.type === 'text' && clip.textStyle && clip.duration > 0) {
+        activeTextClips.push(clip);
+      }
+    }
+  }
+
+  let assFullPath: string | undefined;
+  if (activeTextClips.length > 0 && probe.supportsAss) {
+    assFullPath = resolveSafeStoragePath(storageDir, `renders/${jobId}.ass`);
+    const assDoc = buildAssSubtitleDocument(sanitizedProject, activeTextClips);
+    fs.writeFileSync(assFullPath, assDoc, 'utf8');
+  }
+
   const plan = buildFfmpegRenderPlan({
     project: sanitizedProject,
     outputPath: outputFullPath,
     encoder,
     quality,
+    assFilePath: assFullPath,
     resolveAssetPath: (assetId) => {
       const row = db.getMediaAsset(assetId);
       if (!row) return null;
@@ -301,6 +378,9 @@ export async function enqueueServerRenderJob(options: {
     });
 
     child.on('error', (err) => {
+      if (assFullPath && fs.existsSync(assFullPath)) {
+        fs.rmSync(assFullPath, { force: true });
+      }
       db.updateRenderJob(jobId, {
         status: 'failed',
         error: `FFmpeg process error: ${err.message}`,
@@ -308,6 +388,9 @@ export async function enqueueServerRenderJob(options: {
     });
 
     child.on('close', (code) => {
+      if (assFullPath && fs.existsSync(assFullPath)) {
+        fs.rmSync(assFullPath, { force: true });
+      }
       if (code === 0 && fs.existsSync(outputFullPath)) {
         db.updateRenderJob(jobId, {
           status: 'completed',
