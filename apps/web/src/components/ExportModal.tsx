@@ -7,6 +7,7 @@ import {
   Film,
   Loader2,
   Server,
+  Share2,
   Smartphone,
   Sparkles,
   X,
@@ -21,6 +22,11 @@ import {
   type ClientExportProgress,
   exportProjectClientSide,
 } from '../engine/clientExporter';
+import {
+  canShareFilesOnDevice,
+  saveBlobToDevice,
+  shareBlobWithSystemSheet,
+} from '../engine/localPersistence';
 import { mediaRegistry } from '../engine/opfsStorage';
 import {
   fetchRenderJobStatus,
@@ -39,12 +45,18 @@ import { useUiStore } from '../stores/uiStore';
 
 interface ExportModalProps {
   isOpen: boolean;
+  onOpenModeSettings?: () => void;
   onClose: () => void;
 }
 
-export function ExportModal({ isOpen, onClose }: ExportModalProps) {
+export function ExportModal({
+  isOpen,
+  onOpenModeSettings,
+  onClose,
+}: ExportModalProps) {
   const abortRef = useRef<AbortController | null>(null);
   const experienceMode = useUiStore((s) => s.experienceMode);
+  const runtimeMode = useUiStore((s) => s.runtimeMode);
   const projectName = useTimelineStore((s) => s.projectName);
   const resolution = useTimelineStore((s) => s.resolution);
   const clips = useTimelineStore((s) => s.clips);
@@ -57,7 +69,10 @@ export function ExportModal({ isOpen, onClose }: ExportModalProps) {
   const [downloadInfo, setDownloadInfo] = useState<{
     url: string;
     ext: 'mp4' | 'webm';
+    blob: Blob;
+    filename: string;
   } | null>(null);
+  const [saveNotice, setSaveNotice] = useState<string | null>(null);
   const [serverJob, setServerJob] = useState<RenderJobRecord | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [isExporting, setIsExporting] = useState(false);
@@ -65,13 +80,16 @@ export function ExportModal({ isOpen, onClose }: ExportModalProps) {
   const subtitleCount = selectExportableSubtitleClips(Object.values(clips)).length;
 
   useEffect(() => {
-    if (isOpen) {
+    if (isOpen && runtimeMode === 'server') {
       void fetchServerCapabilities().then(setServerCaps);
+    } else if (isOpen) {
+      setServerCaps(null);
+      setRenderMode('client-webcodecs');
     }
     return () => {
       abortRef.current?.abort();
     };
-  }, [isOpen]);
+  }, [isOpen, runtimeMode]);
 
   if (!isOpen) return null;
 
@@ -110,11 +128,22 @@ export function ExportModal({ isOpen, onClose }: ExportModalProps) {
         const project = useTimelineStore.getState().exportProjectDocument();
         const blob = await exportProjectClientSide({
           project,
+          quality,
           onProgress: setClientProgress,
           signal: controller.signal,
         });
         const ext = blob.type.includes('webm') ? 'webm' : 'mp4';
-        setDownloadInfo({ url: URL.createObjectURL(blob), ext });
+        const safeBase = (projectName || 'velocut-export').replace(
+          /[^\w.-]/g,
+          '_'
+        );
+        setSaveNotice(null);
+        setDownloadInfo({
+          url: URL.createObjectURL(blob),
+          ext,
+          blob,
+          filename: `${safeBase}.${ext}`,
+        });
         setIsExporting(false);
       } else {
         const store = useTimelineStore.getState();
@@ -173,12 +202,8 @@ export function ExportModal({ isOpen, onClose }: ExportModalProps) {
     const body =
       ext === 'srt' ? exportSubtitlesToSrt(all) : exportSubtitlesToVtt(all);
     const blob = new Blob([body], { type: 'text/plain;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${(projectName || 'velocut').replace(/[^\w.-]/g, '_')}.${ext}`;
-    a.click();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    const filename = `${(projectName || 'velocut').replace(/[^\w.-]/g, '_')}.${ext}`;
+    void saveBlobToDevice(blob, filename);
   };
 
   const activeProgress =
@@ -330,25 +355,45 @@ export function ExportModal({ isOpen, onClose }: ExportModalProps) {
 
             <button
               type="button"
-              disabled={serverCaps?.status !== 'online'}
+              disabled={runtimeMode !== 'server' || serverCaps?.status !== 'online'}
               onClick={() => setRenderMode('server-ffmpeg')}
-              className={`rounded-xl border p-2.5 text-left transition disabled:opacity-45 ${
+              className={`rounded-xl border p-2.5 text-left transition disabled:opacity-60 ${
                 renderMode === 'server-ffmpeg'
                   ? 'border-emerald-400 bg-emerald-950/25'
                   : 'border-zinc-800 bg-zinc-950/60 hover:border-zinc-700'
               }`}
             >
-              <div className="flex items-center gap-1.5 font-bold text-white">
-                <Server className="h-3.5 w-3.5 text-emerald-400" />
-                <span>Server PC FFmpeg</span>
+              <div className="flex items-center justify-between gap-1 font-bold text-white">
+                <div className="flex items-center gap-1.5">
+                  <Server className="h-3.5 w-3.5 text-emerald-400" />
+                  <span>Server PC FFmpeg</span>
+                </div>
               </div>
               <p className="mt-1 text-[10px] text-zinc-400">
-                {serverCaps?.status === 'online'
-                  ? `Aktif (${serverCaps.preferredEncoder || 'libx264'})`
-                  : 'Server PC tidak terhubung'}
+                {runtimeMode !== 'server'
+                  ? 'Mode Mandiri aktif (buka Mode Operasi jika ingin pakai Server PC)'
+                  : serverCaps?.status === 'online'
+                    ? `Aktif (${serverCaps.preferredEncoder || 'libx264'})`
+                    : 'Server PC tidak terhubung'}
               </p>
             </button>
           </div>
+
+          {runtimeMode !== 'server' && onOpenModeSettings && (
+            <div className="flex items-center justify-between rounded-lg border border-zinc-800 bg-zinc-950/60 px-3 py-1.5 text-[10px] text-zinc-400">
+              <span>Ingin render cepat di PC/Laptop lain via WiFi?</span>
+              <button
+                type="button"
+                onClick={() => {
+                  onClose();
+                  onOpenModeSettings();
+                }}
+                className="font-semibold text-cyan-300 hover:underline"
+              >
+                Hubungkan Server PC
+              </button>
+            </div>
+          )}
 
           <div className="flex gap-2">
             <button
@@ -392,19 +437,52 @@ export function ExportModal({ isOpen, onClose }: ExportModalProps) {
 
           {downloadInfo && (
             <div className="space-y-1.5">
-              <a
-                href={downloadInfo.url}
-                download={`${(projectName || 'velocut-export').replace(
-                  /[^\w.-]/g,
-                  '_'
-                )}.${downloadInfo.ext}`}
-                className="flex items-center justify-center gap-2 rounded-xl border border-emerald-400/50 bg-emerald-500/20 py-2.5 text-xs font-bold text-emerald-200 hover:bg-emerald-500/30"
-              >
-                <CheckCircle2 className="h-4 w-4 text-emerald-400" />
-                <span>
-                  Video Siap! Klik untuk Unduh (.{downloadInfo.ext})
-                </span>
-              </a>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    void saveBlobToDevice(
+                      downloadInfo.blob,
+                      downloadInfo.filename
+                    ).then((how) => {
+                      setSaveNotice(
+                        how === 'native-saved'
+                          ? `Tersimpan ke folder Downloads/VeloCut/${downloadInfo.filename}`
+                          : `File ${downloadInfo.filename} mulai diunduh!`
+                      );
+                    });
+                  }}
+                  className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-emerald-400/50 bg-emerald-500/20 px-3 py-2.5 text-xs font-bold text-emerald-200 hover:bg-emerald-500/30"
+                >
+                  <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+                  <span>Unduh Video (.{downloadInfo.ext})</span>
+                </button>
+
+                {canShareFilesOnDevice() && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      void shareBlobWithSystemSheet(
+                        downloadInfo.blob,
+                        downloadInfo.filename,
+                        projectName || 'VeloCut Studio'
+                      ).catch(() => {});
+                    }}
+                    className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-cyan-400/50 bg-cyan-500/20 px-3 py-2.5 text-xs font-bold text-cyan-200 hover:bg-cyan-500/30"
+                    title="Simpan ke Galeri / Photos (iOS & Android) atau Bagikan"
+                  >
+                    <Share2 className="h-4 w-4" />
+                    <span>Simpan / Bagikan</span>
+                  </button>
+                )}
+              </div>
+
+              {saveNotice && (
+                <p className="text-center text-[10px] text-emerald-300">
+                  {saveNotice}
+                </p>
+              )}
+
               {downloadInfo.ext === 'webm' && serverCaps?.status === 'online' && (
                 <p className="text-center text-[10px] text-amber-300">
                   Browser HTTP LAN menghasilkan format .webm. Untuk MP4 H.264 universal (WhatsApp/iOS), pilih mode <strong>Server PC FFmpeg</strong>.

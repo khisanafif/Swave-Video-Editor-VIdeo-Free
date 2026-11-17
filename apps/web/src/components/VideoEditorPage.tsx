@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
 import {
-  Activity,
   Captions,
   Check,
   ChevronDown,
+  Cpu,
   Download,
   Film,
   FolderOpen,
@@ -13,6 +13,7 @@ import {
   QrCode,
   RotateCcw,
   Save,
+  Server,
   ShieldAlert,
   ShieldCheck,
   SlidersHorizontal,
@@ -20,7 +21,6 @@ import {
   Sparkles,
   Tablet,
   Type,
-  Wifi,
   X,
 } from 'lucide-react';
 import type { ServerCapabilities } from '@velocut/shared';
@@ -37,6 +37,7 @@ import {
 } from '../engine/runtimeCapabilities';
 import {
   fetchServerCapabilities,
+  getServerBaseUrl,
   loadProjectFromServer,
   resolveServerUrl,
   saveProjectToServer,
@@ -45,13 +46,18 @@ import { useEditorShortcuts } from '../hooks/useEditorShortcuts';
 import { usePwaInstall } from '../hooks/usePwaInstall';
 import { usePlaybackStore } from '../stores/playbackStore';
 import { useTimelineStore } from '../stores/timelineStore';
-import { useUiStore } from '../stores/uiStore';
+import {
+  hasExplicitRuntimePreference,
+  isStaticStandaloneHost,
+  useUiStore,
+} from '../stores/uiStore';
 import { ExportModal } from './ExportModal';
 import { HelpShortcutsModal } from './HelpShortcutsModal';
 import { InspectorPanel } from './InspectorPanel';
 import { MediaBinPanel } from './MediaBinPanel';
 import { MultiDeviceHubModal } from './MultiDeviceHubModal';
 import { PreviewViewport } from './PreviewViewport';
+import { RuntimeModeModal } from './RuntimeModeModal';
 import { TimelineContainer } from './timeline/TimelineContainer';
 
 type DeviceLayoutMode = 'desktop' | 'tablet' | 'mobile';
@@ -89,7 +95,10 @@ export function VideoEditorPage() {
   );
   const [serverCaps, setServerCaps] = useState<ServerCapabilities | null>(null);
   const [showDiagnostics, setShowDiagnostics] = useState(false);
-  const [showAndroidModal, setShowAndroidModal] = useState(false);
+  const [modeModalState, setModeModalState] = useState<{
+    open: boolean;
+    tab: 'mode' | 'download';
+  }>({ open: false, tab: 'mode' });
   const [hubModalState, setHubModalState] = useState<{
     open: boolean;
     tab: 'connect' | 'projects';
@@ -108,6 +117,8 @@ export function VideoEditorPage() {
   const pwa = usePwaInstall();
   const experienceMode = useUiStore((s) => s.experienceMode);
   const setExperienceMode = useUiStore((s) => s.setExperienceMode);
+  const runtimeMode = useUiStore((s) => s.runtimeMode);
+  const setRuntimeMode = useUiStore((s) => s.setRuntimeMode);
   const showExportModal = useUiStore((s) => s.showExportModal);
   const setShowExportModal = useUiStore((s) => s.setShowExportModal);
   const showHelpModal = useUiStore((s) => s.showHelpModal);
@@ -127,37 +138,57 @@ export function VideoEditorPage() {
       }
     }
 
-    void fetchServerCapabilities().then(async (sc) => {
-      setServerCaps(sc);
-      if (!sc) return;
+    const explicitStandalone =
+      hasExplicitRuntimePreference() &&
+      useUiStore.getState().runtimeMode === 'standalone';
+    const shouldProbeServer =
+      !explicitStandalone &&
+      (Boolean(requestedProjectId) ||
+        Boolean(getServerBaseUrl()) ||
+        !isStaticStandaloneHost());
 
-      if (requestedProjectId) {
-        try {
-          const doc = await loadProjectFromServer(requestedProjectId);
-          for (const asset of Object.values(doc.assets)) {
-            if (asset.serverUrl) {
-              mediaRegistry.registerRemoteAsset(
-                asset.id,
-                resolveServerUrl(asset.serverUrl)
-              );
-            }
+    if (shouldProbeServer) {
+      void fetchServerCapabilities().then(async (sc) => {
+        setServerCaps(sc);
+        if (!sc) {
+          if (!hasExplicitRuntimePreference()) {
+            setRuntimeMode('standalone', false);
           }
-          useTimelineStore.getState().loadProjectDocument(doc);
-          usePlaybackStore.getState().seekTo(0);
-        } catch {
-          // Project does not exist on server yet; will be created on first save
+          return;
         }
-      }
-    });
+
+        if (!hasExplicitRuntimePreference() && sc.status === 'online') {
+          setRuntimeMode('server', false);
+        }
+
+        if (requestedProjectId) {
+          try {
+            const doc = await loadProjectFromServer(requestedProjectId);
+            for (const asset of Object.values(doc.assets)) {
+              if (asset.serverUrl) {
+                mediaRegistry.registerRemoteAsset(
+                  asset.id,
+                  resolveServerUrl(asset.serverUrl)
+                );
+              }
+            }
+            useTimelineStore.getState().loadProjectDocument(doc);
+            usePlaybackStore.getState().seekTo(0);
+          } catch {
+            // Project does not exist on server yet; will be created on first save
+          }
+        }
+      });
+    }
 
     const onResize = () => {
       setLayoutMode(detectDeviceLayout());
     };
     window.addEventListener('resize', onResize);
     return () => window.removeEventListener('resize', onResize);
-  }, []);
+  }, [setRuntimeMode]);
 
-  // Debounced Live Auto-Save (Local Offline Browser Storage + PC Server)
+  // Debounced Live Auto-Save (Local Offline Browser Storage + optional PC Server)
   useEffect(() => {
     if (Object.keys(clips).length === 0 && Object.keys(assets).length === 0) {
       return;
@@ -167,19 +198,24 @@ export function VideoEditorPage() {
       const doc = useTimelineStore.getState().exportProjectDocument();
       saveProjectLocally(doc);
 
-      if (autoSaveEnabled && serverCaps?.status === 'online') {
+      if (
+        autoSaveEnabled &&
+        runtimeMode === 'server' &&
+        serverCaps?.status === 'online'
+      ) {
         void saveProjectToServer(doc)
           .then(() => {
             setSaveFeedback('Auto-Synced');
             setTimeout(() => setSaveFeedback(null), 1500);
           })
-          .catch(() => { });
+          .catch(() => {});
       }
     }, 1200);
 
     return () => clearTimeout(timer);
   }, [
     autoSaveEnabled,
+    runtimeMode,
     serverCaps?.status,
     projectId,
     projectName,
@@ -191,13 +227,21 @@ export function VideoEditorPage() {
   ]);
 
   const handleSaveProject = async () => {
+    const doc = useTimelineStore.getState().exportProjectDocument();
+    saveProjectLocally(doc);
+
+    if (runtimeMode !== 'server') {
+      setSaveFeedback('Tersimpan Lokal');
+      setTimeout(() => setSaveFeedback(null), 2000);
+      return;
+    }
+
     try {
-      const doc = useTimelineStore.getState().exportProjectDocument();
       await saveProjectToServer(doc);
       setSaveFeedback('Tersimpan');
       setTimeout(() => setSaveFeedback(null), 2000);
     } catch {
-      setSaveFeedback('Server Offline');
+      setSaveFeedback('Lokal Saja');
       setTimeout(() => setSaveFeedback(null), 2500);
     }
   };
@@ -324,18 +368,42 @@ export function VideoEditorPage() {
             )}
           </button>
 
-          {/* Android App / PWA Install CTA */}
+          {/* Runtime Mode Switcher (Mandiri On-Device vs Server PC) */}
+          <button
+            type="button"
+            onClick={() => setModeModalState({ open: true, tab: 'mode' })}
+            className={`inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs font-medium transition ${
+              runtimeMode === 'server' && serverCaps?.status === 'online'
+                ? 'border-emerald-500/40 bg-emerald-500/15 text-emerald-300 hover:bg-emerald-500/25'
+                : 'border-cyan-500/35 bg-cyan-500/10 text-cyan-200 hover:bg-cyan-500/20'
+            }`}
+            title="Pilih Mode Operasi: Mandiri di Perangkat vs Perantara Server PC"
+          >
+            {runtimeMode === 'server' && serverCaps?.status === 'online' ? (
+              <>
+                <Server className="h-3.5 w-3.5 text-emerald-400" />
+                <span className="hidden lg:inline">Server PC</span>
+              </>
+            ) : (
+              <>
+                <Cpu className="h-3.5 w-3.5 text-cyan-400" />
+                <span className="hidden lg:inline">Di Perangkat</span>
+              </>
+            )}
+          </button>
+
+          {/* Android / iOS / Portable App Download & Install CTA */}
           <button
             type="button"
             onClick={() => {
               if (pwa.canInstall) {
                 void pwa.promptInstall();
               } else {
-                setShowAndroidModal(true);
+                setModeModalState({ open: true, tab: 'download' });
               }
             }}
             className="hidden items-center gap-1 rounded-md border border-emerald-500/35 bg-emerald-500/15 px-2 py-1 text-xs font-medium text-emerald-300 hover:bg-emerald-500/25 sm:inline-flex"
-            title="Instal sebagai Aplikasi Android (PWA / APK)"
+            title="Unduh / Instal Aplikasi (Android APK, iOS Safari/IPA, Portabel)"
           >
             <Smartphone className="h-3.5 w-3.5" />
             <span className="hidden xl:inline">
@@ -343,7 +411,7 @@ export function VideoEditorPage() {
                 ? 'App Aktif'
                 : pwa.canInstall
                   ? 'Instal App'
-                  : 'App Android'}
+                  : 'App HP'}
             </span>
           </button>
 
@@ -365,20 +433,6 @@ export function VideoEditorPage() {
             </button>
           )}
 
-          {experienceMode === 'pro' && (
-            <div className="hidden items-center gap-1.5 rounded-md border border-zinc-800 bg-zinc-900/70 px-2.5 py-1 text-xs xl:flex">
-              <Activity
-                className={`h-3.5 w-3.5 ${serverCaps?.status === 'online'
-                  ? 'text-emerald-400'
-                  : 'text-zinc-500'
-                  }`}
-              />
-              <span className="text-zinc-300">
-                {serverCaps?.status === 'online' ? 'Server PC Aktif' : 'Lokal Saja'}
-              </span>
-            </div>
-          )}
-
           <button
             type="button"
             onClick={() => setShowHelpModal(true)}
@@ -392,9 +446,15 @@ export function VideoEditorPage() {
             type="button"
             onClick={() => void handleSaveProject()}
             className="inline-flex items-center gap-1 rounded-md border border-zinc-800 bg-zinc-900 px-2 py-1 text-xs font-medium text-zinc-200 hover:border-cyan-500/50 hover:bg-zinc-800"
-            title="Simpan Proyek ke Server PC"
+            title={
+              runtimeMode === 'server'
+                ? 'Simpan Proyek ke Perangkat & Server PC'
+                : 'Simpan Proyek Lokal di Perangkat'
+            }
           >
-            {saveFeedback === 'Tersimpan' || saveFeedback === 'Auto-Synced' ? (
+            {saveFeedback === 'Tersimpan' ||
+            saveFeedback === 'Auto-Synced' ||
+            saveFeedback === 'Tersimpan Lokal' ? (
               <Check className="h-3.5 w-3.5 text-emerald-400" />
             ) : (
               <Save className="h-3.5 w-3.5 text-cyan-400" />
@@ -673,7 +733,7 @@ export function VideoEditorPage() {
                 if (pwa.canInstall) {
                   void pwa.promptInstall();
                 } else {
-                  setShowAndroidModal(true);
+                  setModeModalState({ open: true, tab: 'download' });
                 }
               }}
               className="flex flex-col items-center justify-center gap-0.5 rounded-lg text-zinc-400 transition hover:text-cyan-300"
@@ -747,6 +807,7 @@ export function VideoEditorPage() {
       {showExportModal && (
         <ExportModal
           isOpen={showExportModal}
+          onOpenModeSettings={() => setModeModalState({ open: true, tab: 'mode' })}
           onClose={() => setShowExportModal(false)}
         />
       )}
@@ -758,104 +819,16 @@ export function VideoEditorPage() {
         />
       )}
 
-      {/* Modal Panduan & Instalasi Aplikasi Android (PWA WebAPK & Native Capacitor APK) */}
-      {showAndroidModal && (
-        <div
-          role="dialog"
-          aria-label="Instalasi Aplikasi Android"
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4"
-        >
-          <div className="max-h-[88dvh] w-full max-w-lg overflow-y-auto rounded-xl border border-zinc-700 bg-zinc-900 p-5 text-xs shadow-2xl">
-            <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
-              <div className="flex items-center gap-2">
-                <Smartphone className="h-5 w-5 text-cyan-400" />
-                <h2 className="text-sm font-bold text-white">
-                  VeloCut Android App & Akses Multi-Device
-                </h2>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowAndroidModal(false)}
-                className="rounded p-1 text-zinc-400 hover:bg-zinc-800 hover:text-white"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-
-            <div className="mt-4 space-y-4 text-zinc-300">
-              {pwa.canInstall && (
-                <div className="rounded-lg border border-emerald-500/40 bg-emerald-950/30 p-3">
-                  <p className="font-semibold text-emerald-300">
-                    Browser Anda siap menginstal VeloCut!
-                  </p>
-                  <button
-                    type="button"
-                    onClick={() => void pwa.promptInstall()}
-                    className="mt-2 w-full rounded-md bg-emerald-500 py-2 font-semibold text-zinc-950 hover:bg-emerald-400"
-                  >
-                    Instal Aplikasi VeloCut Sekarang
-                  </button>
-                </div>
-              )}
-
-              <div className="rounded-lg border border-cyan-500/30 bg-cyan-950/20 p-3.5">
-                <div className="flex items-center justify-between">
-                  <h3 className="font-semibold text-cyan-300">
-                    Buka dari HP, Tablet, atau Laptop Lain di WiFi yang Sama
-                  </h3>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowAndroidModal(false);
-                      setHubModalState({ open: true, tab: 'connect' });
-                    }}
-                    className="inline-flex items-center gap-1 rounded bg-cyan-500 px-2.5 py-1 text-[11px] font-semibold text-zinc-950"
-                  >
-                    <Wifi className="h-3 w-3" />
-                    <span>Buka QR Hub</span>
-                  </button>
-                </div>
-                <p className="mt-1.5 text-[11px] text-zinc-400">
-                  Cukup jalankan <code className="text-zinc-200">start-studio.bat</code>{' '}
-                  (atau <code className="text-zinc-200">npm start</code>) di PC/Laptop
-                  utama Anda, lalu scan QR Code dari HP/Tablet untuk langsung mengedit
-                  proyek yang sama.
-                </p>
-              </div>
-
-              <div className="rounded-lg border border-zinc-800 bg-zinc-950/70 p-3.5">
-                <h3 className="font-semibold text-cyan-300">
-                  Opsi 1: Instal Langsung dari Chrome Android (WebAPK / PWA)
-                </h3>
-                <ol className="mt-2 list-decimal space-y-1 pl-4 text-[11px] text-zinc-400">
-                  <li>
-                    Buka URL VeloCut di Chrome Android (via WiFi LAN atau HTTPS
-                    Cloudflare Tunnel).
-                  </li>
-                  <li>
-                    Ketuk menu titik tiga Chrome &rarr;{' '}
-                    <strong>Tambahkan ke Layar Utama / Instal aplikasi</strong>.
-                  </li>
-                  <li>
-                    VeloCut berjalan layar penuh (standalone) tanpa bar URL.
-                  </li>
-                </ol>
-              </div>
-
-              <div className="rounded-lg border border-zinc-800 bg-zinc-950/70 p-3.5">
-                <h3 className="font-semibold text-emerald-300">
-                  Opsi 2: Build File .APK Native (Capacitor / TWA Android)
-                </h3>
-                <pre className="mt-2 overflow-x-auto rounded bg-zinc-900 p-2 font-mono text-[10px] text-cyan-300">
-                  {`npm run build
-npm --workspace=@velocut/web run android:init
-npm --workspace=@velocut/web run android:sync`}
-                </pre>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Modal Mode Operasi (On-Device vs Server PC) & Unduh Aplikasi Android/iOS */}
+      <RuntimeModeModal
+        isOpen={modeModalState.open}
+        initialTab={modeModalState.tab}
+        serverCaps={serverCaps}
+        onServerCapsChange={setServerCaps}
+        onOpenQrHub={() => setHubModalState({ open: true, tab: 'connect' })}
+        pwa={pwa}
+        onClose={() => setModeModalState((s) => ({ ...s, open: false }))}
+      />
     </div>
   );
 }

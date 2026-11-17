@@ -32,7 +32,9 @@ async function seekVideo(video: HTMLVideoElement, timeSec: number): Promise<void
 async function loadImage(url: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const img = new Image();
-    img.crossOrigin = 'anonymous';
+    if (!url.startsWith('blob:') && !url.startsWith('data:')) {
+      img.crossOrigin = 'anonymous';
+    }
     img.onload = () => resolve(img);
     img.onerror = () => reject(new Error(`Gagal memuat gambar: ${url}`));
     img.src = url;
@@ -42,9 +44,13 @@ async function loadImage(url: string): Promise<HTMLImageElement> {
 async function loadVideo(url: string): Promise<HTMLVideoElement> {
   return new Promise((resolve, reject) => {
     const video = document.createElement('video');
-    video.crossOrigin = 'anonymous';
+    if (!url.startsWith('blob:') && !url.startsWith('data:')) {
+      video.crossOrigin = 'anonymous';
+    }
     video.muted = true;
     video.playsInline = true;
+    video.setAttribute('playsinline', '');
+    video.setAttribute('webkit-playsinline', '');
     video.preload = 'auto';
     video.onloadeddata = () => resolve(video);
     video.onerror = () => reject(new Error(`Gagal memuat video: ${url}`));
@@ -231,6 +237,7 @@ async function exportViaMediaRecorderFallback(options: {
   width: number;
   height: number;
   fps: number;
+  bitrate: number;
   totalDuration: number;
   totalFrames: number;
   videoElements: Map<string, HTMLVideoElement>;
@@ -243,6 +250,7 @@ async function exportViaMediaRecorderFallback(options: {
     width,
     height,
     fps,
+    bitrate,
     totalDuration,
     totalFrames,
     videoElements,
@@ -278,6 +286,9 @@ async function exportViaMediaRecorderFallback(options: {
           .webkitAudioContext;
       if (mixedAudio && AudioCtx) {
         liveAudioCtx = new AudioCtx({ sampleRate: 44100 });
+        if (liveAudioCtx.state === 'suspended') {
+          await liveAudioCtx.resume().catch(() => {});
+        }
         if (typeof liveAudioCtx.createMediaStreamDestination === 'function') {
           audioDest = liveAudioCtx.createMediaStreamDestination();
           audioSourceNode = liveAudioCtx.createBufferSource();
@@ -293,6 +304,8 @@ async function exportViaMediaRecorderFallback(options: {
     }
 
     const mimeCandidates = [
+      'video/mp4;codecs=avc1.42E01E,mp4a.40.2',
+      'video/mp4;codecs=avc1,mp4a.40.2',
       'video/mp4',
       'video/webm;codecs=vp9,opus',
       'video/webm;codecs=vp8,opus',
@@ -307,7 +320,7 @@ async function exportViaMediaRecorderFallback(options: {
     const recorder = selectedMime
       ? new MediaRecorder(stream, {
           mimeType: selectedMime,
-          videoBitsPerSecond: 4_500_000,
+          videoBitsPerSecond: bitrate,
         })
       : new MediaRecorder(stream);
 
@@ -382,10 +395,17 @@ async function exportViaMediaRecorderFallback(options: {
 
 export async function exportProjectClientSide(options: {
   project: ProjectDocument;
+  quality?: 'draft' | 'standard' | 'high';
   onProgress?: (info: ClientExportProgress) => void;
   signal?: AbortSignal;
 }): Promise<Blob> {
-  const { project, onProgress, signal } = options;
+  const { project, quality = 'standard', onProgress, signal } = options;
+  const bitrate =
+    quality === 'draft'
+      ? 2_500_000
+      : quality === 'high'
+        ? 10_000_000
+        : 5_000_000;
 
   const width = Math.max(16, Math.round(project.resolution.width / 2) * 2);
   const height = Math.max(16, Math.round(project.resolution.height / 2) * 2);
@@ -420,7 +440,10 @@ export async function exportProjectClientSide(options: {
     if (!asset) continue;
     const rawUrl = mediaRegistry.getObjectUrl(asset.id) || asset.serverUrl;
     if (!rawUrl) continue;
-    const url = rawUrl.startsWith('blob:') ? rawUrl : resolveServerUrl(rawUrl);
+    const url =
+      rawUrl.startsWith('blob:') || rawUrl.startsWith('data:')
+        ? rawUrl
+        : resolveServerUrl(rawUrl);
 
     if (asset.kind === 'video' && !videoElements.has(asset.id)) {
       videoElements.set(asset.id, await loadVideo(url));
@@ -439,6 +462,7 @@ export async function exportProjectClientSide(options: {
       width,
       height,
       fps,
+      bitrate,
       totalDuration,
       totalFrames,
       videoElements,
@@ -448,9 +472,70 @@ export async function exportProjectClientSide(options: {
     });
   }
 
-  const canEncodeAudio = typeof AudioEncoder !== 'undefined';
+  const codecCandidates = [
+    'avc1.64002a',
+    'avc1.4d002a',
+    'avc1.640028',
+    'avc1.4d0028',
+    'avc1.42002a',
+    'avc1.420028',
+    'avc1.42E028',
+    'avc1.42001f',
+    'avc1.42E01E',
+  ];
+  let selectedCodec: string | null = null;
+  for (const candidate of codecCandidates) {
+    try {
+      const support = await VideoEncoder.isConfigSupported({
+        codec: candidate,
+        width,
+        height,
+        bitrate,
+        framerate: fps,
+      });
+      if (support.supported) {
+        selectedCodec = candidate;
+        break;
+      }
+    } catch {
+      // Try next H.264 profile/level
+    }
+  }
+
+  // Fallback cleanly if device/iOS/Android WebView lacks supported H.264 WebCodecs profile
+  if (!selectedCodec) {
+    return exportViaMediaRecorderFallback({
+      project,
+      width,
+      height,
+      fps,
+      bitrate,
+      totalDuration,
+      totalFrames,
+      videoElements,
+      imageElements,
+      onProgress,
+      signal,
+    });
+  }
+
+  let audioSupported = false;
+  if (typeof AudioEncoder !== 'undefined') {
+    try {
+      const aSupport = await AudioEncoder.isConfigSupported({
+        codec: 'mp4a.40.2',
+        numberOfChannels: 2,
+        sampleRate: 44100,
+        bitrate: 192_000,
+      });
+      audioSupported = Boolean(aSupport.supported);
+    } catch {
+      audioSupported = false;
+    }
+  }
+
   let mixedAudio: AudioBuffer | null = null;
-  if (canEncodeAudio) {
+  if (audioSupported) {
     onProgress?.({
       phase: 'audio',
       progress: 8,
@@ -478,32 +563,16 @@ export async function exportProjectClientSide(options: {
     },
   });
 
-  const codecCandidates = ['avc1.4d002a', 'avc1.42001f', 'avc1.42E01E'];
-  let selectedCodec = 'avc1.42001f';
-  for (const candidate of codecCandidates) {
-    const support = await VideoEncoder.isConfigSupported({
-      codec: candidate,
-      width,
-      height,
-      bitrate: 5_000_000,
-      framerate: fps,
-    });
-    if (support.supported) {
-      selectedCodec = candidate;
-      break;
-    }
-  }
-
   videoEncoder.configure({
     codec: selectedCodec,
     width,
     height,
-    bitrate: 5_000_000,
+    bitrate,
     framerate: fps,
   });
 
   let audioEncoder: AudioEncoder | null = null;
-  if (mixedAudio && typeof AudioEncoder !== 'undefined') {
+  if (mixedAudio && audioSupported && typeof AudioEncoder !== 'undefined') {
     audioEncoder = new AudioEncoder({
       output: (chunk, meta) => muxer.addAudioChunk(chunk, meta),
       error: (err) => {

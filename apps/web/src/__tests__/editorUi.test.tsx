@@ -14,6 +14,7 @@ describe('VideoEditorPage UI Integration (Desktop, Tablet, Android & Multi-Devic
     usePlaybackStore.setState({ currentTime: 0, isPlaying: false });
     useUiStore.setState({
       experienceMode: 'beginner',
+      runtimeMode: 'standalone',
       safeGuideMode: 'none',
       activeMediaCategory: 'media',
       clipboardStyle: null,
@@ -212,5 +213,69 @@ describe('VideoEditorPage UI Integration (Desktop, Tablet, Android & Multi-Devic
       screen.getByRole('button', { name: /Shortcut Keyboard \(Pro\)/i })
     );
     expect(screen.getByText(/Shift \+ Delete/i)).toBeInTheDocument();
+  });
+
+  it('supports switching between Standalone On-Device mode, Mobile APK/iOS downloads, and PC Server offload', async () => {
+    render(<VideoEditorPage />);
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    // Save in standalone mode saves locally without complaining about Server Offline
+    const saveBtn = screen.getByTitle(/Simpan Proyek Lokal di Perangkat/i);
+    await act(async () => {
+      fireEvent.click(saveBtn);
+      await Promise.resolve();
+    });
+    expect(screen.getByText(/Tersimpan Lokal/i)).toBeInTheDocument();
+
+    // Open Runtime Mode & Mobile Download Modal
+    fireEvent.click(screen.getByTitle(/Pilih Mode Operasi/i));
+    const dialog = screen.getByRole('dialog', {
+      name: /Instalasi Aplikasi Android/i,
+    });
+    expect(dialog).toBeInTheDocument();
+    expect(screen.getByText(/Mandiri di Perangkat/i)).toBeInTheDocument();
+    expect(screen.getByText(/Perantara Server PC/i)).toBeInTheDocument();
+
+    // Switch to APK / iOS / Portable Download tab
+    fireEvent.click(
+      screen.getByRole('button', { name: /Unduh APK \/ iOS \/ Web App/i })
+    );
+    expect(
+      screen.getAllByText(/VeloCut-Studio-Android\.apk/i).length
+    ).toBeGreaterThanOrEqual(1);
+    expect(
+      screen.getAllByText(/VeloCut-Studio-iOS-Unsigned\.ipa/i).length
+    ).toBeGreaterThanOrEqual(1);
+    expect(
+      screen.getAllByText(/VeloCut-Studio-OnDevice-Portable\.zip/i).length
+    ).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText(/Safari iOS/i).length).toBeGreaterThanOrEqual(1);
+
+    // Test connecting to PC Server from Mode tab
+    fireEvent.click(
+      screen.getByRole('button', { name: /Pilih Mode \(HP \/ Server PC\)/i })
+    );
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          status: 'online',
+          ffmpegAvailable: true,
+          preferredEncoder: 'libx264',
+        }),
+      }))
+    );
+
+    const urlInput = screen.getByPlaceholderText(/192\.168\.1\.10:3000/i);
+    fireEvent.change(urlInput, { target: { value: '192.168.1.50:3000' } });
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /^Hubungkan$/i }));
+      await Promise.resolve();
+    });
+    expect(useUiStore.getState().runtimeMode).toBe('server');
   });
 });

@@ -38,10 +38,17 @@ class StudioMediaRuntime {
     return this.compositor;
   }
 
+  unlockAudio(): void {
+    this.ensureAudioContext();
+    if (this.audioCtx?.state === 'suspended') {
+      void this.audioCtx.resume().catch(() => {});
+    }
+  }
+
   private ensureAudioContext(): void {
     if (this.audioCtx) {
       if (this.audioCtx.state === 'suspended') {
-        void this.audioCtx.resume();
+        void this.audioCtx.resume().catch(() => {});
       }
       return;
     }
@@ -61,11 +68,15 @@ class StudioMediaRuntime {
 
     const rawUrl = mediaRegistry.getObjectUrl(asset.id) || asset.serverUrl;
     if (!rawUrl) return null;
-    const url = rawUrl.startsWith('blob:') ? rawUrl : resolveServerUrl(rawUrl);
+    const url =
+      rawUrl.startsWith('blob:') || rawUrl.startsWith('data:')
+        ? rawUrl
+        : resolveServerUrl(rawUrl);
+    const isRemote = !url.startsWith('blob:') && !url.startsWith('data:');
 
     if (asset.kind === 'image') {
       const img = new Image();
-      img.crossOrigin = 'anonymous';
+      if (isRemote) img.crossOrigin = 'anonymous';
       img.src = url;
       const node: CachedMediaNode = {
         assetId: asset.id,
@@ -80,10 +91,12 @@ class StudioMediaRuntime {
       asset.kind === 'audio'
         ? document.createElement('audio')
         : document.createElement('video');
-    el.crossOrigin = 'anonymous';
+    if (isRemote) el.crossOrigin = 'anonymous';
     el.preload = 'auto';
     if (el instanceof HTMLVideoElement) {
       el.playsInline = true;
+      el.setAttribute('playsinline', '');
+      el.setAttribute('webkit-playsinline', '');
     }
     el.src = url;
 
@@ -164,6 +177,10 @@ class StudioMediaRuntime {
   renderFrameAt(time: number, isPlaying: boolean): void {
     const timeline = useTimelineStore.getState();
     const playback = usePlaybackStore.getState();
+
+    if (isPlaying && this.audioCtx?.state === 'suspended') {
+      void this.audioCtx.resume().catch(() => {});
+    }
 
     if (this.masterGain && this.audioCtx) {
       this.masterGain.gain.setValueAtTime(

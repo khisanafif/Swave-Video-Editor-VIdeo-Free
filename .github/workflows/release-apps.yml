@@ -1,0 +1,180 @@
+name: Build & Release Standalone Apps (Android APK, iOS IPA, Portable Web & Pages)
+
+on:
+  push:
+    branches: [main]
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: velocut-release-apps
+  cancel-in-progress: false
+
+jobs:
+  build-standalone-web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run typecheck & tests
+        run: npm run typecheck && npm test
+
+      - name: Build Standalone On-Device Web Bundle
+        run: npm run build:standalone
+
+      - name: Package Portable ZIP
+        run: |
+          mkdir -p artifacts
+          cd dist-standalone
+          zip -qr ../artifacts/VeloCut-Studio-OnDevice-Portable.zip VeloCut-Studio-OnDevice
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: portable-web-zip
+          path: artifacts/VeloCut-Studio-OnDevice-Portable.zip
+
+      - name: Configure GitHub Pages
+        continue-on-error: true
+        uses: actions/configure-pages@v5
+        with:
+          enablement: true
+
+      - name: Upload GitHub Pages artifact
+        continue-on-error: true
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist-standalone/VeloCut-Studio-OnDevice/web
+
+  deploy-pages:
+    needs: build-standalone-web
+    if: ${{ github.event_name != 'pull_request' }}
+    continue-on-error: true
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
+
+  build-android-apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Prepare Capacitor Android Project
+        run: npm run mobile:android
+
+      - name: Build Android APK
+        working-directory: apps/web/android
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleDebug --no-daemon
+
+      - name: Collect APK
+        run: |
+          mkdir -p artifacts
+          cp apps/web/android/app/build/outputs/apk/debug/app-debug.apk artifacts/VeloCut-Studio-Android.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android-apk
+          path: artifacts/VeloCut-Studio-Android.apk
+
+  build-ios-ipa:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Prepare Capacitor iOS Project
+        run: npm run mobile:ios
+
+      - name: Build Unsigned iOS App Bundle
+        run: |
+          xcodebuild \
+            -workspace apps/web/ios/App/App.xcworkspace \
+            -scheme App \
+            -configuration Release \
+            -sdk iphoneos \
+            -derivedDataPath apps/web/ios/build \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            DEVELOPMENT_TEAM="" \
+            clean build
+
+      - name: Package Unsigned IPA (AltStore / Sideloadly / TrollStore)
+        run: |
+          mkdir -p artifacts ios_pkg/Payload
+          cp -R apps/web/ios/build/Build/Products/Release-iphoneos/App.app ios_pkg/Payload/
+          cd ios_pkg
+          zip -qr ../artifacts/VeloCut-Studio-iOS-Unsigned.ipa Payload
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ios-ipa
+          path: artifacts/VeloCut-Studio-iOS-Unsigned.ipa
+
+  publish-release:
+    needs: [build-standalone-web, build-android-apk, build-ios-ipa]
+    if: ${{ always() && (needs.build-standalone-web.result == 'success' || needs.build-android-apk.result == 'success' || needs.build-ios-ipa.result == 'success') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: release-files
+          merge-multiple: true
+
+      - name: Publish GitHub Release Assets
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || 'latest-standalone' }}
+          name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || 'VeloCut Studio — Aplikasi Mandiri Terbaru (Android · iOS · Portabel)' }}
+          make_latest: true
+          generate_release_notes: true
+          body: |
+            ## VeloCut Studio — 100% Gratis Tanpa Watermark
+
+            Semua proses editing, preview 60 FPS WebGL2, AI Whisper Subtitle, dan ekspor video **berlangsung 100% langsung di HP / perangkat Anda sendiri** tanpa membutuhkan server PC. Anda tetap bisa menghubungkan Server PC kapan saja dari tombol **Di Perangkat / Server PC** di bar atas aplikasi.
+
+            ### File Unduhan:
+            - **Android (`.apk`)**: `VeloCut-Studio-Android.apk` — instal langsung di HP Android.
+            - **iPhone / iPad (`iOS .ipa`)**: `VeloCut-Studio-iOS-Unsigned.ipa` — instal via **AltStore / Sideloadly / TrollStore** *(atau cara paling mudah tanpa sideload: buka link GitHub Pages di Safari iPhone/iPad lalu pilih Bagikan -> Tambahkan ke Layar Utama)*.
+            - **Laptop / PC Portabel (`.zip`)**: `VeloCut-Studio-OnDevice-Portable.zip` — ekstrak dan klik ganda `Jalankan-Di-Perangkat.bat` (Windows) atau `./jalankan-di-perangkat.sh` (Linux/macOS).
+          files: |
+            release-files/*

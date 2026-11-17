@@ -3,11 +3,17 @@ node_modules/
 apps/*/node_modules/
 packages/*/node_modules/
 
-# Build outputs & TypeScript incremental cache
+# Build outputs, standalone packages & generated mobile projects
 dist/
+dist-standalone/
 apps/*/dist/
 packages/*/dist/
+apps/web/android/
+apps/web/ios/
 *.tsbuildinfo
+*.apk
+*.ipa
+*.zip
 
 # Runtime local storage, SQLite DBs & user uploaded media/renders
 apps/server/storage/

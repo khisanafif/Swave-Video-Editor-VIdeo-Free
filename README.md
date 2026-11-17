@@ -1,52 +1,92 @@
-# VeloCut Studio (V-HESA) — Video Editor Web 100% Gratis Tanpa Watermark
+# VeloCut Studio (V-HESA) — Video Editor 100% Gratis (HP Mandiri & Server PC)
 
-**VeloCut** adalah aplikasi edit video web 60 FPS berbasis **Hybrid-Edge Studio Architecture (V-HESA)** yang dirancang agar mudah digunakan oleh **pemula / kreator kasual** sekaligus lengkap untuk **editor profesional**.
+**VeloCut Studio** adalah aplikasi edit video 60 FPS yang **100% gratis tanpa watermark, tanpa langganan berbayar, dan tanpa batasan ekspor**, lengkap dengan **Dual-Mode (`Pemula` | `Pro`)** dan **Subtitle Otomatis (AI Speech-to-Text)**.
 
-Semua fitur **100% gratis tanpa watermark, tanpa langganan berbayar, dan tanpa batasan resolusi ekspor**. Cukup jalankan 1 server lokal di PC/Laptop Anda, lalu edit dari komputer tersebut maupun langsung dari **HP Android/iOS, Tablet, dan Laptop lain** di jaringan WiFi/LAN yang sama.
+Sekarang pengguna bebas memilih **2 cara kerja** dalam satu aplikasi yang sama:
+
+1. **Aplikasi Mandiri di Perangkat (100% Di HP / Device Sendiri — Tanpa Server PC)**
+   Unduh dari **GitHub Releases** atau pasang via **GitHub Pages**. Semua proses (preview WebGL2, potong klip, AI Whisper subtitle, potong hening VAD, mixing audio, & ekspor MP4) **berlangsung 100% langsung di HP Android, iPhone/iPad (iOS), maupun Laptop Anda**.
+2. **Mode Perantara Server PC / Laptop (WiFi / LAN Offload FFmpeg)**
+   Jalankan VeloCut sebagai server di satu PC/Laptop, lalu edit dari HP/Tablet lain di WiFi yang sama (scan QR Code) atau hubungkan aplikasi Android/iOS ke alamat IP PC untuk memakai render **FFmpeg CPU/GPU** dan **`faster-whisper`** di PC.
+
+> Anda dapat berpindah antara **Mandiri di Perangkat** dan **Server PC** kapan saja lewat tombol status di bar atas editor.
 
 ---
 
-## Mulai Cepat (3 Langkah untuk Semua Pengguna)
+## Pilihan 1: Unduh & Pakai Langsung di Perangkat (Tanpa Server PC)
 
-> **Syarat utama**: Terpasang **Node.js versi `>= 22.5.0`** (disarankan **Node.js 22 LTS**).
+Tidak perlu menginstal Node.js atau menjalankan server di laptop:
+
+### A. HP Android (`.apk` / WebAPK)
+1. **Unduh file `.apk` langsung dari GitHub**:
+   - Buka halaman **[Releases](https://github.com/khisanafif/WEB-EDITOR-VID-SERVER/releases/latest)** pada repository ini.
+   - Unduh **`VeloCut-Studio-Android.apk`** dan instal di HP Android Anda *(izinkan "Instal aplikasi tidak dikenal" jika diminta)*.
+   - Semua editing, AI Subtitle Whisper, dan ekspor berlangsung langsung di HP (`Downloads/VeloCut/`).
+2. **Atau tanpa instal file APK (Chrome PWA)**:
+   - Buka halaman **GitHub Pages** VeloCut di Chrome Android → ketuk menu titik tiga → **Instal aplikasi / Tambahkan ke Layar Utama**.
+
+### B. iPhone & iPad / iOS (Safari PWA & File `.ipa`)
+1. **Cara Paling Mudah di iPhone/iPad (Resmi Apple Web App, Tanpa PC & Tanpa Sideload)**:
+   - Buka link **GitHub Pages** VeloCut di browser **Safari** iPhone/iPad Anda.
+   - Ketuk tombol **Bagikan (Share ↑)** di bagian bawah Safari → pilih **Tambahkan ke Layar Utama (Add to Home Screen)**.
+   - VeloCut berjalan layar penuh (*standalone*) sebagai aplikasi iOS, mendukung impor galeri, preview ber-audio WebGL2, AI subtitle, dan ekspor `.mp4` langsung ke **Photos / Files**.
+2. **Menggunakan File `.ipa` (`VeloCut-Studio-iOS-Unsigned.ipa`)**:
+   - Unduh **`VeloCut-Studio-iOS-Unsigned.ipa`** dari **[Releases](https://github.com/khisanafif/WEB-EDITOR-VID-SERVER/releases/latest)**.
+   - Pasang ke iPhone/iPad menggunakan **AltStore**, **Sideloadly**, **TrollStore**, atau sign dengan Apple ID gratis di **Xcode** (`npm run mobile:ios`).
+
+### C. Laptop / PC Portabel Offline (`.zip` — Tanpa `npm install`)
+1. Unduh **`VeloCut-Studio-OnDevice-Portable.zip`** dari **[Releases](https://github.com/khisanafif/WEB-EDITOR-VID-SERVER/releases/latest)** lalu ekstrak.
+2. **Windows**: Klik ganda **`Jalankan-Di-Perangkat.bat`**.
+3. **Linux / macOS**: Jalankan **`./jalankan-di-perangkat.sh`**.
+4. Semua pemrosesan tetap berlangsung lokal di browser perangkat Anda (zero server upload).
+
+> *Catatan*: Paket `.apk`, `.ipa`, `.zip`, dan GitHub Pages otomatis dibuat oleh GitHub Actions ([`release-apps.yml`](.github/workflows/release-apps.yml)) setiap kali ada push ke `main` atau tag versi (`v*`). Untuk mengaktifkan **GitHub Pages**, pastikan di menu GitHub repo **Settings → Pages → Source** dipilih **GitHub Actions**.
+
+---
+
+## Pilihan 2: Jalankan sebagai Server PC / Laptop (Mode Multi-Device & Offload FFmpeg)
+
+Gunakan cara ini bila Anda ingin menjadikan **1 Laptop/PC sebagai server perantara** agar:
+- HP Android / iOS / Tablet lain di WiFi yang sama bisa membuka dan melanjutkan proyek yang sama lewat **QR Code**; atau
+- HP dengan spesifikasi ringan mengirim proyek untuk dirender oleh **FFmpeg (`libx264` / NVENC / VAAPI)** dan **`faster-whisper`** milik PC.
+
+### Mulai Cepat Server PC (3 Langkah)
+
+> **Syarat utama PC/Laptop Host**: Terpasang **Node.js versi `>= 22.5.0`** (disarankan **Node.js 22 LTS**).
 
 1. **Unduh / Clone Repository**
    ```bash
    git clone --depth 1 https://github.com/khisanafif/WEB-EDITOR-VID-SERVER.git
    cd WEB-EDITOR-VID-SERVER
    ```
-   *(Menggunakan `--depth 1` membuat proses clone jauh lebih cepat karena hanya mengambil versi terbaru).*
 
 2. **Instal Dependensi**
    ```bash
    npm install
    ```
-   *(Perintah ini otomatis mengunduh paket web/server, biner `ffmpeg-static` sesuai OS Anda, serta mem-build paket `@velocut/shared`).*
+   *(Otomatis memasang paket web/server, biner `ffmpeg-static` sesuai OS Anda, serta membangun `@velocut/shared`).*
 
-3. **Jalankan Studio**
-   - **Windows**: Klik ganda file `start-studio.bat` (atau jalankan `npm start` di terminal).
+3. **Jalankan Server Studio**
+   - **Windows**: Klik ganda file `start-studio.bat` (atau `npm start`).
    - **Linux / macOS**:
      ```bash
      chmod +x start-studio.sh
      ./start-studio.sh
      ```
-   Lalu buka **`http://localhost:3000`** di browser Anda (atau scan **QR Code** di tombol **Multi-Device / QR** untuk membuka langsung dari HP/Tablet di WiFi yang sama!).
+   - Buka **`http://localhost:3000`** di browser PC, lalu klik **Multi-Device / QR** untuk scan dari HP/Tablet lain di WiFi yang sama, **atau** buka aplikasi VeloCut (`.apk`/iOS PWA) di HP → ketuk tombol mode **`Di Perangkat`** di bar atas → pilih **Perantara Server PC** dan masukkan alamat IP PC (`http://192.168.x.x:3000`).
 
 ---
 
-## Panduan Instalasi Lengkap per Sistem Operasi
+## Panduan Instalasi Lengkap PC Host per Sistem Operasi
 
 ### 1. Windows 10 / 11
-
-1. **Pasang Node.js v22 LTS**:
-   - Buka [https://nodejs.org](https://nodejs.org) dan unduh installer **22.x LTS (Windows Installer `.msi`)**.
-   - Jalankan installer hingga selesai, lalu buka **Command Prompt (CMD)** atau **PowerShell** dan pastikan versinya `>= 22.5.0`:
-     ```cmd
-     node -v
-     npm -v
-     ```
-2. **Pasang Git** (jika belum ada): unduh dari [https://git-scm.com/download/win](https://git-scm.com/download/win).
-3. **Clone, Instal, & Jalankan**:
+1. Pasang **Node.js v22 LTS** dari [https://nodejs.org](https://nodejs.org) dan **Git** dari [https://git-scm.com/download/win](https://git-scm.com/download/win).
+2. Pastikan versi minimal `>= 22.5.0`:
+   ```cmd
+   node -v
+   npm -v
+   ```
+3. Clone & jalankan:
    ```cmd
    git clone --depth 1 https://github.com/khisanafif/WEB-EDITOR-VID-SERVER.git
    cd WEB-EDITOR-VID-SERVER
@@ -54,28 +94,18 @@ Semua fitur **100% gratis tanpa watermark, tanpa langganan berbayar, dan tanpa b
    npm run build
    npm --workspace=@velocut/server run start
    ```
-   *(Atau cukup klik ganda `start-studio.bat` setelah clone).*
-4. **Tips WiFi LAN Windows**: Jika muncul jendela *Windows Defender Firewall*, centang **Private networks** dan klik **Allow access** agar HP/Tablet dapat terhubung ke alamat `http://192.168.x.x:3000`.
-
----
+   *(Atau klik ganda `start-studio.bat`). Jika muncul Windows Defender Firewall, izinkan **Private networks** agar HP via WiFi dapat terhubung.*
 
 ### 2. Linux (Ubuntu / Linux Mint / Debian / Arch)
-
-1. **Pasang Node.js v22 LTS** *(jangan memakai `sudo apt install nodejs` bawaan Ubuntu/Debian lama karena sering masih v18)*:
+1. Pasang Node.js v22 LTS via NVM (disarankan, hindari paket distro lama):
    ```bash
-   # Pasang NVM (Node Version Manager)
    curl -fsSL https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | bash
    source ~/.bashrc
-
-   # Pasang Node.js 22 LTS
    nvm install 22
    nvm use 22
-
-   # Pastikan versi >= v22.5.0
    node -v
-   npm -v
    ```
-2. **Clone, Instal, & Jalankan**:
+2. Clone, instal, & jalankan:
    ```bash
    git clone --depth 1 https://github.com/khisanafif/WEB-EDITOR-VID-SERVER.git
    cd WEB-EDITOR-VID-SERVER
@@ -84,23 +114,19 @@ Semua fitur **100% gratis tanpa watermark, tanpa langganan berbayar, dan tanpa b
    chmod +x start-studio.sh
    ./start-studio.sh
    ```
-3. **Izinkan Port 3000 di Firewall (jika memakai `ufw` dan ingin akses dari HP via WiFi)**:
+3. Bila memakai `ufw` dan ingin dihubungkan dari HP via WiFi:
    ```bash
    sudo ufw allow 3000/tcp
    ```
 
----
-
 ### 3. macOS
-
-1. **Pasang Node.js v22** via Homebrew:
+1. Pasang Node.js v22 via Homebrew:
    ```bash
    brew install node@22
    echo 'export PATH="/opt/homebrew/opt/node@22/bin:$PATH"' >> ~/.zshrc
    source ~/.zshrc
-   node -v
    ```
-2. **Clone, Instal, & Jalankan**:
+2. Clone, instal, & jalankan:
    ```bash
    git clone --depth 1 https://github.com/khisanafif/WEB-EDITOR-VID-SERVER.git
    cd WEB-EDITOR-VID-SERVER
@@ -112,66 +138,41 @@ Semua fitur **100% gratis tanpa watermark, tanpa langganan berbayar, dan tanpa b
 
 ---
 
-## Fitur Lengkap untuk Pemula & Profesional
+## Fitur Utama Editor (100% Gratis Tanpa Watermark)
 
-### 1. Dual-Mode (1 Klik di Bar Atas: `Pemula` | `Pro`)
-- **Mode Pemula (Simpel)**:
-  - Layar awal *Quick Start*: langsung impor video/foto, pilih rasio **`16:9 YouTube`**, **`9:16 TikTok/Reels`**, **`1:1 Feed`**, atau muat proyek demo.
-  - Tombol **Isi Penuh (Fill)** & **Pas Layar (Fit)** 1-klik untuk menghilangkan garis hitam saat video landscape dimasukkan ke format vertikal `9:16`.
-  - Preset filter warna, stiker animasi *Pop Zoom*, efek suara (SFX) & musik latar (BGM) sintetis bebas hak cipta, serta **Auto-Ducking BGM** (otomatis mengecilkan musik saat suara bicara terdengar).
-  - Tombol hijau **Ekspor MP4** selalu tersedia di bar atas dengan preset sekali klik (*TikTok / Reels*, *YouTube Full HD*, *Hemat WhatsApp*).
-- **Mode Pro (Studio NLE Lengkap — 100% Gratis)**:
-  - Multi-track timeline: **Split (`S`)**, **Trim ke Playhead (`[` / `]`)**, **Ripple Delete / Rapatkan (`Shift+Delete`)**, **Tutup Celah**, **Freeze Frame**, **Mirror / Flip / Rotate 90°**, **Pisah Audio (`Detach Audio`)**, **Salin & Tempel Gaya**, serta rename & hapus track.
-  - **Auto-Cut Silence (VAD)**: mendeteksi dan membuang jeda diam/hening secara otomatis pada klip video atau audio.
-  - **9 Shader WebGL2 GLSL Real-time**: *Brightness, Contrast, Saturation, Grayscale, Sepia, Vignette, Chromatic Aberration (RGB Glitch), Blur, Mosaic Pixelate* + preset LUT.
-  - **Shuttle `J / K / L`**, panduan bingkai (*Grid 3×3*, *Zona Aman TikTok/Reels*, *Safe Area YouTube*), dan panel diagnostik runtime.
+### 1. Dual-Mode (`Pemula` | `Pro`)
+- **Mode Pemula (Simpel)**: Layar awal *Quick Start*, pilih rasio `16:9` / `9:16` / `1:1`, tombol 1-klik **Isi Penuh (Fill)** & **Pas Layar (Fit)**, preset filter/stiker/BGM/SFX bebas hak cipta, **Auto-Ducking BGM**, dan preset ekspor cepat (*TikTok / Reels*, *YouTube Full HD*, *Hemat WhatsApp*).
+- **Mode Pro (Studio NLE)**: **Split (`S`)**, **Trim ke Playhead (`[` / `]`)**, **Ripple Delete (`Shift+Delete`)**, **Tutup Celah**, **Freeze Frame**, **Mirror / Flip / Rotate 90°**, **Pisah Audio (`Detach Audio`)**, **Auto-Cut Silence (VAD)**, **Salin & Tempel Gaya**, **Shuttle `J / K / L`**, panduan bingkai (*Grid 3×3*, *Zona Aman TikTok*, *Safe Area YouTube*), dan **9 Shader WebGL2 GLSL Real-time**.
 
 ### 2. Subtitle Otomatis (AI Speech-to-Text) & Subtitle Studio
-Buka tab **Subtitle** di panel kiri untuk membuat subtitle otomatis:
-- **AI Whisper di Browser (100% Gratis, Tanpa Server/API Key)**: Menjalankan `@huggingface/transformers` di Web Worker (`Xenova/whisper-tiny` ~40MB / `Xenova/whisper-base` ~75MB; diunduh sekali pada pemakaian pertama lalu tersimpan permanen di cache browser). Mendukung deteksi otomatis, **Bahasa Indonesia (`id`)**, Inggris, Melayu, Jawa, Jepang, Korea, Mandarin, Arab, dll.
-- **Server PC Lokal (Whisper / VAD)**: Mengirim audio ke server lokal; otomatis memakai `faster-whisper` / `whisper` jika terpasang di PC, atau fallback **Server VAD** deteksi suara.
-- **Live Dikte Mikrofon**: Ucapkan subtitle langsung sambil memutar video (Web Speech API di Chrome/Edge).
-- **Sinkronisasi Naskah + VAD (100% Offline)**: Tempel naskah/lirik untuk diselaraskan otomatis dengan jeda bicara di audio.
-- **Opsional BYOK API**: Mendukung *Groq* / *OpenAI* API key milik sendiri (disimpan hanya di `sessionStorage` browser).
-- **Editor Cue, Sorot Kata Karaoke, & `.SRT` / `.VTT`**:
-  - Edit teks per cue, geser waktu `-0.2s / +0.2s`, pecah (`Split`), gabung (`Merge`), dan **Terapkan Gaya ke Semua Subtitle** dalam 1 klik.
-  - Sorot kata aktif (*Karaoke / Hormozi Highlight*) dengan *auto word-wrapping* di kanvas.
-  - Impor dan ekspor `.srt` / `.vtt`, serta burn-in subtitle saat ekspor MP4 (WebCodecs maupun FFmpeg `libass`).
-
-### 3. Multi-Device Studio & Penyimpanan Offline
-- **Edit Bersama di WiFi/LAN**: Klik **Multi-Device / QR** di bar atas, lalu scan QR Code dari kamera HP/Tablet. Video dari galeri HP diunggah per potongan 10MB ke Server PC dan langsung sinkron ke timeline.
-- **Auto-Save Offline**: Perubahan proyek tersimpan otomatis di `localStorage` + file media lokal di OPFS browser (serta ke database SQLite WAL saat terhubung ke Server PC).
+- **AI Whisper di Perangkat (100% Gratis, Tanpa Server)**: Menjalankan `@huggingface/transformers` (`Xenova/whisper-tiny` / `Xenova/whisper-base`) langsung di browser/HP (mendukung **Bahasa Indonesia (`id`)**, Inggris, Melayu, Jawa, Jepang, Korea, Mandarin, Arab, dll.).
+- **Mode Tambahan**: Perantara Server PC (`faster-whisper` / Server VAD), **Live Dikte Mikrofon**, **Sinkronisasi Naskah + VAD (100% Offline)**, serta opsional BYOK *Groq* / *OpenAI*.
+- **Editor Cue & Karaoke**: Edit waktu & teks tiap blok, sorot kata aktif (*Karaoke / Hormozi*), *auto word-wrap*, **Terapkan Gaya ke Semua**, impor/ekspor `.srt` & `.vtt`, serta burn-in subtitle saat ekspor.
 
 ---
 
-## Cara Mengaktifkan Fitur Opsional Tambahan di Server PC
+## Build Lokal APK Android, Project Xcode iOS, & Paket Portabel (Developer)
 
-1. **Transkripsi Whisper Lokal di PC Server (Tanpa Internet Setelah Unduh Model)**
-   Berguna bila Anda mengedit dari HP lewat WiFi dan ingin PC yang memproses transkripsi:
-   ```bash
-   pip install faster-whisper
-   ```
-   Setelah terpasang, mode **Server PC Lokal** di tab **Subtitle** otomatis memakai `faster-whisper`.
+```bash
+# 1. Buat paket portabel offline (dist-standalone/VeloCut-Studio-OnDevice)
+npm run build:standalone
 
-2. **Mode Development, Test, & Build**
-   ```bash
-   # Jalankan hot-reload frontend (:5173) + backend (:3000)
-   npm run dev
+# 2. Siapkan & sync project Android Studio / APK (butuh Android SDK & JDK 17)
+npm run mobile:android
+npm --workspace=@velocut/web run android:open   # atau: cd apps/web/android && ./gradlew assembleDebug
 
-   # Periksa tipe TypeScript, jalankan seluruh test, dan build produksi
-   npm run typecheck
-   npm test
-   npm run build
-   ```
+# 3. Siapkan & sync project Xcode iOS (khusus macOS dengan Xcode & CocoaPods)
+npm run mobile:ios
+npm --workspace=@velocut/web run ios:open
 
-3. **Instal sebagai Aplikasi Android (PWA / APK)**
-   - **PWA (Paling Cepat)**: Buka URL VeloCut di Chrome Android → ketuk menu titik tiga → **Tambahkan ke Layar Utama / Instal aplikasi**.
-   - **Native `.apk` (Capacitor)**:
-     ```bash
-     npm run build
-     npm --workspace=@velocut/web run android:init
-     npm --workspace=@velocut/web run android:sync
-     ```
+# 4. Mode development, typecheck, test, dan build produksi
+npm run dev
+npm run typecheck
+npm test
+npm run build
+```
+
+> Opsional PC Server Whisper: jalankan `pip install faster-whisper` di PC Host agar mode subtitle Server PC otomatis memakai `faster-whisper`.
 
 ---
 
@@ -179,7 +180,7 @@ Buka tab **Subtitle** di panel kiri untuk membuat subtitle otomatis:
 
 | Shortcut | Fungsi |
 | :--- | :--- |
-| `Space` | Play / Pause video |
+| `Space` | Play / Pause pratinjau video |
 | `J` / `K` / `L` | Mundur 1 detik / Stop / Maju cepat (`1x` → `2x` → `4x`) |
 | `←` / `→` | Geser 1 frame (`Shift` + panah untuk 1 detik) |
 | `S` | Potong (*Split*) klip di posisi Playhead |
@@ -194,7 +195,7 @@ Buka tab **Subtitle** di panel kiri untuk membuat subtitle otomatis:
 
 ## Troubleshooting
 
-- **Error `node:sqlite` atau `Unsupported engine` saat `npm install` / `npm start`**: Pastikan `node -v` menunjukkan **`v22.5.0` atau lebih baru**.
-- **HP tidak bisa membuka `http://192.168.x.x:3000`**: Pastikan HP dan PC berada di WiFi yang sama, fitur *AP Isolation* router mati, dan port `3000` dibuka di firewall PC.
-- **Ekspor dari HP via HTTP LAN menghasilkan `.webm`, bukan `.mp4`**: Browser menonaktifkan *WebCodecs* pada alamat `http://` selain `localhost` sehingga memakai fallback `MediaRecorder`. Pilih mode **Server PC FFmpeg** pada dialog Ekspor untuk mendapatkan file `.mp4` (H.264 + AAC) universal, atau sajikan lewat HTTPS (`infra/caddy/Caddyfile`, `infra/nginx/velocut.conf`, `infra/cloudflared/config.yml`).
-- **Model AI Whisper di Browser gagal diunduh**: Koneksi internet hanya dibutuhkan saat pertama kali mengunduh model (~40MB). Setelah selesai, model tersimpan di cache browser. Jika sedang offline penuh, gunakan mode **Sinkronisasi Naskah + Deteksi Suara (100% Offline)** atau **Dikte Mikrofon**.
+- **HP ingin edit mandiri tanpa PC tapi muncul pesan server**: Klik tombol **`Di Perangkat` / `Server PC`** di bar atas → pilih **`Mandiri di Perangkat`**. Kini simpan proyek, preview, AI subtitle, dan ekspor berjalan 100% di HP.
+- **Ekspor `.mp4` di Safari iPhone / iOS**: Pilih **Simpan / Bagikan** setelah ekspor selesai untuk langsung menyimpan hasil video ke **Photos (Galeri)** atau **Files**.
+- **Ekspor via WiFi LAN `http://192.168.x.x:3000` menghasilkan `.webm`**: Browser membatasi *WebCodecs* di luar HTTPS / `localhost`, sehingga memakai fallback `MediaRecorder`. Pilih **Server PC FFmpeg** saat memakai Mode Server PC atau instal aplikasi via **GitHub Pages / APK / PWA HTTPS** untuk mendapatkan `.mp4` (H.264 + AAC) langsung di perangkat.
+- **Error `node:sqlite` atau `Unsupported engine` saat `npm install` di PC**: Pastikan `node -v` menunjukkan **`v22.5.0` atau lebih baru**.

@@ -6,12 +6,18 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -p tsconfig.json && vite build",
+    "build:standalone": "VITE_STANDALONE_BUILD=true npm run build",
     "preview": "vite preview",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
-    "android:init": "npx --yes @capacitor/cli@latest add android",
-    "android:sync": "npm run build && npx --yes @capacitor/cli@latest sync android",
-    "android:open": "npx --yes @capacitor/cli@latest open android"
+    "android:prepare": "node scripts/prepare-mobile.mjs android",
+    "ios:prepare": "node scripts/prepare-mobile.mjs ios",
+    "android:init": "npx --yes @capacitor/cli@6.2.1 add android",
+    "android:sync": "VITE_STANDALONE_BUILD=true npm run build && npx --yes @capacitor/cli@6.2.1 sync android",
+    "android:open": "npx --yes @capacitor/cli@6.2.1 open android",
+    "ios:init": "npx --yes @capacitor/cli@6.2.1 add ios",
+    "ios:sync": "VITE_STANDALONE_BUILD=true npm run build && npx --yes @capacitor/cli@6.2.1 sync ios",
+    "ios:open": "npx --yes @capacitor/cli@6.2.1 open ios"
   },
   "dependencies": {
     "@huggingface/transformers": "^4.3.2",

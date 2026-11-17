@@ -360,7 +360,10 @@ export function PreviewViewport() {
 
           <button
             type="button"
-            onClick={() => usePlaybackStore.getState().togglePlay()}
+            onClick={() => {
+              mediaRuntime.unlockAudio();
+              usePlaybackStore.getState().togglePlay();
+            }}
             aria-label={isPlaying ? 'Pause' : 'Play'}
             className="flex h-8 w-10 items-center justify-center rounded-md bg-cyan-500 text-zinc-950 shadow-md shadow-cyan-500/20 transition hover:bg-cyan-400 active:scale-95"
             title="Play / Pause (Space)"

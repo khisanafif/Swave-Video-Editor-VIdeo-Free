@@ -1,12 +1,19 @@
-const CACHE_NAME = 'velocut-app-shell-v1';
-const APP_SHELL_URLS = [
-  '/',
-  '/index.html',
-  '/manifest.webmanifest',
-  '/icons/icon-192.png',
-  '/icons/icon-512.png',
-  '/icons/icon.svg',
-];
+const CACHE_NAME = 'velocut-app-shell-v2';
+
+function scopedUrl(relPath) {
+  return new URL(relPath, self.registration.scope).toString();
+}
+
+function getAppShellUrls() {
+  return [
+    scopedUrl('./'),
+    scopedUrl('index.html'),
+    scopedUrl('manifest.webmanifest'),
+    scopedUrl('icons/icon-192.png'),
+    scopedUrl('icons/icon-512.png'),
+    scopedUrl('icons/icon.svg'),
+  ];
+}
 
 function withIsolationHeaders(response) {
   const headers = new Headers(response.headers);
@@ -14,7 +21,7 @@ function withIsolationHeaders(response) {
     headers.set('Cross-Origin-Opener-Policy', 'same-origin');
   }
   if (!headers.has('Cross-Origin-Embedder-Policy')) {
-    headers.set('Cross-Origin-Embedder-Policy', 'require-corp');
+    headers.set('Cross-Origin-Embedder-Policy', 'credentialless');
   }
   return new Response(response.body, {
     status: response.status,
@@ -27,7 +34,7 @@ self.addEventListener('install', (event) => {
   event.waitUntil(
     caches
       .open(CACHE_NAME)
-      .then((cache) => cache.addAll(APP_SHELL_URLS))
+      .then((cache) => cache.addAll(getAppShellUrls()))
       .then(() => self.skipWaiting())
       .catch(() => {})
   );
@@ -71,7 +78,8 @@ self.addEventListener('fetch', (event) => {
         })
         .catch(async () => {
           const cached =
-            (await caches.match(request)) || (await caches.match('/index.html'));
+            (await caches.match(request)) ||
+            (await caches.match(scopedUrl('index.html')));
           return cached ? withIsolationHeaders(cached) : Response.error();
         })
     );

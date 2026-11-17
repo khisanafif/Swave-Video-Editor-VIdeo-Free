@@ -170,6 +170,13 @@ export function HelpShortcutsModal({
                     </p>
                   </div>
                 </div>
+
+                <div className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-3 text-[11px] text-zinc-400">
+                  <strong className="text-zinc-200">Tips Mode Jalan:</strong> Ketuk
+                  tombol <strong>Di Perangkat</strong> / <strong>Server PC</strong> di
+                  bar atas jika ingin memilih apakah semua proses dikerjakan mandiri
+                  di HP/laptop ini atau melalui perantara Server PC lewat WiFi/LAN.
+                </div>
               </div>
             </>
           ) : (

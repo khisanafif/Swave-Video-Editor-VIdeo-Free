@@ -106,6 +106,8 @@ export async function probeAndRegisterMediaFile(
       video.preload = 'metadata';
       video.muted = true;
       video.playsInline = true;
+      video.setAttribute('playsinline', '');
+      video.setAttribute('webkit-playsinline', '');
       video.src = objectUrl;
       let settled = false;
       const finish = (thumb?: string) => {
@@ -126,8 +128,18 @@ export async function probeAndRegisterMediaFile(
         const h = video.videoHeight || 720;
         finish(captureThumbnailDataUrl(video, w, h));
       };
+      video.onseeked = () => {
+        const w = video.videoWidth || 1280;
+        const h = video.videoHeight || 720;
+        finish(captureThumbnailDataUrl(video, w, h));
+      };
       video.onloadedmetadata = () => {
-        setTimeout(() => finish(), 350);
+        try {
+          if (video.currentTime === 0) video.currentTime = 0.05;
+        } catch {
+          // Ignore seek errors before data arrives
+        }
+        setTimeout(() => finish(), 450);
       };
       video.onerror = () => finish();
     });

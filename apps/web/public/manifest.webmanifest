@@ -1,10 +1,10 @@
 {
-  "id": "/",
-  "name": "VeloCut Studio — Hybrid-Edge Video Editor",
+  "id": "./",
+  "name": "VeloCut Studio — Video Editor Gratis (On-Device & Server PC)",
   "short_name": "VeloCut",
-  "description": "Video editor web 60 FPS dengan WebGL2, WebCodecs, OPFS, dan Server FFmpeg Offload.",
-  "start_url": "/",
-  "scope": "/",
+  "description": "Video editor 60 FPS gratis tanpa watermark: jalan 100% langsung di HP Android, iOS, Desktop, atau sambungkan ke Server PC.",
+  "start_url": "./",
+  "scope": "./",
   "display": "standalone",
   "display_override": ["standalone", "minimal-ui"],
   "orientation": "any",
@@ -14,25 +14,25 @@
   "categories": ["video", "photo", "multimedia", "productivity"],
   "icons": [
     {
-      "src": "/icons/icon-192.png",
+      "src": "icons/icon-192.png",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "/icons/icon-512.png",
+      "src": "icons/icon-512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "/icons/icon-maskable-512.png",
+      "src": "icons/icon-maskable-512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "maskable"
     },
     {
-      "src": "/icons/icon.svg",
+      "src": "icons/icon.svg",
       "sizes": "any",
       "type": "image/svg+xml",
       "purpose": "any"

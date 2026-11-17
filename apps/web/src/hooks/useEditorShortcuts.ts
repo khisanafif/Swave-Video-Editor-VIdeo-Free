@@ -49,6 +49,7 @@ export function useEditorShortcuts(): void {
 
       if (event.code === 'Space') {
         event.preventDefault();
+        mediaRuntime.unlockAudio();
         usePlaybackStore.getState().togglePlay();
         return;
       }
@@ -63,6 +64,7 @@ export function useEditorShortcuts(): void {
 
       if (!isMod && key === 'l') {
         event.preventDefault();
+        mediaRuntime.unlockAudio();
         const pb = usePlaybackStore.getState();
         const nextRate = pb.isPlaying
           ? Math.min(4, pb.playbackRate >= 2 ? 4 : pb.playbackRate * 2)

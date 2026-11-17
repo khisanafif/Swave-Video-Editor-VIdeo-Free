@@ -9,7 +9,26 @@ export interface PwaInstallState {
   canInstall: boolean;
   isStandalone: boolean;
   isCapacitorNative: boolean;
+  isIos: boolean;
+  isAndroid: boolean;
   promptInstall: () => Promise<'accepted' | 'dismissed' | 'unavailable'>;
+}
+
+function detectIosBrowser(): boolean {
+  if (typeof navigator === 'undefined') return false;
+  const ua = navigator.userAgent || '';
+  if (/iPad|iPhone|iPod/i.test(ua)) return true;
+  // iPadOS desktop-mode Safari reports MacIntel with touch points
+  return (
+    navigator.platform === 'MacIntel' &&
+    typeof navigator.maxTouchPoints === 'number' &&
+    navigator.maxTouchPoints > 1
+  );
+}
+
+function detectAndroidBrowser(): boolean {
+  if (typeof navigator === 'undefined') return false;
+  return /Android/i.test(navigator.userAgent || '');
 }
 
 export function usePwaInstall(): PwaInstallState {
@@ -19,7 +38,16 @@ export function usePwaInstall(): PwaInstallState {
 
   const isCapacitorNative =
     typeof window !== 'undefined' &&
-    Boolean((window as unknown as { Capacitor?: { isNativePlatform?: () => boolean } }).Capacitor?.isNativePlatform?.());
+    Boolean(
+      (
+        window as unknown as {
+          Capacitor?: { isNativePlatform?: () => boolean };
+        }
+      ).Capacitor?.isNativePlatform?.()
+    );
+
+  const isIos = detectIosBrowser();
+  const isAndroid = detectAndroidBrowser();
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -33,8 +61,14 @@ export function usePwaInstall(): PwaInstallState {
     };
     checkStandalone();
 
-    if ('serviceWorker' in navigator && import.meta.env.PROD) {
-      void navigator.serviceWorker.register('/sw.js').catch(() => {});
+    if (
+      !isCapacitorNative &&
+      'serviceWorker' in navigator &&
+      import.meta.env.PROD &&
+      window.location.protocol.startsWith('http')
+    ) {
+      const swUrl = `${import.meta.env.BASE_URL || './'}sw.js`;
+      void navigator.serviceWorker.register(swUrl).catch(() => {});
     }
 
     const onBeforeInstall = (e: Event) => {
@@ -69,7 +103,8 @@ export function usePwaInstall(): PwaInstallState {
     canInstall: Boolean(deferredPrompt) && !isStandalone,
     isStandalone,
     isCapacitorNative,
+    isIos,
+    isAndroid,
     promptInstall,
   };
 }
-

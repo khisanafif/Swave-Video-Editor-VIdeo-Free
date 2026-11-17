@@ -54,6 +54,7 @@ export function MediaBinPanel({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const activeCategory = useUiStore((s) => s.activeMediaCategory);
   const setActiveCategory = useUiStore((s) => s.setActiveMediaCategory);
+  const runtimeMode = useUiStore((s) => s.runtimeMode);
   const [isImporting, setIsImporting] = useState(false);
   const [isGeneratingDemo, setIsGeneratingDemo] = useState(false);
   const [busySfxId, setBusySfxId] = useState<string | null>(null);
@@ -63,7 +64,7 @@ export function MediaBinPanel({
   );
   const [captionPresetId, setCaptionPresetId] = useState('capcut-yellow');
   const [uploadStatus, setUploadStatus] = useState<string | null>(null);
-  const [autoSyncServer, setAutoSyncServer] = useState(true);
+  const [autoSyncServer, setAutoSyncServer] = useState(false);
   const [serverAssets, setServerAssets] = useState<ServerMediaAssetItem[]>([]);
   const [isServerOnline, setIsServerOnline] = useState(false);
 
@@ -77,6 +78,11 @@ export function MediaBinPanel({
     Object.values(clips).find((c) => c.type === 'video' || c.type === 'overlay');
 
   const refreshServerAssets = async () => {
+    if (useUiStore.getState().runtimeMode !== 'server') {
+      setIsServerOnline(false);
+      setServerAssets([]);
+      return;
+    }
     const caps = await fetchServerCapabilities();
     if (!caps) {
       setIsServerOnline(false);
@@ -88,8 +94,15 @@ export function MediaBinPanel({
   };
 
   useEffect(() => {
-    void refreshServerAssets();
-  }, []);
+    if (runtimeMode === 'server') {
+      setAutoSyncServer(true);
+      void refreshServerAssets();
+    } else {
+      setAutoSyncServer(false);
+      setIsServerOnline(false);
+      setServerAssets([]);
+    }
+  }, [runtimeMode]);
 
   const handleChunkedUpload = async (assetId: string, blobOverride?: Blob) => {
     const asset = useTimelineStore.getState().assets[assetId];
@@ -348,21 +361,25 @@ export function MediaBinPanel({
                 {isImporting ? 'Memproses Media...' : 'Impor Video, Audio, Gambar'}
               </p>
               <p className="mt-0.5 text-[10px] text-zinc-500">
-                Dari HP, Tablet, atau Laptop (OPFS + Sync Server PC)
+                {runtimeMode === 'server'
+                  ? 'Dari perangkat ini + sinkron ke Server PC'
+                  : '100% disimpan & diproses lokal di perangkat Anda'}
               </p>
             </div>
 
-            <div className="flex items-center justify-between px-0.5 text-[11px]">
-              <label className="flex cursor-pointer items-center gap-1.5 text-zinc-400">
-                <input
-                  type="checkbox"
-                  checked={autoSyncServer}
-                  onChange={(e) => setAutoSyncServer(e.target.checked)}
-                  className="accent-cyan-400"
-                />
-                <span>Auto-Sync ke Server PC (Multi-Device)</span>
-              </label>
-            </div>
+            {runtimeMode === 'server' && (
+              <div className="flex items-center justify-between px-0.5 text-[11px]">
+                <label className="flex cursor-pointer items-center gap-1.5 text-zinc-400">
+                  <input
+                    type="checkbox"
+                    checked={autoSyncServer}
+                    onChange={(e) => setAutoSyncServer(e.target.checked)}
+                    className="accent-cyan-400"
+                  />
+                  <span>Auto-Sync ke Server PC (Multi-Device)</span>
+                </label>
+              </div>
+            )}
 
             {uploadStatus && (
               <div className="rounded bg-zinc-900 px-2 py-1 text-[11px] text-cyan-300">
@@ -433,7 +450,7 @@ export function MediaBinPanel({
                             <CheckCircle2 className="h-3 w-3" />
                             Siap di Semua Perangkat
                           </span>
-                        ) : (
+                        ) : runtimeMode === 'server' ? (
                           <button
                             type="button"
                             onClick={() => void handleChunkedUpload(asset.id)}
@@ -448,6 +465,10 @@ export function MediaBinPanel({
                                 : 'Sync ke Server PC'}
                             </span>
                           </button>
+                        ) : (
+                          <span className="rounded bg-zinc-800/80 px-1.5 py-0.5 text-[10px] text-zinc-400">
+                            Lokal Perangkat
+                          </span>
                         )}
 
                         <button

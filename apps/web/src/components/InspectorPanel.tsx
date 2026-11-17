@@ -19,6 +19,7 @@ import {
   RotateCw,
   Scissors,
   Server,
+  Share2,
   SlidersHorizontal,
   Snowflake,
   Sparkles,
@@ -45,6 +46,11 @@ import {
   type ClientExportProgress,
   exportProjectClientSide,
 } from '../engine/clientExporter';
+import {
+  canShareFilesOnDevice,
+  saveBlobToDevice,
+  shareBlobWithSystemSheet,
+} from '../engine/localPersistence';
 import { mediaRuntime } from '../engine/mediaRuntime';
 import { mediaRegistry } from '../engine/opfsStorage';
 import {
@@ -52,8 +58,8 @@ import {
   fetchServerCapabilities,
   getServerBaseUrl,
   saveProjectToServer,
-  setServerBaseUrl,
   startServerRenderJob,
+  testAndConnectServer,
   uploadBlobInChunks,
 } from '../engine/serverOffloadClient';
 import { usePlaybackStore } from '../stores/playbackStore';
@@ -148,7 +154,11 @@ export function InspectorPanel({
   );
   const [clientProgress, setClientProgress] =
     useState<ClientExportProgress | null>(null);
-  const [clientDownloadUrl, setClientDownloadUrl] = useState<string | null>(null);
+  const [clientExportFile, setClientExportFile] = useState<{
+    blob: Blob;
+    ext: 'mp4' | 'webm';
+    filename: string;
+  } | null>(null);
   const [exportError, setExportError] = useState<string | null>(null);
   const [isExporting, setIsExporting] = useState(false);
   const [serverJob, setServerJob] = useState<RenderJobRecord | null>(null);
@@ -156,6 +166,8 @@ export function InspectorPanel({
   const [isCuttingSilence, setIsCuttingSilence] = useState(false);
 
   const experienceMode = useUiStore((s) => s.experienceMode);
+  const runtimeMode = useUiStore((s) => s.runtimeMode);
+  const setRuntimeMode = useUiStore((s) => s.setRuntimeMode);
   const clipboardStyle = useUiStore((s) => s.clipboardStyle);
   const setClipboardStyle = useUiStore((s) => s.setClipboardStyle);
 
@@ -171,13 +183,20 @@ export function InspectorPanel({
   }, [initialTab]);
 
   useEffect(() => {
-    void fetchServerCapabilities().then(setServerCaps);
-  }, []);
+    if (runtimeMode === 'server') {
+      void fetchServerCapabilities().then(setServerCaps);
+    } else {
+      setServerCaps(null);
+      setRenderMode('client-webcodecs');
+    }
+  }, [runtimeMode]);
 
   const handleSaveServerUrl = async () => {
-    setServerBaseUrl(serverUrlInput);
-    const caps = await fetchServerCapabilities();
+    const caps = await testAndConnectServer(serverUrlInput);
     setServerCaps(caps);
+    if (caps?.status === 'online') {
+      setRuntimeMode('server', true);
+    }
   };
 
   const getEffect = (type: string, fallback: number) => {
@@ -238,10 +257,7 @@ export function InspectorPanel({
 
   const handleClientExport = async () => {
     setExportError(null);
-    setClientDownloadUrl((prev) => {
-      if (prev) URL.revokeObjectURL(prev);
-      return null;
-    });
+    setClientExportFile(null);
     setIsExporting(true);
     try {
       const project = useTimelineStore.getState().exportProjectDocument();
@@ -249,8 +265,16 @@ export function InspectorPanel({
         project,
         onProgress: setClientProgress,
       });
-      const url = URL.createObjectURL(blob);
-      setClientDownloadUrl(url);
+      const ext = blob.type.includes('webm') ? 'webm' : 'mp4';
+      const safeName = (project.name || 'velocut-export').replace(
+        /[^\w.-]/g,
+        '_'
+      );
+      setClientExportFile({
+        blob,
+        ext,
+        filename: `${safeName}.${ext}`,
+      });
     } catch (err) {
       setExportError((err as Error).message);
     } finally {
@@ -1465,14 +1489,36 @@ export function InspectorPanel({
                   </div>
                 )}
 
-                {clientDownloadUrl && (
-                  <a
-                    href={clientDownloadUrl}
-                    download="velocut-export.mp4"
-                    className="block rounded-md border border-emerald-500/50 bg-emerald-500/15 py-2 text-center text-xs font-semibold text-emerald-300 hover:bg-emerald-500/25"
-                  >
-                    Unduh Hasil Render (.mp4)
-                  </a>
+                {clientExportFile && (
+                  <div className="space-y-1.5">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        void saveBlobToDevice(
+                          clientExportFile.blob,
+                          clientExportFile.filename
+                        );
+                      }}
+                      className="block w-full rounded-md border border-emerald-500/50 bg-emerald-500/15 py-2 text-center text-xs font-semibold text-emerald-300 hover:bg-emerald-500/25"
+                    >
+                      Unduh Hasil Render (.{clientExportFile.ext})
+                    </button>
+                    {canShareFilesOnDevice() && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          void shareBlobWithSystemSheet(
+                            clientExportFile.blob,
+                            clientExportFile.filename
+                          ).catch(() => {});
+                        }}
+                        className="flex w-full items-center justify-center gap-1.5 rounded-md border border-cyan-500/40 bg-cyan-500/15 py-1.5 text-[11px] font-semibold text-cyan-200 hover:bg-cyan-500/25"
+                      >
+                        <Share2 className="h-3.5 w-3.5" />
+                        <span>Simpan ke Galeri / Bagikan</span>
+                      </button>
+                    )}
+                  </div>
                 )}
               </div>
             ) : (

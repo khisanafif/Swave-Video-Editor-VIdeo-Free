@@ -42,10 +42,17 @@ export function getServerBaseUrl(): string {
   }
 }
 
+export function normalizeServerBaseUrl(rawUrl: string): string {
+  const trimmed = rawUrl.trim().replace(/\/+$/, '');
+  if (!trimmed) return '';
+  if (/^https?:\/\//i.test(trimmed)) return trimmed;
+  return `http://${trimmed}`;
+}
+
 export function setServerBaseUrl(url: string): void {
   if (typeof window === 'undefined') return;
   try {
-    const cleaned = url.trim().replace(/\/+$/, '');
+    const cleaned = normalizeServerBaseUrl(url);
     if (cleaned) {
       localStorage.setItem(SERVER_URL_STORAGE_KEY, cleaned);
     } else {
@@ -54,6 +61,13 @@ export function setServerBaseUrl(url: string): void {
   } catch {
     // Ignore storage quota / privacy errors
   }
+}
+
+export async function testAndConnectServer(
+  rawUrl: string
+): Promise<ServerCapabilities | null> {
+  setServerBaseUrl(rawUrl);
+  return fetchServerCapabilities();
 }
 
 export function resolveServerUrl(path: string): string {

@@ -22,6 +22,7 @@ import {
   type LiveDictationController,
 } from '../engine/autoSubtitleEngine';
 import { TEXT_PRESETS } from '../engine/capcutPresets';
+import { saveBlobToDevice } from '../engine/localPersistence';
 import { mediaRuntime } from '../engine/mediaRuntime';
 import {
   chunkSubtitleCues,
@@ -250,12 +251,7 @@ export function SubtitleStudioTab({ onClipAdded }: SubtitleStudioTabProps) {
         ? exportSubtitlesToSrt(allClips)
         : exportSubtitlesToVtt(allClips);
     const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `velocut-subtitles.${format}`;
-    a.click();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    void saveBlobToDevice(blob, `velocut-subtitles.${format}`);
   };
 
   const applyBatchPreset = (targetPresetId: string) => {
@@ -306,10 +302,10 @@ export function SubtitleStudioTab({ onClipAdded }: SubtitleStudioTabProps) {
             className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-2.5 py-1.5 text-xs text-zinc-100 outline-none focus:border-violet-400"
           >
             <option value="browser-whisper">
-              AI Whisper di Browser (100% Gratis, Tanpa Server)
+              AI Whisper di Perangkat (100% Gratis, Tanpa Server)
             </option>
             <option value="server-whisper">
-              Server PC Lokal (Whisper / VAD Gratis)
+              Perantara Server PC (Whisper / VAD PC)
             </option>
             <option value="vad-script">
               Sinkronisasi Naskah + Deteksi Suara (100% Offline)
