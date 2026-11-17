@@ -1,4 +1,4 @@
-const CACHE_NAME = 'swave-video-shell-v8';
+const CACHE_NAME = 'swave-video-shell-v9';
 
 function scopedUrl(relPath) {
   return new URL(relPath, self.registration.scope).toString();
