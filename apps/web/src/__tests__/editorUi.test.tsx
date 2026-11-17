@@ -18,6 +18,7 @@ describe('VideoEditorPage UI Integration (Desktop, Tablet, Android & Multi-Devic
       safeGuideMode: 'none',
       timelineToolMode: 'select',
       layoutPreference: 'auto',
+      mobileTimelineFocus: 'main',
       activeMediaCategory: 'media',
       clipboardStyle: null,
       showExportModal: false,
@@ -470,5 +471,100 @@ describe('VideoEditorPage UI Integration (Desktop, Tablet, Android & Multi-Devic
     expect(useTimelineStore.getState().resolution.width).toBe(1440);
     expect(useTimelineStore.getState().resolution.height).toBe(1800);
     expect(useTimelineStore.getState().resolution.fps).toBe(60);
+  });
+
+  it('places mobile overlays cleanly below main video and displays overlay-only tracks when editing overlays on phone', async () => {
+    const store = useTimelineStore.getState();
+    store.registerAsset({
+      id: 'vid-mobile-base',
+      name: 'utama_hp.mp4',
+      kind: 'video',
+      mimeType: 'video/mp4',
+      size: 2048,
+      duration: 6,
+      width: 1080,
+      height: 1920,
+      hasAudio: true,
+      source: 'local',
+    });
+    store.registerAsset({
+      id: 'img-mob-1',
+      name: 'ovl_satu.png',
+      kind: 'image',
+      mimeType: 'image/png',
+      size: 512,
+      duration: 4,
+      width: 400,
+      height: 400,
+      hasAudio: false,
+      source: 'local',
+    });
+    store.registerAsset({
+      id: 'img-mob-2',
+      name: 'ovl_dua.png',
+      kind: 'image',
+      mimeType: 'image/png',
+      size: 512,
+      duration: 4,
+      width: 400,
+      height: 400,
+      hasAudio: false,
+      source: 'local',
+    });
+
+    store.addClipFromAsset('vid-mobile-base', 'track-1', 0);
+    const ovl1Id = store.addOverlayClipFromAsset('img-mob-1', 0)!;
+    const ovl2Id = store.addOverlayClipFromAsset('img-mob-2', 0)!;
+
+    const prevW = window.innerWidth;
+    const prevH = window.innerHeight;
+    Object.defineProperty(window, 'innerWidth', { value: 390, configurable: true });
+    Object.defineProperty(window, 'innerHeight', { value: 844, configurable: true });
+
+    try {
+      render(<VideoEditorPage />);
+      await act(async () => {
+        await Promise.resolve();
+      });
+
+      const timeline = screen.getByLabelText(/Multi-Track Timeline/i);
+      const ovl1TrackId = useTimelineStore.getState().clips[ovl1Id].trackId;
+      const ovl2TrackId = useTimelineStore.getState().clips[ovl2Id].trackId;
+
+      // Selected overlay auto-enters Overlay-only mode on phone:
+      // Main Video ref stays on top, Overlay 1 & Overlay 2 appear BELOW it, and Text/Audio tracks are hidden!
+      expect(timeline).toHaveAttribute('data-mobile-timeline-view', 'overlay');
+      const mainRefEl = timeline.querySelector('[data-mobile-main-ref="true"]')!;
+      const ovl1El = timeline.querySelector(`[data-track-id="${ovl1TrackId}"]`)!;
+      const ovl2El = timeline.querySelector(`[data-track-id="${ovl2TrackId}"]`)!;
+      expect(mainRefEl).not.toBeNull();
+      expect(ovl1El).not.toBeNull();
+      expect(ovl2El).not.toBeNull();
+      expect(
+        mainRefEl.compareDocumentPosition(ovl1El) & Node.DOCUMENT_POSITION_FOLLOWING
+      ).toBeTruthy();
+      expect(
+        ovl1El.compareDocumentPosition(ovl2El) & Node.DOCUMENT_POSITION_FOLLOWING
+      ).toBeTruthy();
+      expect(timeline.querySelector('[data-track-id="track-2"]')).toBeNull();
+      expect(timeline.querySelector('[data-track-id="track-3"]')).toBeNull();
+
+      // Clicking Back [<] exits Overlay-only mode back to Main Timeline showing compact Overlay pill below Video Utama
+      fireEvent.click(screen.getByRole('button', { name: /^Kembali$/i }));
+      expect(timeline).toHaveAttribute('data-mobile-timeline-view', 'main');
+      const summaryBtn = screen.getByTestId('mobile-overlay-summary-strip');
+      const mainTrackEl = timeline.querySelector('[data-track-id="track-1"]')!;
+      expect(
+        mainTrackEl.compareDocumentPosition(summaryBtn) & Node.DOCUMENT_POSITION_FOLLOWING
+      ).toBeTruthy();
+      expect(timeline.querySelector('[data-track-id="track-3"]')).not.toBeNull();
+
+      // Clicking summary strip jumps cleanly back into Overlay-only view
+      fireEvent.click(summaryBtn);
+      expect(timeline).toHaveAttribute('data-mobile-timeline-view', 'overlay');
+    } finally {
+      Object.defineProperty(window, 'innerWidth', { value: prevW, configurable: true });
+      Object.defineProperty(window, 'innerHeight', { value: prevH, configurable: true });
+    }
   });
 });

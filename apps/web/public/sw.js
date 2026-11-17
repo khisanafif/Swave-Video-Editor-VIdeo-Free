@@ -1,4 +1,4 @@
-const CACHE_NAME = 'swave-video-shell-v6';
+const CACHE_NAME = 'swave-video-shell-v7';
 
 function scopedUrl(relPath) {
   return new URL(relPath, self.registration.scope).toString();
@@ -11,6 +11,8 @@ function getAppShellUrls() {
     scopedUrl('manifest.webmanifest'),
     scopedUrl('icons/icon-192.png'),
     scopedUrl('icons/icon-512.png'),
+    scopedUrl('icons/icon-maskable-512.png'),
+    scopedUrl('icons/apple-touch-icon.png'),
     scopedUrl('icons/icon.svg'),
   ];
 }

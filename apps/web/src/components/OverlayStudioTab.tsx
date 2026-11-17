@@ -19,6 +19,7 @@ import {
   getTimelineDisplayTrackOrder,
   useTimelineStore,
 } from '../stores/timelineStore';
+import { useUiStore } from '../stores/uiStore';
 
 interface OverlayStudioTabProps {
   onSyncAsset?: (assetId: string, file?: File) => void;
@@ -81,6 +82,7 @@ export function OverlayStudioTab({
         onSyncAsset?.(asset.id, file);
       }
       mediaRuntime.renderFrameAt(baseTime, false);
+      useUiStore.getState().setMobileTimelineFocus('overlay');
       onClipAdded?.();
     } finally {
       setIsImporting(false);
@@ -315,6 +317,7 @@ export function OverlayStudioTab({
                   onClick={() => {
                     const t = usePlaybackStore.getState().currentTime;
                     useTimelineStore.getState().addOverlayClipFromAsset(asset.id, t);
+                    useUiStore.getState().setMobileTimelineFocus('overlay');
                     mediaRuntime.renderFrameAt(t, false);
                     onClipAdded?.();
                   }}

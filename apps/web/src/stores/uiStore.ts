@@ -13,6 +13,7 @@ export type StudioRuntimeMode = 'standalone' | 'server';
 export type SafeGuideMode = 'none' | 'thirds' | 'tiktok' | 'youtube';
 export type TimelineToolMode = 'select' | 'blade';
 export type LayoutPreference = 'auto' | 'desktop' | 'tablet' | 'mobile';
+export type MobileTimelineFocus = 'main' | 'overlay';
 export type MediaBinCategory =
   | 'media'
   | 'overlay'
@@ -87,6 +88,7 @@ export interface UiState {
   safeGuideMode: SafeGuideMode;
   timelineToolMode: TimelineToolMode;
   layoutPreference: LayoutPreference;
+  mobileTimelineFocus: MobileTimelineFocus;
   activeMediaCategory: MediaBinCategory;
   clipboardStyle: CopiedClipStyle | null;
   showExportModal: boolean;
@@ -96,6 +98,7 @@ export interface UiState {
   setSafeGuideMode: (mode: SafeGuideMode) => void;
   setTimelineToolMode: (tool: TimelineToolMode) => void;
   setLayoutPreference: (pref: LayoutPreference) => void;
+  setMobileTimelineFocus: (focus: MobileTimelineFocus) => void;
   setActiveMediaCategory: (cat: MediaBinCategory) => void;
   setClipboardStyle: (style: CopiedClipStyle | null) => void;
   setShowExportModal: (open: boolean) => void;
@@ -108,6 +111,7 @@ export const useUiStore = create<UiState>((set) => ({
   safeGuideMode: 'none',
   timelineToolMode: 'select',
   layoutPreference: 'auto',
+  mobileTimelineFocus: 'main',
   activeMediaCategory: 'media',
   clipboardStyle: null,
   showExportModal: false,
@@ -141,6 +145,7 @@ export const useUiStore = create<UiState>((set) => ({
   setSafeGuideMode: (safeGuideMode) => set({ safeGuideMode }),
   setTimelineToolMode: (timelineToolMode) => set({ timelineToolMode }),
   setLayoutPreference: (layoutPreference) => set({ layoutPreference }),
+  setMobileTimelineFocus: (mobileTimelineFocus) => set({ mobileTimelineFocus }),
   setActiveMediaCategory: (activeMediaCategory) => set({ activeMediaCategory }),
   setClipboardStyle: (clipboardStyle) => set({ clipboardStyle }),
   setShowExportModal: (showExportModal) => set({ showExportModal }),

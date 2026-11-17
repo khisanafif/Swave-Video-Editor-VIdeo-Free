@@ -7,7 +7,6 @@ import {
   Copy,
   Cpu,
   Download,
-  Film,
   FolderOpen,
   FolderPlus,
   Gauge,
@@ -21,6 +20,7 @@ import {
   PanelLeft,
   Pause,
   Play,
+  Plus,
   QrCode,
   Redo2,
   RotateCcw,
@@ -90,6 +90,53 @@ import { TimelineContainer } from './timeline/TimelineContainer';
 
 type DeviceLayoutMode = 'desktop' | 'tablet' | 'mobile';
 type MobileSheetType = 'none' | 'media' | 'inspector' | 'export';
+
+function SwaveLogoMark({ className = 'h-6 w-6' }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 512 512"
+      aria-hidden="true"
+      className={`shrink-0 ${className}`}
+    >
+      <defs>
+        <linearGradient id="swave-ui-bg" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stopColor="#09090b" />
+          <stop offset="100%" stopColor="#0f172a" />
+        </linearGradient>
+        <linearGradient id="swave-ui-s" x1="0.15" y1="0.1" x2="0.85" y2="0.9">
+          <stop offset="0%" stopColor="#67e8f9" />
+          <stop offset="50%" stopColor="#00e5ff" />
+          <stop offset="100%" stopColor="#0284c7" />
+        </linearGradient>
+      </defs>
+      <rect width="512" height="512" rx="112" fill="url(#swave-ui-bg)" />
+      <rect
+        x="24"
+        y="24"
+        width="464"
+        height="464"
+        rx="96"
+        fill="none"
+        stroke="#00e5ff"
+        strokeOpacity="0.3"
+        strokeWidth="12"
+      />
+      <path
+        d="M 338 144 C 288 106, 170 112, 170 176 C 170 232, 342 222, 342 280 C 342 344, 222 350, 174 312"
+        fill="none"
+        stroke="url(#swave-ui-s)"
+        strokeWidth="60"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <rect x="132" y="394" width="36" height="22" rx="10" fill="#0ea5e9" />
+      <rect x="182" y="382" width="36" height="34" rx="10" fill="#22d3ee" />
+      <rect x="232" y="374" width="52" height="42" rx="12" fill="#00e5ff" />
+      <rect x="298" y="382" width="36" height="34" rx="10" fill="#22d3ee" />
+      <rect x="348" y="394" width="36" height="22" rx="10" fill="#0ea5e9" />
+    </svg>
+  );
+}
 
 interface ViewportGeometry {
   mode: DeviceLayoutMode;
@@ -292,6 +339,8 @@ export function VideoEditorPage() {
   const setRuntimeMode = useUiStore((s) => s.setRuntimeMode);
   const activeMediaCategory = useUiStore((s) => s.activeMediaCategory);
   const setActiveMediaCategory = useUiStore((s) => s.setActiveMediaCategory);
+  const mobileTimelineFocus = useUiStore((s) => s.mobileTimelineFocus);
+  const setMobileTimelineFocus = useUiStore((s) => s.setMobileTimelineFocus);
   const showExportModal = useUiStore((s) => s.showExportModal);
   const setShowExportModal = useUiStore((s) => s.setShowExportModal);
   const showHelpModal = useUiStore((s) => s.showHelpModal);
@@ -499,6 +548,19 @@ export function VideoEditorPage() {
                 usePlaybackStore.getState().currentTime
               ),
         },
+        ...(selectedClip.type === 'overlay'
+          ? [
+              {
+                label: '+ Overlay',
+                icon: Plus,
+                onClick: () => {
+                  setMobileTimelineFocus('overlay');
+                  setActiveMediaCategory('overlay');
+                  setMobileSheet('media');
+                },
+              },
+            ]
+          : []),
         {
           label: 'Kecepatan',
           icon: Gauge,
@@ -585,8 +647,14 @@ export function VideoEditorPage() {
       label: 'Overlay',
       icon: Layers,
       onClick: () => {
-        setActiveMediaCategory('overlay');
-        setMobileSheet('media');
+        setMobileTimelineFocus('overlay');
+        const hasOverlays = Object.values(useTimelineStore.getState().clips).some(
+          (c) => c.type === 'overlay'
+        );
+        if (!hasOverlays) {
+          setActiveMediaCategory('overlay');
+          setMobileSheet('media');
+        }
       },
     },
     {
@@ -619,6 +687,45 @@ export function VideoEditorPage() {
       onClick: () => setModeModalState({ open: true, tab: 'download' }),
     },
   ];
+
+  const mobileOverlayDockItems = [
+    {
+      label: '+ Tambah Overlay',
+      icon: Plus,
+      onClick: () => {
+        setMobileTimelineFocus('overlay');
+        setActiveMediaCategory('overlay');
+        setMobileSheet('media');
+      },
+    },
+    {
+      label: 'Urutan Layer',
+      icon: Layers,
+      onClick: () => {
+        setMobileTimelineFocus('overlay');
+        setActiveMediaCategory('overlay');
+        setMobileSheet('media');
+      },
+    },
+    {
+      label: 'Utama',
+      icon: Scissors,
+      onClick: () => setMobileTimelineFocus('main'),
+    },
+  ];
+
+  const isMobileOverlayMode =
+    mobileTimelineFocus === 'overlay' || selectedClip?.type === 'overlay';
+  const activeMobileSubActions = selectedClip
+    ? mobileClipActions
+    : isMobileOverlayMode
+    ? mobileOverlayDockItems
+    : null;
+
+  const exitMobileSubMode = () => {
+    useTimelineStore.getState().clearSelection();
+    setMobileTimelineFocus('main');
+  };
 
   const headerHeightClass =
     layoutMode === 'desktop'
@@ -711,9 +818,12 @@ export function VideoEditorPage() {
               className="absolute top-12 left-3 z-60 w-64 space-y-2.5 rounded-xl border border-[#2A2A32] bg-[#202026] p-3 text-xs shadow-2xl"
             >
               <div className="flex items-center justify-between border-b border-[#2A2A32] pb-2">
-                <span className="font-bold text-white">
-                  SWAVE <span className="text-[#00E5FF]">Video</span>
-                </span>
+                <div className="flex items-center gap-1.5">
+                  <SwaveLogoMark className="h-5 w-5" />
+                  <span className="font-bold text-white">
+                    SWAVE <span className="text-[#00E5FF]">Video</span>
+                  </span>
+                </div>
                 <button
                   type="button"
                   onClick={() => setShowMobileMenu(false)}
@@ -833,9 +943,7 @@ export function VideoEditorPage() {
             )}
 
             <div className="flex items-center gap-1.5">
-              <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-gradient-to-br from-[#00E5FF] to-sky-500 text-zinc-950 shadow-xs">
-                <Film className="h-3.5 w-3.5" />
-              </div>
+              <SwaveLogoMark className="h-6 w-6 shadow-xs" />
               <span className="text-xs font-extrabold tracking-tight text-white sm:text-sm">
                 SWAVE <span className="text-[#00E5FF]">Video</span>
               </span>
@@ -1149,6 +1257,7 @@ export function VideoEditorPage() {
                   setMobileSheet('inspector');
                 }}
                 onQuickOverlayClick={() => {
+                  setMobileTimelineFocus('overlay');
                   setActiveMediaCategory('overlay');
                   setMobileSheet('media');
                 }}
@@ -1202,17 +1311,17 @@ export function VideoEditorPage() {
             aria-label="Navigasi Studio Android"
             className="no-scrollbar z-40 flex w-[58px] shrink-0 flex-col items-center gap-1 overflow-y-auto border-l border-[#2A2A32] bg-[#18181C] py-1.5"
           >
-            {selectedClip && mobileSheet === 'none' ? (
+            {activeMobileSubActions && mobileSheet === 'none' ? (
               <>
                 <button
                   type="button"
-                  onClick={() => useTimelineStore.getState().clearSelection()}
+                  onClick={exitMobileSubMode}
                   className="flex h-9 w-11 shrink-0 items-center justify-center rounded-lg bg-[#242429] text-zinc-200"
                   aria-label="Kembali"
                 >
                   <ChevronLeft className="h-4 w-4" />
                 </button>
-                {mobileClipActions.map((act) => {
+                {activeMobileSubActions.map((act) => {
                   const ActIcon = act.icon;
                   return (
                     <button
@@ -1222,7 +1331,7 @@ export function VideoEditorPage() {
                       className="flex h-11 w-12 shrink-0 flex-col items-center justify-center gap-0.5 rounded-lg text-zinc-200 hover:bg-[#242429]"
                     >
                       <ActIcon className="h-3.5 w-3.5 text-zinc-100" />
-                      <span className="text-[9px]">{act.label}</span>
+                      <span className="truncate text-[9px]">{act.label}</span>
                     </button>
                   );
                 })}
@@ -1293,6 +1402,7 @@ export function VideoEditorPage() {
                 setMobileSheet('inspector');
               }}
               onQuickOverlayClick={() => {
+                setMobileTimelineFocus('overlay');
                 setActiveMediaCategory('overlay');
                 setMobileSheet('media');
               }}
@@ -1348,11 +1458,11 @@ export function VideoEditorPage() {
             aria-label="Navigasi Studio Android"
             className="z-40 flex h-[68px] shrink-0 items-center border-t border-[#2A2A32] bg-[#18181C] px-1"
           >
-            {selectedClip && mobileSheet === 'none' ? (
+            {activeMobileSubActions && mobileSheet === 'none' ? (
               <div className="flex w-full items-center gap-1">
                 <button
                   type="button"
-                  onClick={() => useTimelineStore.getState().clearSelection()}
+                  onClick={exitMobileSubMode}
                   className="flex h-12 w-10 shrink-0 items-center justify-center rounded-lg bg-[#242429] text-zinc-100"
                   title="Kembali ke menu utama"
                   aria-label="Kembali"
@@ -1361,7 +1471,7 @@ export function VideoEditorPage() {
                 </button>
 
                 <div className="no-scrollbar flex flex-1 items-center gap-1 overflow-x-auto px-1">
-                  {mobileClipActions.map((act) => {
+                  {activeMobileSubActions.map((act) => {
                     const ActIcon = act.icon;
                     return (
                       <button

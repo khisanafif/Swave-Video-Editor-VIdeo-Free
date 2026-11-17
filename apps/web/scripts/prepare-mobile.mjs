@@ -115,20 +115,36 @@ function patchAndroidProject() {
   const resDir = path.join(androidDir, 'app/src/main/res');
   const icon192 = path.join(webDir, 'public/icons/icon-192.png');
   const icon512 = path.join(webDir, 'public/icons/icon-512.png');
+  const iconMaskable512 = path.join(webDir, 'public/icons/icon-maskable-512.png');
   if (fs.existsSync(resDir) && fs.existsSync(icon192) && fs.existsSync(icon512)) {
     for (const entry of fs.readdirSync(resDir)) {
       if (!entry.startsWith('mipmap-')) continue;
       const folder = path.join(resDir, entry);
-      const src =
-        entry.includes('xxhdpi') || entry.includes('xxxhdpi') ? icon512 : icon192;
+      const isHighDpi = entry.includes('xxhdpi') || entry.includes('xxxhdpi');
+      const src = isHighDpi ? icon512 : icon192;
       for (const targetName of ['ic_launcher.png', 'ic_launcher_round.png']) {
         const dest = path.join(folder, targetName);
         if (fs.existsSync(dest)) {
           fs.copyFileSync(src, dest);
         }
       }
+      const fgDest = path.join(folder, 'ic_launcher_foreground.png');
+      if (fs.existsSync(fgDest)) {
+        fs.copyFileSync(
+          fs.existsSync(iconMaskable512) ? iconMaskable512 : src,
+          fgDest
+        );
+      }
     }
-    console.log('Updated Android mipmap launcher icons.');
+    const bgColorXml = path.join(resDir, 'values/ic_launcher_background.xml');
+    if (fs.existsSync(bgColorXml)) {
+      fs.writeFileSync(
+        bgColorXml,
+        '<?xml version="1.0" encoding="utf-8"?>\n<resources>\n    <color name="ic_launcher_background">#09090B</color>\n</resources>\n',
+        'utf8'
+      );
+    }
+    console.log('Updated Android mipmap and adaptive SWAVE launcher icons.');
   }
 
   const mainActivityPath = path.join(

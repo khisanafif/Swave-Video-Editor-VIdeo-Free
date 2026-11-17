@@ -8,6 +8,7 @@ import {
   Copy,
   FlipHorizontal2,
   Image as ImageIcon,
+  Layers,
   Lock,
   Magnet,
   Maximize2,
@@ -100,6 +101,8 @@ export function TimelineContainer({
   const experienceMode = useUiStore((s) => s.experienceMode);
   const timelineToolMode = useUiStore((s) => s.timelineToolMode);
   const setTimelineToolMode = useUiStore((s) => s.setTimelineToolMode);
+  const mobileTimelineFocus = useUiStore((s) => s.mobileTimelineFocus);
+  const setMobileTimelineFocus = useUiStore((s) => s.setMobileTimelineFocus);
   const tracks = useTimelineStore((s) => s.tracks);
   const trackOrder = useTimelineStore((s) => s.trackOrder);
   const clips = useTimelineStore((s) => s.clips);
@@ -167,24 +170,66 @@ export function TimelineContainer({
   };
 
   // ============================================================================
-  // MOBILE TIMELINE (Portrait & Landscape — Fixed Center Playhead + 50vw Buffer)
+  // MOBILE TIMELINE (CapCut Android: Video Utama on top, Overlays BELOW, isolated Overlay edit view)
   // ============================================================================
   if (layoutMode === 'mobile') {
     const rulerHeight = 22;
-    const mainTrackIndex = displayTrackOrder.indexOf(mainVideoTrackId || '');
-    const mainTrackOffsetTop = displayTrackOrder
-      .slice(0, Math.max(0, mainTrackIndex))
-      .reduce((acc, tid) => {
-        const tr = tracks[tid];
-        return (
-          acc +
-          (tr ? getTrackRowHeight(tr.type, false, 'mobile', compactLandscape) + 6 : 0)
-        );
-      }, rulerHeight + 6);
+    const selectedClipObj =
+      selectedClipIds.length === 1 ? clips[selectedClipIds[0]] : undefined;
+    const isOverlayOnlyView =
+      mobileTimelineFocus === 'overlay' || selectedClipObj?.type === 'overlay';
+
+    // Mobile natural bottom-up layer order BELOW Video Utama: Overlay 1 -> Overlay 2 -> Overlay 3...
+    const overlayTrackIds = trackOrder.filter(
+      (tid) => tracks[tid]?.type === 'overlay'
+    );
+    const nonMainTextTrackIds = trackOrder.filter(
+      (tid) =>
+        tid !== mainVideoTrackId &&
+        tracks[tid]?.type !== 'overlay' &&
+        tracks[tid]?.type !== 'audio'
+    );
+    const audioTrackIds = trackOrder.filter(
+      (tid) => tracks[tid]?.type === 'audio'
+    );
+
+    const overlayClipsCount = Object.values(clips).filter(
+      (c) => c.type === 'overlay'
+    ).length;
+
+    const mainTrack = mainVideoTrackId ? tracks[mainVideoTrackId] : undefined;
+    const mobileMainTracks: string[] = [
+      ...(mainVideoTrackId ? [mainVideoTrackId] : []),
+      ...nonMainTextTrackIds,
+      ...audioTrackIds,
+    ];
+
+    const mobileRows = isOverlayOnlyView ? overlayTrackIds : mobileMainTracks;
+
+    const mobileTotalHeight = Math.max(
+      140,
+      rulerHeight +
+        32 +
+        mobileRows.reduce((sum, tid) => {
+          const tr = tracks[tid];
+          if (!tr) return sum;
+          return (
+            sum +
+            getTrackRowHeight(
+              tr.type,
+              tid === mainVideoTrackId && !isOverlayOnlyView,
+              'mobile',
+              compactLandscape
+            ) +
+            6
+          );
+        }, 0)
+    );
 
     return (
       <section
         aria-label="Multi-Track Timeline"
+        data-mobile-timeline-view={isOverlayOnlyView ? 'overlay' : 'main'}
         className={`relative flex flex-col overflow-hidden bg-[#0A0A0C] ${
           compactLandscape
             ? 'min-h-[120px] flex-1'
@@ -194,16 +239,16 @@ export function TimelineContainer({
         {/* Fixed Static White Playhead pinned horizontally at X = 50% */}
         <Playhead
           variant="static-center"
-          height={Math.max(220, lanesTotalHeight + rulerHeight + 16)}
+          height={Math.max(220, mobileTotalHeight + 16)}
         />
 
-        {/* Floating White Rounded-Square [+] Add Clip Button aligned with Main Video Track */}
-        {onAddMediaClick && (
+        {/* Floating White Rounded-Square [+] Add Clip Button (Main View only, pinned to Video Utama row) */}
+        {!isOverlayOnlyView && onAddMediaClick && (
           <button
             type="button"
             onClick={onAddMediaClick}
             aria-label="Tambah Media ke Track Utama"
-            style={{ top: Math.max(28, mainTrackOffsetTop + (compactLandscape ? 4 : 10)) }}
+            style={{ top: rulerHeight + (compactLandscape ? 10 : 16) }}
             className="absolute right-3 z-40 flex h-8 w-8 items-center justify-center rounded-lg bg-white text-zinc-950 shadow-lg transition active:scale-95 sm:h-9 sm:w-9"
           >
             <Plus className="h-5 w-5 stroke-[2.5]" />
@@ -246,141 +291,292 @@ export function TimelineContainer({
               <TimeRuler totalDuration={totalDuration} height={rulerHeight} />
             </div>
 
-            {displayTrackOrder.map((trackId) => {
-              const track = tracks[trackId];
-              if (!track) return null;
-              const isMain = track.id === mainVideoTrackId;
-              const rowH = getTrackRowHeight(
-                track.type,
-                isMain,
-                'mobile',
-                compactLandscape
-              );
-              const isEmpty = track.clipIds.length === 0;
-
-              return (
-                <div
-                  key={track.id}
-                  data-track-id={track.id}
-                  style={{ height: rowH, width: laneWidth }}
-                  onPointerDown={(e) => {
-                    if (e.target === e.currentTarget) {
+            {/* CAPCUT OVERLAY-ONLY MOBILE VIEW: Slim dimmed Main Video Reference + ONLY Overlay rows BELOW */}
+            {isOverlayOnlyView && (
+              <>
+                {mainTrack && (
+                  <div
+                    data-track-id={`${mainTrack.id}-ref`}
+                    data-mobile-main-ref="true"
+                    style={{ height: compactLandscape ? 18 : 22, width: laneWidth }}
+                    onClick={() => {
                       useTimelineStore.getState().clearSelection();
-                    }
-                  }}
-                  className={`relative bg-transparent ${
-                    track.isMuted ? 'opacity-50' : ''
-                  }`}
-                >
-                  {/* Main Track Inline Left-of-00:00 CapCut Mute & Cover Pills */}
-                  {isMain && (
+                      setMobileTimelineFocus('main');
+                    }}
+                    title="Track Video Utama (ketuk untuk kembali ke timeline utama)"
+                    className="relative cursor-pointer opacity-55 transition hover:opacity-80"
+                  >
                     <div
-                      style={{ right: 'calc(100% + 10px)' }}
-                      className="absolute top-1/2 flex -translate-y-1/2 items-center gap-1.5"
+                      style={{ right: 'calc(100% + 8px)' }}
+                      className="absolute top-1/2 flex -translate-y-1/2 items-center gap-1 rounded bg-[#18181C] px-1.5 py-0.5 text-[9px] font-medium text-zinc-400 ring-1 ring-[#2A2A32]"
                     >
-                      <button
-                        type="button"
-                        onClick={() =>
-                          useTimelineStore.getState().toggleTrackMute(track.id)
-                        }
-                        className={`flex h-10 w-10 flex-col items-center justify-center rounded-md text-[9px] leading-tight ${
-                          track.isMuted
-                            ? 'bg-rose-500/25 text-rose-200 ring-1 ring-rose-500/40'
-                            : 'bg-[#18181C] text-zinc-200 ring-1 ring-[#2A2A32]'
-                        }`}
-                        title="Bisukan suara track utama"
-                      >
-                        {track.isMuted ? (
-                          <VolumeX className="h-3.5 w-3.5" />
-                        ) : (
-                          <Volume2 className="h-3.5 w-3.5" />
-                        )}
-                        <span>Bisu</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={onCoverClick}
-                        className="flex h-10 w-11 flex-col items-center justify-center rounded-md bg-[#18181C] text-[9px] leading-tight text-zinc-200 ring-1 ring-[#2A2A32]"
-                        title="Ambil frame sampul PNG"
-                      >
-                        <ImageIcon className="h-3.5 w-3.5 text-zinc-100" />
-                        <span>Sampul</span>
-                      </button>
+                      <span>Utama</span>
                     </div>
-                  )}
+                    {mainTrack.clipIds.length === 0 ? (
+                      <div className="flex h-full w-48 items-center rounded border border-dashed border-[#2A2A32] bg-[#141418] px-2 text-[9px] text-zinc-500">
+                        Video Utama (Kosong)
+                      </div>
+                    ) : (
+                      mainTrack.clipIds.map((cid) => {
+                        const c = clips[cid];
+                        if (!c) return null;
+                        return (
+                          <div
+                            key={`ref-${c.id}`}
+                            style={{
+                              left: c.start * pixelsPerSecond,
+                              width: Math.max(18, c.duration * pixelsPerSecond),
+                            }}
+                            className="absolute top-0 bottom-0 overflow-hidden rounded border border-[#2f455e] bg-[#19283a] px-1.5 text-[9px] leading-[20px] text-zinc-300"
+                          >
+                            <span className="truncate">{c.name}</span>
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+                )}
 
-                  {/* CapCut-style Clean Inline Prompt Pills on Empty Tracks */}
-                  {isEmpty && isMain && onAddMediaClick && (
-                    <button
-                      type="button"
-                      onClick={onAddMediaClick}
-                      className="flex h-full items-center gap-1.5 rounded-lg border border-dashed border-[#2A2A32] bg-[#181820]/90 px-3 text-[11px] font-medium text-zinc-300 hover:border-[#00E5FF]"
-                    >
-                      <Plus className="h-3.5 w-3.5 text-[#00E5FF]" />
-                      <span>Tambah Video / Foto</span>
-                    </button>
-                  )}
+                {overlayTrackIds.length === 0 ? (
+                  <div
+                    style={{ height: compactLandscape ? 36 : 44, width: laneWidth }}
+                    className="relative flex items-center"
+                  >
+                    {onQuickOverlayClick && (
+                      <button
+                        type="button"
+                        onClick={onQuickOverlayClick}
+                        className="inline-flex h-full items-center gap-1.5 rounded-lg border border-dashed border-amber-500/50 bg-amber-500/10 px-3 text-[11px] font-semibold text-amber-200 hover:bg-amber-500/20"
+                      >
+                        <Layers className="h-3.5 w-3.5 text-amber-300" />
+                        <span>+ Tambahkan Overlay (Gambar / Video PIP)</span>
+                      </button>
+                    )}
+                  </div>
+                ) : (
+                  overlayTrackIds.map((trackId, ovlIdx) => {
+                    const track = tracks[trackId];
+                    if (!track) return null;
+                    const rowH = getTrackRowHeight(
+                      'overlay',
+                      false,
+                      'mobile',
+                      compactLandscape
+                    );
+                    const isEmpty = track.clipIds.length === 0;
+                    return (
+                      <div
+                        key={track.id}
+                        data-track-id={track.id}
+                        style={{ height: rowH, width: laneWidth }}
+                        onPointerDown={(e) => {
+                          if (e.target === e.currentTarget) {
+                            useTimelineStore.getState().clearSelection();
+                          }
+                        }}
+                        className={`relative bg-transparent ${
+                          track.isMuted ? 'opacity-50' : ''
+                        }`}
+                      >
+                        <div
+                          style={{ right: 'calc(100% + 8px)' }}
+                          className="absolute top-1/2 -translate-y-1/2 rounded bg-amber-500/20 px-1.5 py-0.5 font-mono text-[9px] font-bold text-amber-300 ring-1 ring-amber-500/35"
+                        >
+                          L{ovlIdx + 1}
+                        </div>
 
-                  {isEmpty && track.type === 'audio' && onQuickAudioClick && (
-                    <button
-                      type="button"
-                      onClick={onQuickAudioClick}
-                      className="inline-flex h-full items-center gap-1.5 rounded-md border border-[#2A2A32] bg-[#18181C] px-2.5 text-[10px] font-medium text-zinc-300"
-                    >
-                      <span>♪ Tambah Audio</span>
-                    </button>
-                  )}
+                        {isEmpty && onQuickOverlayClick && (
+                          <button
+                            type="button"
+                            onClick={onQuickOverlayClick}
+                            className="inline-flex h-full items-center gap-1 rounded-full border border-amber-500/40 bg-[#18181C]/80 px-2.5 text-[10px] font-medium text-amber-200"
+                          >
+                            <span>+ Tambah Overlay</span>
+                          </button>
+                        )}
 
-                  {isEmpty && track.type === 'overlay' && onQuickOverlayClick && (
+                        {track.clipIds.map((cid) => {
+                          const clip = clips[cid];
+                          if (!clip) return null;
+                          return (
+                            <ClipItem
+                              key={clip.id}
+                              clip={clip}
+                              isLocked={track.isLocked}
+                              isMainTrack={false}
+                              compactCapsule={false}
+                              touchHandles
+                            />
+                          );
+                        })}
+                      </div>
+                    );
+                  })
+                )}
+
+                {overlayTrackIds.length > 0 && onQuickOverlayClick && (
+                  <div style={{ height: 28, width: laneWidth }} className="relative flex items-center">
                     <button
                       type="button"
                       onClick={onQuickOverlayClick}
-                      className="inline-flex h-full items-center gap-1 rounded-full border border-amber-500/40 bg-[#18181C]/80 px-2.5 text-[10px] font-medium text-amber-200"
+                      className="inline-flex h-full items-center gap-1 rounded-full border border-amber-500/40 bg-[#18181C] px-2.5 text-[10px] font-medium text-amber-200"
                     >
-                      <span>+ Tambah Overlay</span>
+                      <Plus className="h-3 w-3 text-amber-300" />
+                      <span>Tambah Overlay (Layer Baru)</span>
                     </button>
-                  )}
+                  </div>
+                )}
+              </>
+            )}
 
-                  {isEmpty && track.type === 'text' && (onQuickTextClick || onQuickOverlayClick) && (
-                    <div className="inline-flex h-full items-center gap-1.5">
-                      {onQuickTextClick && (
+            {/* CAPCUT MAIN MOBILE VIEW: Video Utama on TOP, compact Overlay summary pill + Text & Audio BELOW */}
+            {!isOverlayOnlyView &&
+              mobileMainTracks.map((trackId) => {
+                const track = tracks[trackId];
+                if (!track) return null;
+                const isMain = track.id === mainVideoTrackId;
+                const rowH = getTrackRowHeight(
+                  track.type,
+                  isMain,
+                  'mobile',
+                  compactLandscape
+                );
+                const isEmpty = track.clipIds.length === 0;
+
+                return (
+                  <div key={track.id} className="contents">
+                    <div
+                      data-track-id={track.id}
+                      style={{ height: rowH, width: laneWidth }}
+                      onPointerDown={(e) => {
+                        if (e.target === e.currentTarget) {
+                          useTimelineStore.getState().clearSelection();
+                        }
+                      }}
+                      className={`relative bg-transparent ${
+                        track.isMuted ? 'opacity-50' : ''
+                      }`}
+                    >
+                      {/* Main Track Inline Left-of-00:00 CapCut Mute & Cover Pills */}
+                      {isMain && (
+                        <div
+                          style={{ right: 'calc(100% + 10px)' }}
+                          className="absolute top-1/2 flex -translate-y-1/2 items-center gap-1.5"
+                        >
+                          <button
+                            type="button"
+                            onClick={() =>
+                              useTimelineStore.getState().toggleTrackMute(track.id)
+                            }
+                            className={`flex h-10 w-10 flex-col items-center justify-center rounded-md text-[9px] leading-tight ${
+                              track.isMuted
+                                ? 'bg-rose-500/25 text-rose-200 ring-1 ring-rose-500/40'
+                                : 'bg-[#18181C] text-zinc-200 ring-1 ring-[#2A2A32]'
+                            }`}
+                            title="Bisukan suara track utama"
+                          >
+                            {track.isMuted ? (
+                              <VolumeX className="h-3.5 w-3.5" />
+                            ) : (
+                              <Volume2 className="h-3.5 w-3.5" />
+                            )}
+                            <span>Bisu</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={onCoverClick}
+                            className="flex h-10 w-11 flex-col items-center justify-center rounded-md bg-[#18181C] text-[9px] leading-tight text-zinc-200 ring-1 ring-[#2A2A32]"
+                            title="Ambil frame sampul PNG"
+                          >
+                            <ImageIcon className="h-3.5 w-3.5 text-zinc-100" />
+                            <span>Sampul</span>
+                          </button>
+                        </div>
+                      )}
+
+                      {/* CapCut-style Clean Inline Prompt Pills on Empty Tracks */}
+                      {isEmpty && isMain && onAddMediaClick && (
                         <button
                           type="button"
-                          onClick={onQuickTextClick}
-                          className="inline-flex h-full items-center gap-1 rounded-full border border-[#2A2A32] bg-[#18181C]/70 px-2.5 text-[10px] font-medium text-zinc-400"
+                          onClick={onAddMediaClick}
+                          className="flex h-full items-center gap-1.5 rounded-lg border border-dashed border-[#2A2A32] bg-[#181820]/90 px-3 text-[11px] font-medium text-zinc-300 hover:border-[#00E5FF]"
                         >
-                          <span>T Tambah Teks</span>
+                          <Plus className="h-3.5 w-3.5 text-[#00E5FF]" />
+                          <span>Tambah Video / Foto</span>
                         </button>
                       )}
-                      {onQuickOverlayClick && (
+
+                      {isEmpty && track.type === 'audio' && onQuickAudioClick && (
                         <button
                           type="button"
-                          onClick={onQuickOverlayClick}
-                          className="inline-flex h-full items-center gap-1 rounded-full border border-amber-500/35 bg-[#18181C]/70 px-2.5 text-[10px] font-medium text-amber-300"
+                          onClick={onQuickAudioClick}
+                          className="inline-flex h-full items-center gap-1.5 rounded-md border border-[#2A2A32] bg-[#18181C] px-2.5 text-[10px] font-medium text-zinc-300"
                         >
-                          <span>+ Overlay</span>
+                          <span>♪ Tambah Audio</span>
                         </button>
                       )}
+
+                      {isEmpty &&
+                        track.type === 'text' &&
+                        (onQuickTextClick || onQuickOverlayClick) && (
+                          <div className="inline-flex h-full items-center gap-1.5">
+                            {onQuickTextClick && (
+                              <button
+                                type="button"
+                                onClick={onQuickTextClick}
+                                className="inline-flex h-full items-center gap-1 rounded-full border border-[#2A2A32] bg-[#18181C]/70 px-2.5 text-[10px] font-medium text-zinc-400"
+                              >
+                                <span>T Tambah Teks</span>
+                              </button>
+                            )}
+                            {onQuickOverlayClick && overlayClipsCount === 0 && (
+                              <button
+                                type="button"
+                                onClick={onQuickOverlayClick}
+                                className="inline-flex h-full items-center gap-1 rounded-full border border-amber-500/35 bg-[#18181C]/70 px-2.5 text-[10px] font-medium text-amber-300"
+                              >
+                                <span>+ Overlay</span>
+                              </button>
+                            )}
+                          </div>
+                        )}
+
+                      {track.clipIds.map((cid) => {
+                        const clip = clips[cid];
+                        if (!clip) return null;
+                        return (
+                          <ClipItem
+                            key={clip.id}
+                            clip={clip}
+                            isLocked={track.isLocked}
+                            isMainTrack={isMain}
+                            compactCapsule={track.type === 'text'}
+                            touchHandles
+                          />
+                        );
+                      })}
                     </div>
-                  )}
 
-                  {track.clipIds.map((cid) => {
-                    const clip = clips[cid];
-                    if (!clip) return null;
-                    return (
-                      <ClipItem
-                        key={clip.id}
-                        clip={clip}
-                        isLocked={track.isLocked}
-                        isMainTrack={isMain}
-                        compactCapsule={track.type === 'text'}
-                        touchHandles
-                      />
-                    );
-                  })}
-                </div>
-              );
-            })}
+                    {/* Right BELOW Main Video Track: compact 1-line Overlay entry strip (prevents multi-overlay clutter on Main Timeline) */}
+                    {isMain && overlayClipsCount > 0 && (
+                      <div style={{ height: 26, width: laneWidth }} className="relative flex items-center">
+                        <button
+                          type="button"
+                          data-testid="mobile-overlay-summary-strip"
+                          onClick={() => setMobileTimelineFocus('overlay')}
+                          className="inline-flex h-full items-center gap-1.5 rounded-full border border-amber-500/45 bg-amber-500/15 px-3 text-[10px] font-semibold text-amber-200 hover:bg-amber-500/25"
+                        >
+                          <Layers className="h-3 w-3 text-amber-300" />
+                          <span>
+                            Overlay ({overlayClipsCount} klip · {overlayTrackIds.length}{' '}
+                            layer) — Ketuk Edit
+                          </span>
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
           </div>
         </div>
       </section>
