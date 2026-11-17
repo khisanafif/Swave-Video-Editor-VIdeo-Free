@@ -60,7 +60,7 @@ export function MediaBinPanel({
   const [busySfxId, setBusySfxId] = useState<string | null>(null);
   const [duckFeedback, setDuckFeedback] = useState<string | null>(null);
   const [captionScript, setCaptionScript] = useState(
-    'Halo semuanya! Selamat datang di SWAVE VIDEO.\nEdit video & subtitle otomatis 100% gratis tanpa watermark!'
+    'Halo semuanya! Selamat datang di SWAVE Video.\nEdit visual & subtitle otomatis 100% gratis tanpa watermark!'
   );
   const [captionPresetId, setCaptionPresetId] = useState('bold-yellow');
   const [uploadStatus, setUploadStatus] = useState<string | null>(null);
@@ -166,7 +166,7 @@ export function MediaBinPanel({
       store.registerAsset(audioAsset);
       store.addClipFromAsset(visualAsset.id, 'track-1', 0);
       store.addTextClip(
-        'SWAVE VIDEO Studio\n60 FPS WebGL2 + Multi-Device',
+        'SWAVE Video Studio\n60 FPS WebGL2 + Multi-Device',
         0.4,
         'track-2'
       );

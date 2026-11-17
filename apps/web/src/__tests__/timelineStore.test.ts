@@ -29,7 +29,7 @@ const sampleAudioAsset: MediaAsset = {
   source: 'local',
 };
 
-describe('SWAVE VIDEO Dual-Store & Zundo History', () => {
+describe('SWAVE Video Dual-Store & Zundo History', () => {
   beforeEach(() => {
     useTimelineStore.getState().resetProject();
     useTimelineStore.temporal.getState().clear();

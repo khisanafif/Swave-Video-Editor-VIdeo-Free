@@ -1,4 +1,4 @@
-# SWAVE VIDEO (Self-Hosted & Web-Native Video Editor) — Caddy Alternative Config
+# SWAVE Video (Self-Hosted & Web-Native Visual Editor) — Caddy Alternative Config
 # Provides automatic local HTTPS (tls internal) for LAN/WiFi access
 # enabling WebCodecs, OPFS, and SharedArrayBuffer on connected devices.
 

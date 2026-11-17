@@ -219,7 +219,7 @@ export const TEXT_PRESETS: TextPresetItem[] = [
   {
     id: 'neon-cyber',
     label: 'Neon Cyber Glow',
-    sampleText: 'SWAVE VIDEO',
+    sampleText: 'SWAVE Video',
     previewBg: 'bg-cyan-950/60 text-cyan-300 border-cyan-500/40',
     defaultY: 0,
     defaultAnimation: 'zoom-in',

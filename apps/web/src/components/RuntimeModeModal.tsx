@@ -347,7 +347,7 @@ export function RuntimeModeModal({
                     className="mt-2 flex w-full items-center justify-center gap-2 rounded-lg bg-emerald-500 py-2 font-bold text-zinc-950 hover:bg-emerald-400"
                   >
                     <Download className="h-4 w-4" />
-                    <span>Instal SWAVE VIDEO di Perangkat Ini Sekarang</span>
+                    <span>Instal SWAVE Video di Perangkat Ini Sekarang</span>
                   </button>
                 </div>
               )}
@@ -377,17 +377,17 @@ export function RuntimeModeModal({
                 <ul className="mt-2.5 space-y-1 text-[11px] text-zinc-300">
                   <li>
                     • <strong>Android:</strong>{' '}
-                    <code>SWAVE-VIDEO-Android.apk</code> (instal langsung sebagai
+                    <code>SWAVE-Video-Android.apk</code> (instal langsung sebagai
                     aplikasi HP Android)
                   </li>
                   <li>
                     • <strong>iPhone / iPad (iOS):</strong>{' '}
-                    <code>SWAVE-VIDEO-iOS-Unsigned.ipa</code> (AltStore / Sideloadly
+                    <code>SWAVE-Video-iOS-Unsigned.ipa</code> (AltStore / Sideloadly
                     / TrollStore / Xcode)
                   </li>
                   <li>
                     • <strong>Laptop Portabel:</strong>{' '}
-                    <code>SWAVE-VIDEO-OnDevice-Portable.zip</code> (ekstrak &amp;
+                    <code>SWAVE-Video-OnDevice-Portable.zip</code> (ekstrak &amp;
                     klik jalan)
                   </li>
                 </ul>
@@ -431,7 +431,7 @@ export function RuntimeModeModal({
                   </li>
                   <li>
                     <strong>Via File `.ipa`:</strong> Unduh{' '}
-                    <code>SWAVE-VIDEO-iOS-Unsigned.ipa</code> dari GitHub Releases,
+                    <code>SWAVE-Video-iOS-Unsigned.ipa</code> dari GitHub Releases,
                     lalu pasang via <strong>AltStore / Sideloadly / TrollStore</strong>{' '}
                     (atau sign di Xcode via <code>npm run mobile:ios</code>).
                   </li>
@@ -460,7 +460,7 @@ export function RuntimeModeModal({
                 <ol className="mt-2 list-decimal space-y-1 pl-4 text-[11px] text-zinc-300">
                   <li>
                     <strong>Download APK Langsung:</strong> Ambil{' '}
-                    <code>SWAVE-VIDEO-Android.apk</code> dari{' '}
+                    <code>SWAVE-Video-Android.apk</code> dari{' '}
                     <a
                       href={GITHUB_RELEASES_URL}
                       target="_blank"

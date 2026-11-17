@@ -1,4 +1,4 @@
-name: SWAVE VIDEO CI
+name: SWAVE Video CI
 
 on:
   push:

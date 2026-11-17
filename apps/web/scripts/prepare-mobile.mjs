@@ -225,19 +225,19 @@ function patchIosProject() {
     const entries = [
       [
         'NSPhotoLibraryUsageDescription',
-        '<string>SWAVE VIDEO needs photo library access to import videos and images into your timeline.</string>',
+        '<string>SWAVE Video needs photo library access to import videos and images into your timeline.</string>',
       ],
       [
         'NSPhotoLibraryAddUsageDescription',
-        '<string>SWAVE VIDEO needs permission to save exported MP4 videos to your Photos library.</string>',
+        '<string>SWAVE Video needs permission to save exported MP4 videos to your Photos library.</string>',
       ],
       [
         'NSMicrophoneUsageDescription',
-        '<string>SWAVE VIDEO needs microphone access for Live Subtitle Dictation.</string>',
+        '<string>SWAVE Video needs microphone access for Live Subtitle Dictation.</string>',
       ],
       [
         'NSCameraUsageDescription',
-        '<string>SWAVE VIDEO needs camera access if you record media directly.</string>',
+        '<string>SWAVE Video needs camera access if you record media directly.</string>',
       ],
       ['UIFileSharingEnabled', '<true/>'],
       ['LSSupportsOpeningDocumentsInPlace', '<true/>'],

@@ -1,8 +1,8 @@
 {
   "packageId": "com.swavevideo.app",
   "host": "editor.yourdomain.com",
-  "name": "SWAVE VIDEO",
-  "launcherName": "SWAVE VIDEO",
+  "name": "SWAVE Video",
+  "launcherName": "SWAVE Video",
   "display": "standalone",
   "themeColor": "#09090B",
   "navigationColor": "#09090B",

@@ -8,7 +8,7 @@ if [ -s "$HOME/.nvm/nvm.sh" ]; then
 fi
 
 echo "===================================================================="
-echo "  Menyiapkan SWAVE VIDEO (Self-Hosted & Web-Native Server)..."
+echo "  Menyiapkan SWAVE Video (Self-Hosted & Web-Native Server)..."
 echo "===================================================================="
 
 if ! command -v node >/dev/null 2>&1; then
@@ -19,7 +19,7 @@ fi
 
 NODE_MAJOR=$(node -p "Number(process.versions.node.split('.')[0])")
 if [ "$NODE_MAJOR" -lt 22 ]; then
-  echo "[ERROR] Node.js terdeteksi $(node -v), tetapi SWAVE VIDEO membutuhkan Node.js >= v22.5.0."
+  echo "[ERROR] Node.js terdeteksi $(node -v), tetapi SWAVE Video membutuhkan Node.js >= v22.5.0."
   echo "Silakan update Node.js ke versi 22 LTS (lihat README.md)."
   exit 1
 fi
@@ -30,9 +30,9 @@ if [ ! -d "node_modules" ]; then
 fi
 
 if [ ! -f "packages/shared/dist/index.js" ] || [ ! -f "apps/web/dist/index.html" ] || [ ! -f "apps/server/dist/index.js" ]; then
-  echo "[2/3] Membangun aplikasi SWAVE VIDEO..."
+  echo "[2/3] Membangun aplikasi SWAVE Video..."
   npm run build
 fi
 
-echo "[3/3] Menjalankan Server SWAVE VIDEO..."
+echo "[3/3] Menjalankan Server SWAVE Video..."
 npm --workspace=@swave/server run start

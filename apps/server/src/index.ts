@@ -14,7 +14,7 @@ async function main(): Promise<void> {
   const endpoints = discoverLanEndpoints(PORT);
 
   console.log('\n====================================================================');
-  console.log('  SWAVE VIDEO (Self-Hosted & Web-Native Video Editor) — AKTIF');
+  console.log('  SWAVE Video (Self-Hosted & Web-Native Visual Editor) — AKTIF');
   console.log('====================================================================');
   console.log(`  Akses di PC ini       : http://localhost:${PORT}`);
   if (endpoints.length > 0) {

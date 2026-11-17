@@ -1,6 +1,6 @@
 {
   "appId": "com.swavevideo.app",
-  "appName": "SWAVE VIDEO",
+  "appName": "SWAVE Video",
   "webDir": "dist",
   "bundledWebRuntime": false,
   "server": {

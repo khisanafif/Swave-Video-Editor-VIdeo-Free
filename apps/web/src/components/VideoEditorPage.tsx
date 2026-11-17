@@ -267,7 +267,7 @@ export function VideoEditorPage() {
             </div>
             <div className="flex items-center">
               <span className="text-sm font-extrabold tracking-tight text-white">
-                SWAVE <span className="text-cyan-400">VIDEO</span>
+                SWAVE <span className="text-cyan-400">Video</span>
               </span>
               <span className="ml-1.5 hidden rounded bg-emerald-500/20 px-1.5 py-0.5 font-mono text-[9px] font-bold text-emerald-300 sm:inline">
                 100% GRATIS
@@ -573,7 +573,7 @@ export function VideoEditorPage() {
             </ul>
             {!caps.isSecureContext && (
               <p className="mt-2.5 rounded bg-amber-500/10 p-2 text-[11px] text-amber-300">
-                Saat diakses dari HP/Tablet lewat IP LAN HTTP (`http://192.168.x.x`), SWAVE VIDEO otomatis mengaktifkan fallback `MediaRecorder` untuk export lokal serta sinkronisasi penuh ke Server PC.
+                Saat diakses dari HP/Tablet lewat IP LAN HTTP (`http://192.168.x.x`), SWAVE Video otomatis mengaktifkan fallback `MediaRecorder` untuk export lokal serta sinkronisasi penuh ke Server PC.
               </p>
             )}
           </div>

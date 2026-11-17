@@ -111,7 +111,7 @@ export function PreviewViewport() {
       store.registerAsset(audioAsset);
       store.addClipFromAsset(visualAsset.id, 'track-1', 0);
       store.addTextClip(
-        'SWAVE VIDEO Studio\nSubtitle Otomatis + 60 FPS',
+        'SWAVE Video Studio\nSubtitle Otomatis + 60 FPS',
         0.4,
         'track-2'
       );

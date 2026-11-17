@@ -241,13 +241,13 @@ describe('VideoEditorPage UI Integration (Desktop, Tablet, Android & Multi-Devic
       screen.getByRole('button', { name: /Unduh APK \/ iOS \/ Web App/i })
     );
     expect(
-      screen.getAllByText(/SWAVE-VIDEO-Android\.apk/i).length
+      screen.getAllByText(/SWAVE-Video-Android\.apk/i).length
     ).toBeGreaterThanOrEqual(1);
     expect(
-      screen.getAllByText(/SWAVE-VIDEO-iOS-Unsigned\.ipa/i).length
+      screen.getAllByText(/SWAVE-Video-iOS-Unsigned\.ipa/i).length
     ).toBeGreaterThanOrEqual(1);
     expect(
-      screen.getAllByText(/SWAVE-VIDEO-OnDevice-Portable\.zip/i).length
+      screen.getAllByText(/SWAVE-Video-OnDevice-Portable\.zip/i).length
     ).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByText(/Safari iOS/i).length).toBeGreaterThanOrEqual(1);
 

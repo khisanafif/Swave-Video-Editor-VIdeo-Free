@@ -9,7 +9,7 @@ const __dirname = path.dirname(__filename);
 const rootDir = path.resolve(__dirname, '..');
 const webDistDir = path.join(rootDir, 'apps/web/dist');
 const outRoot = path.join(rootDir, 'dist-standalone');
-const bundleDir = path.join(outRoot, 'SWAVE-VIDEO-OnDevice');
+const bundleDir = path.join(outRoot, 'SWAVE-Video-OnDevice');
 
 function run(cmd, cwd = rootDir, extraEnv = {}) {
   console.log(`\n> ${cmd}`);
@@ -70,7 +70,7 @@ const server = http.createServer((req, res) => {
 
 server.listen(port, '127.0.0.1', () => {
   const url = \`http://localhost:\${port}\`;
-  console.log(\`SWAVE VIDEO (On-Device Mode) running at \${url}\`);
+  console.log(\`SWAVE Video (On-Device Mode) running at \${url}\`);
   console.log('All editing, AI subtitles, and export run locally on your device.');
   console.log('Press Ctrl+C to stop.');
   const openCmd =
@@ -86,7 +86,7 @@ server.listen(port, '127.0.0.1', () => {
 fs.writeFileSync(path.join(bundleDir, 'serve-ondevice.mjs'), serveScript, 'utf8');
 
 const batLauncher = `@echo off
-title SWAVE VIDEO - On-Device Mode (100%% Local)
+title SWAVE Video - On-Device Mode (100%% Local)
 cd /d "%~dp0"
 where node >nul 2>nul
 if %errorlevel%==0 (
@@ -114,7 +114,7 @@ cd "$(dirname "$0")"
 if command -v node >/dev/null 2>&1; then
   node serve-ondevice.mjs
 elif command -v python3 >/dev/null 2>&1; then
-  echo "Opening SWAVE VIDEO (On-Device) at http://localhost:4173 ..."
+  echo "Opening SWAVE Video (On-Device) at http://localhost:4173 ..."
   (sleep 1 && (xdg-open "http://localhost:4173" || open "http://localhost:4173") >/dev/null 2>&1) &
   python3 -m http.server 4173 --directory web
 else
@@ -126,7 +126,7 @@ const shPath = path.join(bundleDir, 'jalankan-di-perangkat.sh');
 fs.writeFileSync(shPath, shLauncher, 'utf8');
 fs.chmodSync(shPath, 0o755);
 
-const readmeTxt = `SWAVE VIDEO (Self-Hosted & Web-Native Video Editor) - Portable On-Device Bundle
+const readmeTxt = `SWAVE Video (Self-Hosted & Web-Native Visual Editor) - Portable On-Device Bundle
 ===============================================================================
 Semua proses (preview WebGL2, AI Whisper subtitle, edit video, & ekspor MP4)
 berjalan 100% langsung di perangkat ini tanpa perlu server PC maupun npm install.

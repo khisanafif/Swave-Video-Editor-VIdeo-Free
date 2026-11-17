@@ -319,7 +319,7 @@ export function CanvasOverlayGizmo({
   return (
     <div
       className="pointer-events-none absolute inset-0 z-20 overflow-hidden select-none"
-      aria-label="Kanvas Interaktif SWAVE VIDEO"
+      aria-label="Kanvas Interaktif SWAVE Video"
     >
       {/* CapCut Magnetic Center Snap Lines */}
       {snapGuideX && (

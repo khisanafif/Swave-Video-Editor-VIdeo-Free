@@ -1,5 +1,5 @@
 # ~/.cloudflared/config.yml
-# Cloudflare Tunnel Ingress for SWAVE VIDEO (Self-Hosted Server)
+# Cloudflare Tunnel Ingress for SWAVE Video (Self-Hosted Server)
 
 tunnel: <YOUR-TUNNEL-UUID>
 credentials-file: /root/.cloudflared/<YOUR-TUNNEL-UUID>.json

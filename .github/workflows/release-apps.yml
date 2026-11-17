@@ -1,4 +1,4 @@
-name: SWAVE VIDEO — Build & Release Apps (Android APK · iOS IPA · Portable · Pages)
+name: SWAVE Video — Build & Release Apps (Android APK · iOS IPA · Portable · Pages)
 
 on:
   push:
@@ -40,12 +40,12 @@ jobs:
         run: |
           mkdir -p artifacts
           cd dist-standalone
-          zip -qr ../artifacts/SWAVE-VIDEO-OnDevice-Portable.zip SWAVE-VIDEO-OnDevice
+          zip -qr ../artifacts/SWAVE-Video-OnDevice-Portable.zip SWAVE-Video-OnDevice
 
       - uses: actions/upload-artifact@v4
         with:
           name: portable-web-zip
-          path: artifacts/SWAVE-VIDEO-OnDevice-Portable.zip
+          path: artifacts/SWAVE-Video-OnDevice-Portable.zip
 
       - name: Configure GitHub Pages
         continue-on-error: true
@@ -57,7 +57,7 @@ jobs:
         continue-on-error: true
         uses: actions/upload-pages-artifact@v3
         with:
-          path: dist-standalone/SWAVE-VIDEO-OnDevice/web
+          path: dist-standalone/SWAVE-Video-OnDevice/web
 
   deploy-pages:
     needs: build-standalone-web
@@ -102,12 +102,12 @@ jobs:
       - name: Collect APK
         run: |
           mkdir -p artifacts
-          cp apps/web/android/app/build/outputs/apk/debug/app-debug.apk artifacts/SWAVE-VIDEO-Android.apk
+          cp apps/web/android/app/build/outputs/apk/debug/app-debug.apk artifacts/SWAVE-Video-Android.apk
 
       - uses: actions/upload-artifact@v4
         with:
           name: android-apk
-          path: artifacts/SWAVE-VIDEO-Android.apk
+          path: artifacts/SWAVE-Video-Android.apk
 
   build-ios-ipa:
     runs-on: macos-latest
@@ -148,12 +148,12 @@ jobs:
           mkdir -p artifacts ios_pkg/Payload
           cp -R apps/web/ios/build/Build/Products/Release-iphoneos/App.app ios_pkg/Payload/
           cd ios_pkg
-          zip -qr ../artifacts/SWAVE-VIDEO-iOS-Unsigned.ipa Payload
+          zip -qr ../artifacts/SWAVE-Video-iOS-Unsigned.ipa Payload
 
       - uses: actions/upload-artifact@v4
         with:
           name: ios-ipa
-          path: artifacts/SWAVE-VIDEO-iOS-Unsigned.ipa
+          path: artifacts/SWAVE-Video-iOS-Unsigned.ipa
 
   publish-release:
     needs: [build-standalone-web, build-android-apk, build-ios-ipa]
@@ -182,17 +182,17 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || 'latest-standalone' }}
-          name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || 'SWAVE VIDEO — Standalone Apps (Android · iOS · Portable)' }}
+          name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || 'SWAVE Video — Standalone Apps (Android · iOS · Portable)' }}
           make_latest: true
           generate_release_notes: true
           body: |
-            ## SWAVE VIDEO — Self-Hosted & Web-Native Video Editor (100% Free, No Watermark)
+            ## SWAVE Video — Self-Hosted & Web-Native Visual Editor (100% Free, No Watermark)
 
-            Edit videos, generate AI auto-subtitles, apply real-time WebGL shaders, and export MP4 **100% locally on your own phone or computer** without requiring a server. Switch anytime between **On-Device** and **Self-Hosted PC Server** mode directly inside the top bar.
+            Edit videos and visual projects, generate AI auto-subtitles, apply real-time WebGL shaders, and export MP4 **100% locally on your own phone or computer** without requiring a server. Switch anytime between **On-Device** and **Self-Hosted PC Server** mode directly inside the top bar.
 
             ### Downloads / Unduhan:
-            - **Android (`.apk`)**: `SWAVE-VIDEO-Android.apk` — install directly on Android devices.
-            - **iPhone / iPad (`iOS .ipa`)**: `SWAVE-VIDEO-iOS-Unsigned.ipa` — install via **AltStore / Sideloadly / TrollStore** *(or open GitHub Pages in iOS Safari → Share → Add to Home Screen)*.
-            - **Portable Desktop (`.zip`)**: `SWAVE-VIDEO-OnDevice-Portable.zip` — extract and run `Jalankan-Di-Perangkat.bat` (Windows) or `./jalankan-di-perangkat.sh` (Linux/macOS).
+            - **Android (`.apk`)**: `SWAVE-Video-Android.apk` — install directly on Android devices.
+            - **iPhone / iPad (`iOS .ipa`)**: `SWAVE-Video-iOS-Unsigned.ipa` — install via **AltStore / Sideloadly / TrollStore** *(or open GitHub Pages in iOS Safari → Share → Add to Home Screen)*.
+            - **Portable Desktop (`.zip`)**: `SWAVE-Video-OnDevice-Portable.zip` — extract and run `Jalankan-Di-Perangkat.bat` (Windows) or `./jalankan-di-perangkat.sh` (Linux/macOS).
           files: |
             release-files/*

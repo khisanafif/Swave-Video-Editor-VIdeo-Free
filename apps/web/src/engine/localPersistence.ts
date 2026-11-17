@@ -141,7 +141,7 @@ export function canShareFilesOnDevice(): boolean {
 export async function shareBlobWithSystemSheet(
   blob: Blob,
   filename: string,
-  title = 'Hasil Edit SWAVE VIDEO'
+  title = 'Hasil Edit SWAVE Video'
 ): Promise<boolean> {
   if (!canShareFilesOnDevice()) return false;
   const file = new File([blob], filename, {
@@ -174,7 +174,7 @@ export async function parseProjectJsonFile(
     !parsed.trackOrder ||
     !parsed.clips
   ) {
-    throw new Error('File bukan proyek SWAVE VIDEO (.swave.json) yang valid.');
+    throw new Error('File bukan proyek SWAVE Video (.swave.json) yang valid.');
   }
   return parsed;
 }

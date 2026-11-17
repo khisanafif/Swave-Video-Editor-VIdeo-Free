@@ -351,7 +351,7 @@ export async function generateSyntheticDemoMedia(): Promise<{
 
         ctx.fillStyle = '#f8fafc';
         ctx.font = '700 54px Inter, system-ui, sans-serif';
-        ctx.fillText('SWAVE VIDEO DEMO', 86, 136);
+        ctx.fillText('SWAVE Video DEMO', 86, 136);
         ctx.fillStyle = '#38bdf8';
         ctx.font = '600 28px ui-monospace, monospace';
         ctx.fillText(`Self-Hosted & Web-Native Studio  |  t = ${t.toFixed(2)}s`, 86, 188);
@@ -393,7 +393,7 @@ export async function generateSyntheticDemoMedia(): Promise<{
     ctx.fillRect(0, 0, 1280, 720);
     ctx.fillStyle = '#38bdf8';
     ctx.font = '700 52px system-ui, sans-serif';
-    ctx.fillText('SWAVE VIDEO DEMO', 90, 340);
+    ctx.fillText('SWAVE Video DEMO', 90, 340);
   }
   const pngBlob = await new Promise<Blob>((resolve) =>
     canvas.toBlob((b) => resolve(b || new Blob()), 'image/png')

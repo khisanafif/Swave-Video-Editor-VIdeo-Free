@@ -28,7 +28,7 @@ afterEach(async () => {
   }
 });
 
-describe('SWAVE VIDEO Local Server API', () => {
+describe('SWAVE Video Local Server API', () => {
   it('sets COOP/COEP headers on health and API responses', async () => {
     const { app } = await createTestServer();
 
@@ -250,7 +250,7 @@ describe('SWAVE VIDEO Local Server API', () => {
           transforms: { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1 },
           effects: [],
           textStyle: {
-            content: 'SWAVE VIDEO FREE',
+            content: 'SWAVE Video FREE',
             fontFamily: 'Inter, sans-serif',
             fontSize: 32,
             color: '#facc15',

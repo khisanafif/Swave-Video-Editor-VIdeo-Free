@@ -19,7 +19,7 @@ describe('Subtitle Utilities & Audio VAD', () => {
 
 2
 00:00:04,000 --> 00:00:06,200
-Selamat datang di SWAVE VIDEO`;
+Selamat datang di SWAVE Video`;
 
     const parsedSrt = parseSrt(srt);
     expect(parsedSrt).toHaveLength(2);

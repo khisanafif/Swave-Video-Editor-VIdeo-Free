@@ -2,7 +2,7 @@
   "name": "swave-video",
   "version": "0.1.0",
   "private": true,
-  "description": "SWAVE VIDEO — Self-Hosted & Web-Native Video Editor (Free On-Device & LAN Server Studio for Android, iOS, and Desktop)",
+  "description": "SWAVE Video (Self-Hosted & Web-Native Visual Editor) — Free On-Device & LAN Server Studio for Android, iOS, and Desktop",
   "workspaces": [
     "packages/*",
     "apps/*"

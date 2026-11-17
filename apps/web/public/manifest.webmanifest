@@ -1,7 +1,7 @@
 {
   "id": "./",
-  "name": "SWAVE VIDEO — Self-Hosted & Web-Native Video Editor",
-  "short_name": "SWAVE VIDEO",
+  "name": "SWAVE Video — Self-Hosted & Web-Native Visual Editor",
+  "short_name": "SWAVE Video",
   "description": "Free 60 FPS video editor with AI auto-subtitles and no watermark: runs 100% locally on Android, iOS, and Desktop or connects to your self-hosted PC server.",
   "start_url": "./",
   "scope": "./",
