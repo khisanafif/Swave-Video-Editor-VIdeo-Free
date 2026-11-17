@@ -13,14 +13,17 @@ import {
   Maximize2,
   Move,
   Pencil,
+  Pipette,
   RotateCw,
   Trash2,
+  X,
 } from 'lucide-react';
 import type { CanvasResolution, Clip, MediaAsset } from '@swave/shared';
 import { TEXT_PRESETS } from '../engine/editorPresets';
 import { mediaRuntime } from '../engine/mediaRuntime';
 import { usePlaybackStore } from '../stores/playbackStore';
 import { getMainVideoTrackId, useTimelineStore } from '../stores/timelineStore';
+import { useUiStore } from '../stores/uiStore';
 
 interface CanvasOverlayGizmoProps {
   containerRef: React.RefObject<HTMLDivElement | null>;
@@ -89,6 +92,131 @@ function computeClipCanvasBox(
   };
 }
 
+function rgbToHex(r: number, g: number, b: number): string {
+  const h = (n: number) =>
+    Math.max(0, Math.min(255, Math.round(n)))
+      .toString(16)
+      .padStart(2, '0');
+  return `#${h(r)}${h(g)}${h(b)}`;
+}
+
+let eyedropperScratchCanvas: HTMLCanvasElement | null = null;
+
+function sampleEyedropperColorAtPoint(
+  container: HTMLDivElement | null,
+  clientX: number,
+  clientY: number,
+  cw: number,
+  ch: number,
+  targetClip: Clip | undefined
+): string | null {
+  if (!container) return null;
+  const rect = container.getBoundingClientRect();
+  if (rect.width <= 0 || rect.height <= 0) return null;
+
+  const canvasX = ((clientX - rect.left) / rect.width) * cw;
+  const canvasY = ((clientY - rect.top) / rect.height) * ch;
+
+  // Prefer sampling raw unkeyed clip pixels first so re-picking still sees the green/blue screen
+  if (targetClip && targetClip.type !== 'text') {
+    const el = mediaRuntime.getVisualElement(targetClip.assetId);
+    const srcW =
+      el instanceof HTMLVideoElement
+        ? el.videoWidth
+        : el instanceof HTMLImageElement
+        ? el.naturalWidth
+        : 0;
+    const srcH =
+      el instanceof HTMLVideoElement
+        ? el.videoHeight
+        : el instanceof HTMLImageElement
+        ? el.naturalHeight
+        : 0;
+
+    if (el && srcW > 0 && srcH > 0) {
+      const fitScale = Math.min(cw / srcW, ch / srcH);
+      const quadW = srcW * fitScale;
+      const quadH = srcH * fitScale;
+      const dx = canvasX - (cw / 2 + (targetClip.transforms.x || 0));
+      const dy = canvasY - (ch / 2 + (targetClip.transforms.y || 0));
+      const rad = -((targetClip.transforms.rotation || 0) * Math.PI) / 180;
+      const cos = Math.cos(rad);
+      const sin = Math.sin(rad);
+      const scale = Math.max(0.05, targetClip.transforms.scale || 1);
+      const flipX = targetClip.transforms.flipH ? -1 : 1;
+      const flipY = targetClip.transforms.flipV ? -1 : 1;
+
+      const localX = (dx * cos - dy * sin) / (scale * flipX);
+      const localY = (dx * sin + dy * cos) / (scale * flipY);
+      const u = localX / quadW + 0.5;
+      const v = localY / quadH + 0.5;
+
+      if (u >= 0 && u <= 1 && v >= 0 && v <= 1) {
+        try {
+          if (!eyedropperScratchCanvas) {
+            eyedropperScratchCanvas = document.createElement('canvas');
+            eyedropperScratchCanvas.width = 1;
+            eyedropperScratchCanvas.height = 1;
+          }
+          const ctx = eyedropperScratchCanvas.getContext('2d');
+          if (ctx) {
+            ctx.drawImage(
+              el,
+              Math.floor(u * srcW),
+              Math.floor(v * srcH),
+              1,
+              1,
+              0,
+              0,
+              1,
+              1
+            );
+            const data = ctx.getImageData(0, 0, 1, 1).data;
+            if (data[3] > 20) {
+              return rgbToHex(data[0], data[1], data[2]);
+            }
+          }
+        } catch {
+          // Fallback to preview canvas pixels below
+        }
+      }
+    }
+  }
+
+  const previewCanvas = container.querySelector(
+    'canvas[data-swave-preview-canvas="true"]'
+  ) as HTMLCanvasElement | null;
+  if (!previewCanvas) return null;
+
+  const px = Math.max(0, Math.min(previewCanvas.width - 1, Math.round(canvasX)));
+  const py = Math.max(0, Math.min(previewCanvas.height - 1, Math.round(canvasY)));
+
+  try {
+    const gl = previewCanvas.getContext('webgl2');
+    if (gl) {
+      const pixel = new Uint8Array(4);
+      gl.readPixels(
+        px,
+        previewCanvas.height - 1 - py,
+        1,
+        1,
+        gl.RGBA,
+        gl.UNSIGNED_BYTE,
+        pixel
+      );
+      return rgbToHex(pixel[0], pixel[1], pixel[2]);
+    }
+    const ctx2d = previewCanvas.getContext('2d');
+    if (ctx2d) {
+      const d = ctx2d.getImageData(px, py, 1, 1).data;
+      return rgbToHex(d[0], d[1], d[2]);
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+
 export function CanvasOverlayGizmo({
   containerRef,
   resolution,
@@ -99,10 +227,13 @@ export function CanvasOverlayGizmo({
   const trackOrder = useTimelineStore((s) => s.trackOrder);
   const selectedClipIds = useTimelineStore((s) => s.selectedClipIds);
   const currentTime = usePlaybackStore((s) => s.currentTime);
+  const eyedropperClipId = useUiStore((s) => s.eyedropperClipId);
+  const setEyedropperClipId = useUiStore((s) => s.setEyedropperClipId);
 
   const [snapGuideX, setSnapGuideX] = useState(false);
   const [snapGuideY, setSnapGuideY] = useState(false);
   const [isInlineEditing, setIsInlineEditing] = useState(false);
+  const [eyedropperHoverHex, setEyedropperHoverHex] = useState<string | null>(null);
 
   const cw = resolution.width || 1920;
   const ch = resolution.height || 1080;
@@ -335,6 +466,72 @@ export function CanvasOverlayGizmo({
       className="pointer-events-none absolute inset-0 z-20 overflow-hidden select-none"
       aria-label="Kanvas Interaktif SWAVE Video"
     >
+      {/* Live CapCut Chroma Color Eyedropper Mode */}
+      {eyedropperClipId && clips[eyedropperClipId] && (
+        <div
+          data-testid="canvas-eyedropper-overlay"
+          className="pointer-events-auto absolute inset-0 z-50 flex cursor-crosshair flex-col items-center justify-between bg-cyan-950/10 p-2"
+          onPointerMove={(e) => {
+            const hex = sampleEyedropperColorAtPoint(
+              containerRef.current,
+              e.clientX,
+              e.clientY,
+              cw,
+              ch,
+              clips[eyedropperClipId]
+            );
+            if (hex) setEyedropperHoverHex(hex);
+          }}
+          onPointerDown={(e) => {
+            e.stopPropagation();
+            const hex =
+              sampleEyedropperColorAtPoint(
+                containerRef.current,
+                e.clientX,
+                e.clientY,
+                cw,
+                ch,
+                clips[eyedropperClipId]
+              ) ||
+              eyedropperHoverHex ||
+              '#00b140';
+            useTimelineStore.getState().setClipChromaKey(eyedropperClipId, {
+              enabled: true,
+              color: hex,
+            });
+            setEyedropperHoverHex(null);
+            setEyedropperClipId(null);
+          }}
+        >
+          <div className="flex items-center gap-2 rounded-full border border-emerald-400/50 bg-[#09090b]/90 px-3 py-1 text-[11px] font-medium text-emerald-200 shadow-xl backdrop-blur">
+            <Pipette className="h-3.5 w-3.5 text-emerald-400" />
+            <span>Ketuk warna di kanvas untuk Kunci Chroma</span>
+            {eyedropperHoverHex && (
+              <span className="inline-flex items-center gap-1 rounded bg-zinc-900 px-1.5 py-0.5 font-mono text-[10px] text-white">
+                <span
+                  className="inline-block h-2.5 w-2.5 rounded-full border border-white/40"
+                  style={{ backgroundColor: eyedropperHoverHex }}
+                />
+                {eyedropperHoverHex}
+              </span>
+            )}
+            <button
+              type="button"
+              onPointerDown={(e) => e.stopPropagation()}
+              onClick={(e) => {
+                e.stopPropagation();
+                setEyedropperHoverHex(null);
+                setEyedropperClipId(null);
+              }}
+              className="ml-1 inline-flex items-center gap-0.5 rounded-full bg-zinc-800 px-2 py-0.5 text-[10px] text-zinc-200 hover:bg-zinc-700"
+            >
+              <X className="h-3 w-3" />
+              Batal
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* CapCut Magnetic Center Snap Lines */}
       {snapGuideX && (
         <div className="pointer-events-none absolute top-0 bottom-0 left-1/2 z-30 w-px -translate-x-1/2 border-l border-dashed border-cyan-400 shadow-[0_0_8px_#22d3ee]" />

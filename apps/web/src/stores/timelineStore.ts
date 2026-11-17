@@ -2,13 +2,16 @@ import { create } from 'zustand';
 import { immer } from 'zustand/middleware/immer';
 import { temporal } from 'zundo';
 import {
+  DEFAULT_BG_REMOVAL,
   DEFAULT_CHROMA_KEY,
   DEFAULT_CLIP_ANIMATION,
   DEFAULT_CLIP_CROP,
+  DEFAULT_CLIP_MASK,
   DEFAULT_CLIP_TRANSFORM,
   DEFAULT_TEXT_STYLE,
   PRESET_RESOLUTIONS,
   normalizeCustomDimensions,
+  type BgRemovalConfig,
   type BlendMode,
   type CanvasResolution,
   type ChromaKeyConfig,
@@ -17,6 +20,7 @@ import {
   type ClipCrop,
   type ClipEffect,
   type ClipEffectType,
+  type ClipMaskConfig,
   type ClipTransform,
   type MediaAsset,
   type ProjectDocument,
@@ -147,6 +151,8 @@ export interface TimelineState {
       filterPreset?: string;
       blendMode?: BlendMode;
       chromaKey?: ChromaKeyConfig;
+      mask?: ClipMaskConfig;
+      bgRemoval?: BgRemovalConfig;
       crop?: ClipCrop;
       cornerRadius?: number;
       effects?: ClipEffect[];
@@ -161,6 +167,10 @@ export interface TimelineState {
   updateClipTransform: (clipId: string, patch: Partial<ClipTransform>) => void;
   updateClipCrop: (clipId: string, patch: Partial<ClipCrop>) => void;
   setClipChromaKey: (clipId: string, patch: Partial<ChromaKeyConfig>) => void;
+  setClipMask: (clipId: string, patch: Partial<ClipMaskConfig>) => void;
+  setClipBgRemoval: (clipId: string, patch: Partial<BgRemovalConfig>) => void;
+  applyCutoutAssetToClip: (clipId: string, cutoutAssetId: string) => boolean;
+  restoreOriginalClipAsset: (clipId: string) => boolean;
   setClipBlendMode: (clipId: string, blendMode: BlendMode) => void;
   flipClip: (clipId: string, axis: 'h' | 'v') => void;
   rotateClip90: (clipId: string) => void;
@@ -1318,6 +1328,8 @@ export const useTimelineStore = create<TimelineState>()(
             offset: Number((original.offset + firstDuration * speed).toFixed(3)),
             transforms: cloneTransforms(original.transforms),
             chromaKey: original.chromaKey ? { ...original.chromaKey } : undefined,
+            mask: original.mask ? { ...original.mask } : undefined,
+            bgRemoval: original.bgRemoval ? { ...original.bgRemoval } : undefined,
             effects: original.effects.map((e) => ({ ...e })),
             textStyle: original.textStyle ? { ...original.textStyle } : undefined,
             subtitleWords: undefined,
@@ -1365,6 +1377,8 @@ export const useTimelineStore = create<TimelineState>()(
             speed: 0.01,
             transforms: cloneTransforms(original.transforms),
             chromaKey: original.chromaKey ? { ...original.chromaKey } : undefined,
+            mask: original.mask ? { ...original.mask } : undefined,
+            bgRemoval: original.bgRemoval ? { ...original.bgRemoval } : undefined,
             effects: original.effects.map((e) => ({ ...e })),
             animation: original.animation ? { ...original.animation } : { ...DEFAULT_CLIP_ANIMATION },
             textStyle: original.textStyle ? { ...original.textStyle } : undefined,
@@ -1629,6 +1643,9 @@ export const useTimelineStore = create<TimelineState>()(
               duration: segDur,
               offset: Number((original.offset + seg.start * speed).toFixed(3)),
               transforms: { ...original.transforms },
+              chromaKey: original.chromaKey ? { ...original.chromaKey } : undefined,
+              mask: original.mask ? { ...original.mask } : undefined,
+              bgRemoval: original.bgRemoval ? { ...original.bgRemoval } : undefined,
               effects: original.effects.map((e) => ({ ...e })),
               animation: original.animation
                 ? { ...original.animation }
@@ -1684,6 +1701,8 @@ export const useTimelineStore = create<TimelineState>()(
             start: Number((original.start + original.duration).toFixed(3)),
             transforms: cloneTransforms(original.transforms),
             chromaKey: original.chromaKey ? { ...original.chromaKey } : undefined,
+            mask: original.mask ? { ...original.mask } : undefined,
+            bgRemoval: original.bgRemoval ? { ...original.bgRemoval } : undefined,
             effects: original.effects.map((e) => ({ ...e })),
             animation: original.animation ? { ...original.animation } : { ...DEFAULT_CLIP_ANIMATION },
             textStyle: original.textStyle ? { ...original.textStyle } : undefined,
@@ -1749,6 +1768,8 @@ export const useTimelineStore = create<TimelineState>()(
             clip.blendMode = source.blendMode;
             clip.effects = source.effects.map((e) => ({ ...e }));
             clip.chromaKey = source.chromaKey ? { ...source.chromaKey } : undefined;
+            clip.mask = source.mask ? { ...source.mask } : undefined;
+            clip.bgRemoval = source.bgRemoval ? { ...source.bgRemoval } : undefined;
             if (source.transforms.cornerRadius !== undefined) {
               clip.transforms.cornerRadius = source.transforms.cornerRadius;
             }
@@ -1772,6 +1793,12 @@ export const useTimelineStore = create<TimelineState>()(
           }
           if (style.chromaKey !== undefined) {
             clip.chromaKey = { ...style.chromaKey };
+          }
+          if (style.mask !== undefined) {
+            clip.mask = { ...style.mask };
+          }
+          if (style.bgRemoval !== undefined) {
+            clip.bgRemoval = { ...style.bgRemoval };
           }
           if (style.crop !== undefined) {
             clip.transforms.crop = { ...style.crop };
@@ -1854,6 +1881,64 @@ export const useTimelineStore = create<TimelineState>()(
             ...patch,
           };
         }),
+
+      setClipMask: (clipId, patch) =>
+        set((state) => {
+          const clip = state.clips[clipId];
+          if (!clip) return;
+          const track = state.tracks[clip.trackId];
+          if (track?.isLocked) return;
+          clip.mask = {
+            ...DEFAULT_CLIP_MASK,
+            ...(clip.mask || {}),
+            ...patch,
+          };
+        }),
+
+      setClipBgRemoval: (clipId, patch) =>
+        set((state) => {
+          const clip = state.clips[clipId];
+          if (!clip) return;
+          const track = state.tracks[clip.trackId];
+          if (track?.isLocked) return;
+          clip.bgRemoval = {
+            ...DEFAULT_BG_REMOVAL,
+            ...(clip.bgRemoval || {}),
+            ...patch,
+          };
+        }),
+
+      applyCutoutAssetToClip: (clipId, cutoutAssetId) => {
+        let applied = false;
+        set((state) => {
+          const clip = state.clips[clipId];
+          const cutoutAsset = state.assets[cutoutAssetId];
+          if (!clip || !cutoutAsset || clip.type === 'text') return;
+          const track = state.tracks[clip.trackId];
+          if (track?.isLocked) return;
+          if (!clip.originalAssetId) {
+            clip.originalAssetId = clip.assetId;
+          }
+          clip.assetId = cutoutAssetId;
+          applied = true;
+        });
+        return applied;
+      },
+
+      restoreOriginalClipAsset: (clipId) => {
+        let restored = false;
+        set((state) => {
+          const clip = state.clips[clipId];
+          if (!clip || !clip.originalAssetId) return;
+          if (!state.assets[clip.originalAssetId]) return;
+          const track = state.tracks[clip.trackId];
+          if (track?.isLocked) return;
+          clip.assetId = clip.originalAssetId;
+          clip.originalAssetId = undefined;
+          restored = true;
+        });
+        return restored;
+      },
 
       setClipBlendMode: (clipId, blendMode) =>
         set((state) => {

@@ -318,7 +318,7 @@ describe('VideoEditorPage UI Integration (Desktop, Tablet, Android & Multi-Devic
     expect(screen.getByRole('button', { name: /Ekstrak \.WAV/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Mute Klip/i })).toBeInTheDocument();
     expect(screen.getByText(/Crop, Sudut & Blend/i)).toBeInTheDocument();
-    expect(screen.getByText(/Chroma Key \(Green Screen\)/i)).toBeInTheDocument();
+    expect(screen.getByText(/Kunci Chroma \(Green Screen\)/i)).toBeInTheDocument();
 
     // Preview bar exposes Snapshot PNG button
     expect(screen.getByRole('button', { name: /Snapshot/i })).toBeInTheDocument();
@@ -584,5 +584,49 @@ describe('VideoEditorPage UI Integration (Desktop, Tablet, Android & Multi-Devic
       Object.defineProperty(window, 'innerWidth', { value: prevW, configurable: true });
       Object.defineProperty(window, 'innerHeight', { value: prevH, configurable: true });
     }
+  });
+
+  it('controls CapCut Cutout (Latar Hitam/Putih), live Canvas Chroma Eyedropper, and Shape Mask in Inspector', async () => {
+    const store = useTimelineStore.getState();
+    store.registerAsset({
+      id: 'img-cutout-test',
+      name: 'sticker.png',
+      kind: 'image',
+      mimeType: 'image/png',
+      size: 1024,
+      duration: 5,
+      width: 600,
+      height: 600,
+      hasAudio: false,
+      source: 'local',
+    });
+    const ovlId = store.addOverlayClipFromAsset('img-cutout-test', 0)!;
+
+    render(<VideoEditorPage />);
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    // Enable Instant Luma Black removal
+    fireEvent.click(screen.getByRole('button', { name: /Latar Hitam/i }));
+    expect(useTimelineStore.getState().clips[ovlId].bgRemoval?.mode).toBe(
+      'luma-black'
+    );
+
+    // Enable CapCut Shape Mask (Circle + Invert)
+    fireEvent.click(screen.getByRole('button', { name: /^Lingkaran$/i }));
+    expect(useTimelineStore.getState().clips[ovlId].mask?.shape).toBe('circle');
+    fireEvent.click(screen.getByRole('button', { name: /^Balik$/i }));
+    expect(useTimelineStore.getState().clips[ovlId].mask?.invert).toBe(true);
+
+    // Activate Canvas Eyedropper and tap preview overlay
+    fireEvent.click(screen.getByRole('button', { name: /Pipet Kanvas/i }));
+    expect(useUiStore.getState().eyedropperClipId).toBe(ovlId);
+    const eyedropperStage = screen.getByTestId('canvas-eyedropper-overlay');
+    fireEvent.pointerDown(eyedropperStage, { clientX: 50, clientY: 50 });
+    expect(useUiStore.getState().eyedropperClipId).toBeNull();
+    expect(useTimelineStore.getState().clips[ovlId].chromaKey?.enabled).toBe(
+      true
+    );
   });
 });

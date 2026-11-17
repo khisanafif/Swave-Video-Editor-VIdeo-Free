@@ -6,6 +6,7 @@ import {
   type ProgressInfo,
 } from '@huggingface/transformers';
 import type { SubtitleCue } from '@swave/shared';
+import { configureOnnxWasmRuntime } from './ortRuntime';
 
 env.allowLocalModels = false;
 env.useBrowserCache = typeof caches !== 'undefined';
@@ -22,37 +23,6 @@ interface WorkerTranscribeMessage {
 }
 
 const pipelineCache = new Map<string, AutomaticSpeechRecognitionPipeline>();
-
-function configureOnnxWasmRuntime(options: {
-  ortBaseUrl?: string;
-  preferCdnWasm?: boolean;
-}): void {
-  const onnxEnv = env.backends?.onnx as
-    | {
-      wasm?: {
-        numThreads?: number;
-        proxy?: boolean;
-        wasmPaths?: string | { mjs?: string; wasm?: string };
-      };
-    }
-    | undefined;
-  if (!onnxEnv?.wasm) return;
-
-  // Single-thread WASM prevents cross-origin pthread Worker crashes on GitHub Pages,
-  // iOS Safari, Firefox, and Capacitor APK where SharedArrayBuffer/COOP varies.
-  onnxEnv.wasm.numThreads = 1;
-  onnxEnv.wasm.proxy = false;
-
-  if (!options.preferCdnWasm && options.ortBaseUrl) {
-    const base = options.ortBaseUrl.endsWith('/')
-      ? options.ortBaseUrl
-      : `${options.ortBaseUrl}/`;
-    onnxEnv.wasm.wasmPaths = {
-      mjs: `${base}ort-wasm-simd-threaded.mjs`,
-      wasm: `${base}ort-wasm-simd-threaded.wasm`,
-    };
-  }
-}
 
 async function getTranscriber(
   modelId: string,

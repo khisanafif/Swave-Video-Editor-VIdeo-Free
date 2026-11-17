@@ -22,6 +22,31 @@ export interface ChromaKeyConfig {
   color: string;
   tolerance: number;
   smoothness?: number;
+  spillReduction?: number;
+}
+
+export type ClipMaskShape =
+  | 'none'
+  | 'circle'
+  | 'rectangle'
+  | 'split-h'
+  | 'split-v'
+  | 'diamond'
+  | 'heart';
+
+export interface ClipMaskConfig {
+  shape: ClipMaskShape;
+  invert?: boolean;
+  feather?: number;
+  size?: number;
+}
+
+export type InstantBgRemovalMode = 'none' | 'luma-black' | 'luma-white';
+
+export interface BgRemovalConfig {
+  mode: InstantBgRemovalMode;
+  threshold: number;
+  softness?: number;
 }
 
 export interface ClipTransform {
@@ -113,6 +138,9 @@ export interface Clip {
   filterPreset?: string;
   blendMode?: BlendMode;
   chromaKey?: ChromaKeyConfig;
+  mask?: ClipMaskConfig;
+  bgRemoval?: BgRemovalConfig;
+  originalAssetId?: string;
   animation?: ClipAnimation;
   transforms: ClipTransform;
   effects: ClipEffect[];
@@ -299,6 +327,20 @@ export const DEFAULT_CHROMA_KEY: ChromaKeyConfig = {
   color: '#00b140',
   tolerance: 0.32,
   smoothness: 0.08,
+  spillReduction: 0.5,
+};
+
+export const DEFAULT_CLIP_MASK: ClipMaskConfig = {
+  shape: 'none',
+  invert: false,
+  feather: 0.04,
+  size: 0.82,
+};
+
+export const DEFAULT_BG_REMOVAL: BgRemovalConfig = {
+  mode: 'none',
+  threshold: 0.16,
+  softness: 0.08,
 };
 
 export const DEFAULT_CLIP_TRANSFORM: ClipTransform = {

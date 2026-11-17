@@ -21,7 +21,6 @@ import {
   Loader2,
   Move,
   Palette,
-  Pipette,
   RotateCw,
   Scissors,
   Server,
@@ -35,7 +34,6 @@ import {
   X,
 } from 'lucide-react';
 import {
-  DEFAULT_CHROMA_KEY,
   DEFAULT_CLIP_ANIMATION,
   DEFAULT_CLIP_CROP,
   type BlendMode,
@@ -43,6 +41,7 @@ import {
   type RenderMode,
   type ServerCapabilities,
 } from '@swave/shared';
+import { InspectorCutoutSection } from './InspectorCutoutSection';
 import {
   detectSpeechSegmentsVad,
   extractAudioFromMediaAsset,
@@ -189,6 +188,7 @@ export function InspectorPanel({
 
   const selectedClipIds = useTimelineStore((s) => s.selectedClipIds);
   const clips = useTimelineStore((s) => s.clips);
+  const assets = useTimelineStore((s) => s.assets);
   const tracks = useTimelineStore((s) => s.tracks);
   const trackOrder = useTimelineStore((s) => s.trackOrder);
   const resolution = useTimelineStore((s) => s.resolution);
@@ -1127,6 +1127,12 @@ export function InspectorPanel({
                             chromaKey: selectedClip.chromaKey
                               ? { ...selectedClip.chromaKey }
                               : undefined,
+                            mask: selectedClip.mask
+                              ? { ...selectedClip.mask }
+                              : undefined,
+                            bgRemoval: selectedClip.bgRemoval
+                              ? { ...selectedClip.bgRemoval }
+                              : undefined,
                             crop: selectedClip.transforms.crop
                               ? { ...selectedClip.transforms.crop }
                               : undefined,
@@ -1451,7 +1457,17 @@ export function InspectorPanel({
                 </div>
               )}
 
-              {/* Crop, Corner Radius, Blend Mode & Chroma Key (Green Screen) */}
+              {/* CapCut Cutout (AI / Hapus Latar Hitam & Putih), Kunci Chroma, & Masker Bentuk */}
+              {selectedClip.type !== 'audio' && selectedClip.type !== 'text' && (
+                <InspectorCutoutSection
+                  selectedClip={selectedClip}
+                  asset={assets[selectedClip.assetId]}
+                  refreshCanvasPreview={refreshCanvasPreview}
+                  showNotice={showNotice}
+                />
+              )}
+
+              {/* Crop, Corner Radius & Blend Mode */}
               {selectedClip.type !== 'audio' && selectedClip.type !== 'text' && (
                 <div className="space-y-3 border-b border-zinc-800 pb-4">
                   <div className="flex items-center justify-between">
@@ -1555,106 +1571,6 @@ export function InspectorPanel({
                         </button>
                       ))}
                     </div>
-                  </div>
-
-                  {/* Chroma Key / Green Screen Removal */}
-                  <div className="space-y-2 rounded-lg border border-emerald-500/25 bg-emerald-950/15 p-2.5">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-1.5 text-[11px] font-semibold text-emerald-200">
-                        <Pipette className="h-3.5 w-3.5 text-emerald-400" />
-                        <span>Chroma Key (Green Screen)</span>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          useTimelineStore.getState().setClipChromaKey(
-                            selectedClip.id,
-                            {
-                              enabled: !selectedClip.chromaKey?.enabled,
-                              color: selectedClip.chromaKey?.color || DEFAULT_CHROMA_KEY.color,
-                              tolerance: selectedClip.chromaKey?.tolerance ?? DEFAULT_CHROMA_KEY.tolerance,
-                            }
-                          );
-                          refreshCanvasPreview();
-                        }}
-                        className={`rounded border px-2 py-0.5 text-[10px] font-bold ${
-                          selectedClip.chromaKey?.enabled
-                            ? 'border-emerald-400 bg-emerald-500/25 text-emerald-200'
-                            : 'border-zinc-700 bg-zinc-900 text-zinc-400'
-                        }`}
-                      >
-                        {selectedClip.chromaKey?.enabled ? 'Aktif' : 'Nonaktif'}
-                      </button>
-                    </div>
-
-                    {selectedClip.chromaKey?.enabled && (
-                      <div className="space-y-2 pt-1">
-                        <div className="flex items-center justify-between gap-2 text-[10px]">
-                          <span className="text-zinc-400">Warna Kunci:</span>
-                          <div className="flex items-center gap-1.5">
-                            {[
-                              { label: 'Green', color: '#00b140' },
-                              { label: 'Blue', color: '#0047bb' },
-                            ].map((sw) => (
-                              <button
-                                key={sw.label}
-                                type="button"
-                                onClick={() => {
-                                  useTimelineStore
-                                    .getState()
-                                    .setClipChromaKey(selectedClip.id, { color: sw.color });
-                                  refreshCanvasPreview();
-                                }}
-                                className="rounded border border-zinc-700 bg-zinc-900 px-2 py-0.5 text-[10px] text-zinc-200 hover:border-emerald-400"
-                              >
-                                {sw.label}
-                              </button>
-                            ))}
-                            <input
-                              type="color"
-                              aria-label="Warna Chroma Key"
-                              value={selectedClip.chromaKey.color || '#00b140'}
-                              onChange={(e) => {
-                                useTimelineStore
-                                  .getState()
-                                  .setClipChromaKey(selectedClip.id, {
-                                    color: e.target.value,
-                                  });
-                                refreshCanvasPreview();
-                              }}
-                              className="h-6 w-8 cursor-pointer rounded border border-zinc-700 bg-transparent"
-                            />
-                          </div>
-                        </div>
-
-                        <SliderRow
-                          label="Toleransi Hapus"
-                          value={selectedClip.chromaKey.tolerance ?? 0.32}
-                          min={0.08}
-                          max={0.65}
-                          step={0.02}
-                          onChange={(tolerance) => {
-                            useTimelineStore
-                              .getState()
-                              .setClipChromaKey(selectedClip.id, { tolerance });
-                            refreshCanvasPreview();
-                          }}
-                        />
-                        <SliderRow
-                          label="Halus Tepi (Edge)"
-                          value={selectedClip.chromaKey.smoothness ?? 0.08}
-                          min={0.02}
-                          max={0.25}
-                          step={0.01}
-                          onChange={(smoothness) => {
-                            useTimelineStore
-                              .getState()
-                              .setClipChromaKey(selectedClip.id, { smoothness });
-                            refreshCanvasPreview();
-                          }}
-                        />
-                      </div>
-                    )}
                   </div>
                 </div>
               )}

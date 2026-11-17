@@ -429,5 +429,72 @@ describe('SWAVE Video Dual-Store & Zundo History', () => {
     expect(fourKVertical.height).toBe(3840);
     expect(fourKVertical.fps).toBe(60);
   });
+
+  it('supports CapCut cutout replacement/restore, luma bg removal, chroma spill reduction, and shape masks', () => {
+    const store = useTimelineStore.getState();
+    const rawOverlayAsset: MediaAsset = {
+      id: 'ovl-raw',
+      name: 'subject.png',
+      kind: 'image',
+      mimeType: 'image/png',
+      size: 20480,
+      duration: 5,
+      width: 720,
+      height: 1280,
+      hasAudio: false,
+      source: 'local',
+    };
+    const cutoutPngAsset: MediaAsset = {
+      id: 'ovl-cutout',
+      name: 'subject-cutout.png',
+      kind: 'image',
+      mimeType: 'image/png',
+      size: 16384,
+      duration: 5,
+      width: 720,
+      height: 1280,
+      hasAudio: false,
+      source: 'local',
+    };
+    store.registerAsset(rawOverlayAsset);
+    store.registerAsset(cutoutPngAsset);
+
+    const ovlId = store.addOverlayClipFromAsset(rawOverlayAsset.id, 0)!;
+    store.setClipBgRemoval(ovlId, { mode: 'luma-black', threshold: 0.22, softness: 0.08 });
+    store.setClipChromaKey(ovlId, {
+      enabled: true,
+      color: '#00b140',
+      tolerance: 0.34,
+      smoothness: 0.09,
+      spillReduction: 0.75,
+    });
+    store.setClipMask(ovlId, {
+      shape: 'circle',
+      size: 0.72,
+      feather: 0.05,
+      invert: true,
+    });
+
+    const swapped = store.applyCutoutAssetToClip(ovlId, cutoutPngAsset.id);
+    expect(swapped).toBe(true);
+    let updated = useTimelineStore.getState().clips[ovlId];
+    expect(updated.assetId).toBe(cutoutPngAsset.id);
+    expect(updated.originalAssetId).toBe(rawOverlayAsset.id);
+    expect(updated.bgRemoval?.mode).toBe('luma-black');
+    expect(updated.chromaKey?.spillReduction).toBe(0.75);
+    expect(updated.mask?.shape).toBe('circle');
+    expect(updated.mask?.invert).toBe(true);
+
+    const dupId = store.duplicateClip(ovlId)!;
+    const dup = useTimelineStore.getState().clips[dupId];
+    expect(dup.mask?.shape).toBe('circle');
+    expect(dup.bgRemoval?.mode).toBe('luma-black');
+
+    const restored = store.restoreOriginalClipAsset(ovlId);
+    expect(restored).toBe(true);
+    updated = useTimelineStore.getState().clips[ovlId];
+    expect(updated.assetId).toBe(rawOverlayAsset.id);
+    expect(updated.originalAssetId).toBeUndefined();
+  });
 });
 

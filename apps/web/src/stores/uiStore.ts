@@ -1,10 +1,12 @@
 import { create } from 'zustand';
 import type {
+  BgRemovalConfig,
   BlendMode,
   ChromaKeyConfig,
   ClipAnimation,
   ClipCrop,
   ClipEffect,
+  ClipMaskConfig,
   TextStyle,
 } from '@swave/shared';
 
@@ -27,6 +29,8 @@ export interface CopiedClipStyle {
   filterPreset?: string;
   blendMode?: BlendMode;
   chromaKey?: ChromaKeyConfig;
+  mask?: ClipMaskConfig;
+  bgRemoval?: BgRemovalConfig;
   crop?: ClipCrop;
   cornerRadius?: number;
   effects?: ClipEffect[];
@@ -91,6 +95,7 @@ export interface UiState {
   mobileTimelineFocus: MobileTimelineFocus;
   activeMediaCategory: MediaBinCategory;
   clipboardStyle: CopiedClipStyle | null;
+  eyedropperClipId: string | null;
   showExportModal: boolean;
   showHelpModal: boolean;
   setExperienceMode: (mode: ExperienceMode) => void;
@@ -101,6 +106,7 @@ export interface UiState {
   setMobileTimelineFocus: (focus: MobileTimelineFocus) => void;
   setActiveMediaCategory: (cat: MediaBinCategory) => void;
   setClipboardStyle: (style: CopiedClipStyle | null) => void;
+  setEyedropperClipId: (clipId: string | null) => void;
   setShowExportModal: (open: boolean) => void;
   setShowHelpModal: (open: boolean) => void;
 }
@@ -114,6 +120,7 @@ export const useUiStore = create<UiState>((set) => ({
   mobileTimelineFocus: 'main',
   activeMediaCategory: 'media',
   clipboardStyle: null,
+  eyedropperClipId: null,
   showExportModal: false,
   showHelpModal: false,
 
@@ -148,6 +155,7 @@ export const useUiStore = create<UiState>((set) => ({
   setMobileTimelineFocus: (mobileTimelineFocus) => set({ mobileTimelineFocus }),
   setActiveMediaCategory: (activeMediaCategory) => set({ activeMediaCategory }),
   setClipboardStyle: (clipboardStyle) => set({ clipboardStyle }),
+  setEyedropperClipId: (eyedropperClipId) => set({ eyedropperClipId }),
   setShowExportModal: (showExportModal) => set({ showExportModal }),
   setShowHelpModal: (showHelpModal) => set({ showHelpModal }),
 }));

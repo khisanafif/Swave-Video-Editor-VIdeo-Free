@@ -38,6 +38,20 @@ class StudioMediaRuntime {
     return this.compositor;
   }
 
+  getVisualElement(
+    assetId: string
+  ): HTMLVideoElement | HTMLImageElement | null {
+    const node = this.nodes.get(assetId);
+    if (!node) return null;
+    if (
+      node.element instanceof HTMLVideoElement ||
+      node.element instanceof HTMLImageElement
+    ) {
+      return node.element;
+    }
+    return null;
+  }
+
   unlockAudio(): void {
     this.ensureAudioContext();
     if (this.audioCtx?.state === 'suspended') {

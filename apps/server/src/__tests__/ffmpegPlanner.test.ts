@@ -215,6 +215,12 @@ describe('buildFfmpegRenderPlan', () => {
       color: '#00b140',
       tolerance: 0.35,
       smoothness: 0.1,
+      spillReduction: 0.75,
+    };
+    project.clips['c-vid'].bgRemoval = {
+      mode: 'luma-black',
+      threshold: 0.2,
+      softness: 0.08,
     };
 
     const plan = buildFfmpegRenderPlan({
@@ -228,6 +234,8 @@ describe('buildFfmpegRenderPlan', () => {
     expect(plan.commandPreview).toContain('crop=iw*0.900:ih*0.800:iw*0.050:ih*0.100');
     expect(plan.commandPreview).toContain('colorbalance=rs=0.14:bs=-0.14');
     expect(plan.commandPreview).toContain('colorkey=0x00b140:0.35:0.10');
+    expect(plan.commandPreview).toContain('despill=type=green:mix=0.75');
+    expect(plan.commandPreview).toContain('colorkey=0x000000:0.20:0.08');
   });
 });
 

@@ -477,6 +477,26 @@ export function buildFfmpegRenderPlan(options: {
         const sim = Math.max(0.05, Math.min(0.6, clip.chromaKey.tolerance || 0.32)).toFixed(2);
         const blend = Math.max(0.01, Math.min(0.3, clip.chromaKey.smoothness ?? 0.08)).toFixed(2);
         chain.push(`colorkey=0x${hexKey}:${sim}:${blend}`);
+
+        const spill = clip.chromaKey.spillReduction ?? 0.5;
+        if (spill > 0.1) {
+          const r = parseInt(hexKey.slice(0, 2), 16) || 0;
+          const g = parseInt(hexKey.slice(2, 4), 16) || 0;
+          const b = parseInt(hexKey.slice(4, 6), 16) || 0;
+          const mix = Math.min(1, Math.max(0.1, spill)).toFixed(2);
+          if (g >= r && g >= b && g > 80) {
+            chain.push(`despill=type=green:mix=${mix}`);
+          } else if (b > r && b > g && b > 80) {
+            chain.push(`despill=type=blue:mix=${mix}`);
+          }
+        }
+      }
+
+      if (clip.bgRemoval?.mode && clip.bgRemoval.mode !== 'none') {
+        const keyHex = clip.bgRemoval.mode === 'luma-black' ? '000000' : 'ffffff';
+        const sim = Math.max(0.05, Math.min(0.6, clip.bgRemoval.threshold || 0.16)).toFixed(2);
+        const blend = Math.max(0.01, Math.min(0.3, clip.bgRemoval.softness ?? 0.08)).toFixed(2);
+        chain.push(`colorkey=0x${keyHex}:${sim}:${blend}`);
       }
 
       const grayscale = getEffectValue(clip, 'grayscale', 0);

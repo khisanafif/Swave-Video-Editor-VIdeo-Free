@@ -1,4 +1,11 @@
-import type { BlendMode, Clip, ClipAnimationType, TextStyle } from '@swave/shared';
+import type {
+  BlendMode,
+  Clip,
+  ClipAnimationType,
+  ClipMaskConfig,
+  ClipMaskShape,
+  TextStyle,
+} from '@swave/shared';
 
 export interface CompositeLayer {
   clip: Clip;
@@ -65,12 +72,76 @@ uniform float u_chromaEnabled;
 uniform vec3 u_chromaColor;
 uniform float u_chromaTolerance;
 uniform float u_chromaSmooth;
+uniform float u_chromaSpill;
+uniform float u_bgRemovalMode;
+uniform float u_bgRemovalThreshold;
+uniform float u_bgRemovalSoftness;
+uniform float u_maskShape;
+uniform float u_maskInvert;
+uniform float u_maskFeather;
+uniform float u_maskSize;
 
 out vec4 outColor;
 
 vec4 sampleTex(vec2 uv) {
   vec2 clampedUv = clamp(uv, 0.0, 1.0);
   return texture(u_texture, clampedUv);
+}
+
+// Signed distance to a centered normalized heart (negative inside)
+float sdHeart(vec2 p) {
+  p.x = abs(p.x);
+  p.y = -p.y + 0.55;
+  if (p.y + p.x > 1.0) {
+    return sqrt(dot(p - vec2(0.25, 0.75), p - vec2(0.25, 0.75))) - sqrt(2.0) / 4.0;
+  }
+  return sqrt(min(
+    dot(p - vec2(0.0, 1.0), p - vec2(0.0, 1.0)),
+    dot(p - 0.5 * max(p.x + p.y, 0.0), p - 0.5 * max(p.x + p.y, 0.0))
+  )) * sign(p.x - p.y);
+}
+
+float evaluateClipMaskAlpha(vec2 boxUv, vec2 boxSize) {
+  if (u_maskShape < 0.5) return 1.0;
+
+  float feather = max(0.004, u_maskFeather);
+  float maskSize = clamp(u_maskSize, 0.08, 1.0);
+  float alpha = 1.0;
+
+  if (u_maskShape < 1.5) {
+    // 1: Circle
+    vec2 p = (boxUv - 0.5) * boxSize;
+    float r = 0.5 * min(boxSize.x, boxSize.y) * maskSize;
+    float dist = (length(p) - r) / max(1.0, min(boxSize.x, boxSize.y));
+    alpha = 1.0 - smoothstep(-feather, feather, dist);
+  } else if (u_maskShape < 2.5) {
+    // 2: Rectangle
+    vec2 p = abs(boxUv - 0.5) - vec2(0.5 * maskSize);
+    float dist = max(p.x, p.y);
+    alpha = 1.0 - smoothstep(-feather, feather, dist);
+  } else if (u_maskShape < 3.5) {
+    // 3: Horizontal split
+    float edge = maskSize;
+    alpha = 1.0 - smoothstep(edge - feather, edge + feather, boxUv.y);
+  } else if (u_maskShape < 4.5) {
+    // 4: Vertical split
+    float edge = maskSize;
+    alpha = 1.0 - smoothstep(edge - feather, edge + feather, boxUv.x);
+  } else if (u_maskShape < 5.5) {
+    // 5: Diamond
+    vec2 p = abs((boxUv - 0.5) * boxSize);
+    float r = 0.5 * min(boxSize.x, boxSize.y) * maskSize;
+    float dist = ((p.x + p.y) - r) / max(1.0, min(boxSize.x, boxSize.y));
+    alpha = 1.0 - smoothstep(-feather, feather, dist);
+  } else {
+    // 6: Heart
+    float scaleDiv = max(1.0, min(boxSize.x, boxSize.y)) * maskSize * 0.78;
+    vec2 p = ((boxUv - 0.5) * boxSize) / scaleDiv;
+    float dist = sdHeart(p);
+    alpha = 1.0 - smoothstep(-feather * 1.4, feather * 1.4, dist);
+  }
+
+  return u_maskInvert > 0.5 ? (1.0 - alpha) : alpha;
 }
 
 void main() {
@@ -100,6 +171,13 @@ void main() {
     edgeAlpha = 1.0 - smoothstep(-1.2, 1.2, dist);
     if (edgeAlpha <= 0.001) discard;
   }
+
+  // CapCut Shape / Split Mask
+  vec2 boxUvSpan = max(vec2(0.01), vec2(1.0 - cRight - cLeft, 1.0 - cBottom - cTop));
+  vec2 boxUv = (v_uv - vec2(cLeft, cTop)) / boxUvSpan;
+  float maskAlpha = evaluateClipMaskAlpha(boxUv, boxUvSpan * u_quadSize);
+  edgeAlpha *= maskAlpha;
+  if (edgeAlpha <= 0.001) discard;
 
   vec2 uv = v_uv;
 
@@ -135,21 +213,52 @@ void main() {
     tex.b = bChan;
   }
 
-  // Chroma Key (Green/Blue Screen) in YCbCr chroma space
+  // Chroma Key (Green/Blue/Color Screen) + Spill Reduction
   float chromaAlpha = 1.0;
   if (u_chromaEnabled > 0.5) {
     float kCb = -0.168736 * u_chromaColor.r - 0.331264 * u_chromaColor.g + 0.5 * u_chromaColor.b;
     float kCr = 0.5 * u_chromaColor.r - 0.418688 * u_chromaColor.g - 0.081312 * u_chromaColor.b;
     float pCb = -0.168736 * tex.r - 0.331264 * tex.g + 0.5 * tex.b;
     float pCr = 0.5 * tex.r - 0.418688 * tex.g - 0.081312 * tex.b;
-    float dist = distance(vec2(pCb, pCr), vec2(kCb, kCr));
+    float keySat = length(vec2(kCb, kCr));
+    float chromaDist = distance(vec2(pCb, pCr), vec2(kCb, kCr));
+    float rgbDist = distance(tex.rgb, u_chromaColor) * 0.58;
+    float pY = dot(tex.rgb, vec3(0.299, 0.587, 0.114));
+    float kY = dot(u_chromaColor, vec3(0.299, 0.587, 0.114));
+    float dist = keySat < 0.08 ? mix(rgbDist, chromaDist, 0.25) : (chromaDist + abs(pY - kY) * 0.12);
     float smoothW = max(0.02, u_chromaSmooth);
     chromaAlpha = smoothstep(u_chromaTolerance - smoothW, u_chromaTolerance + smoothW, dist);
-    if (chromaAlpha < 0.98 && u_chromaColor.g >= u_chromaColor.r && u_chromaColor.g >= u_chromaColor.b) {
-      float maxRB = max(tex.r, tex.b);
-      if (tex.g > maxRB) {
-        tex.g = mix(tex.g, maxRB, 0.55 * (1.0 - chromaAlpha));
+
+    float spill = clamp(u_chromaSpill, 0.0, 1.0);
+    if (spill > 0.01 && chromaAlpha < 0.995) {
+      float edgeMix = spill * (1.0 - chromaAlpha * 0.65);
+      if (u_chromaColor.g >= u_chromaColor.r && u_chromaColor.g >= u_chromaColor.b) {
+        float maxRB = max(tex.r, tex.b);
+        if (tex.g > maxRB) tex.g = mix(tex.g, maxRB, edgeMix);
+      } else if (u_chromaColor.b >= u_chromaColor.r && u_chromaColor.b >= u_chromaColor.g) {
+        float maxRG = max(tex.r, tex.g);
+        if (tex.b > maxRG) tex.b = mix(tex.b, maxRG, edgeMix);
+      } else {
+        float lumaGray = dot(tex.rgb, vec3(0.299, 0.587, 0.114));
+        tex.rgb = mix(tex.rgb, vec3(lumaGray), edgeMix * 0.45);
       }
+    }
+  }
+
+  // Instant Real-Time Luma Background Removal (Black VFX / White Sticker)
+  if (u_bgRemovalMode > 0.5) {
+    float bgLuma = dot(tex.rgb, vec3(0.2126, 0.7152, 0.0722));
+    float bgSoft = max(0.015, u_bgRemovalSoftness);
+    if (u_bgRemovalMode < 1.5) {
+      // Luma-Black removal
+      float lumaMask = smoothstep(u_bgRemovalThreshold, u_bgRemovalThreshold + bgSoft, bgLuma);
+      chromaAlpha *= lumaMask;
+    } else {
+      // Luma-White removal (protect colored areas via min-channel blending)
+      float minChan = min(tex.r, min(tex.g, tex.b));
+      float whiteness = mix(bgLuma, minChan, 0.35);
+      float whiteMask = smoothstep(u_bgRemovalThreshold, u_bgRemovalThreshold + bgSoft, 1.0 - whiteness);
+      chromaAlpha *= whiteMask;
     }
   }
 
@@ -313,6 +422,53 @@ function compileShader(
     throw new Error(info);
   }
   return shader;
+}
+
+const MASK_SHAPE_INDEX: Record<ClipMaskShape, number> = {
+  none: 0,
+  circle: 1,
+  rectangle: 2,
+  'split-h': 3,
+  'split-v': 4,
+  diamond: 5,
+  heart: 6,
+};
+
+function traceCanvas2DMaskShape(
+  ctx: CanvasRenderingContext2D,
+  shape: ClipMaskShape,
+  cx: number,
+  cy: number,
+  bw: number,
+  bh: number,
+  sizeNorm: number
+): void {
+  const minDim = Math.min(bw, bh);
+  if (shape === 'circle') {
+    const r = 0.5 * minDim * sizeNorm;
+    ctx.arc(cx, cy, Math.max(2, r), 0, Math.PI * 2);
+  } else if (shape === 'rectangle') {
+    const rw = bw * sizeNorm;
+    const rh = bh * sizeNorm;
+    ctx.rect(cx - rw / 2, cy - rh / 2, rw, rh);
+  } else if (shape === 'split-h') {
+    ctx.rect(cx - bw / 2, cy - bh / 2, bw, bh * sizeNorm);
+  } else if (shape === 'split-v') {
+    ctx.rect(cx - bw / 2, cy - bh / 2, bw * sizeNorm, bh);
+  } else if (shape === 'diamond') {
+    const r = 0.5 * minDim * sizeNorm;
+    ctx.moveTo(cx, cy - r);
+    ctx.lineTo(cx + r, cy);
+    ctx.lineTo(cx, cy + r);
+    ctx.lineTo(cx - r, cy);
+    ctx.closePath();
+  } else if (shape === 'heart') {
+    const r = 0.42 * minDim * sizeNorm;
+    ctx.moveTo(cx, cy + r * 0.95);
+    ctx.bezierCurveTo(cx - r * 1.4, cy + r * 0.1, cx - r * 1.1, cy - r * 1.0, cx, cy - r * 0.3);
+    ctx.bezierCurveTo(cx + r * 1.1, cy - r * 1.0, cx + r * 1.4, cy + r * 0.1, cx, cy + r * 0.95);
+    ctx.closePath();
+  }
 }
 
 function getEffect(clip: Clip, type: string, fallback: number): number {
@@ -773,6 +929,21 @@ export class WebGLCompositor {
       gl.uniform3f(loc('u_chromaColor'), ckR, ckG, ckB);
       gl.uniform1f(loc('u_chromaTolerance'), chroma?.tolerance ?? 0.32);
       gl.uniform1f(loc('u_chromaSmooth'), chroma?.smoothness ?? 0.08);
+      gl.uniform1f(loc('u_chromaSpill'), chroma?.spillReduction ?? 0.5);
+
+      const bgRem = clip.bgRemoval;
+      const bgMode =
+        bgRem?.mode === 'luma-black' ? 1 : bgRem?.mode === 'luma-white' ? 2 : 0;
+      gl.uniform1f(loc('u_bgRemovalMode'), bgMode);
+      gl.uniform1f(loc('u_bgRemovalThreshold'), bgRem?.threshold ?? 0.16);
+      gl.uniform1f(loc('u_bgRemovalSoftness'), bgRem?.softness ?? 0.08);
+
+      const mask: ClipMaskConfig | undefined = clip.mask;
+      const maskIdx = mask?.shape ? (MASK_SHAPE_INDEX[mask.shape] ?? 0) : 0;
+      gl.uniform1f(loc('u_maskShape'), maskIdx);
+      gl.uniform1f(loc('u_maskInvert'), mask?.invert ? 1 : 0);
+      gl.uniform1f(loc('u_maskFeather'), mask?.feather ?? 0.04);
+      gl.uniform1f(loc('u_maskSize'), mask?.size ?? 0.82);
 
       applyWebGLBlendMode(gl, clip.blendMode);
       gl.drawArrays(gl.TRIANGLES, 0, 6);
@@ -829,11 +1000,12 @@ export class WebGLCompositor {
       ctx.rotate((anim.rotationDeg * Math.PI) / 180);
       ctx.scale(anim.flipX, anim.flipY);
 
+      const bx = -drawW / 2 + cLeft;
+      const by = -drawH / 2 + cTop;
+      const bw = Math.max(2, drawW - cLeft - cRight);
+      const bh = Math.max(2, drawH - cTop - cBottom);
+
       if (cTop > 0 || cRight > 0 || cBottom > 0 || cLeft > 0 || cornerNorm > 0.002) {
-        const bx = -drawW / 2 + cLeft;
-        const by = -drawH / 2 + cTop;
-        const bw = Math.max(2, drawW - cLeft - cRight);
-        const bh = Math.max(2, drawH - cTop - cBottom);
         const rPx = cornerNorm * Math.min(bw, bh);
         ctx.beginPath();
         if (typeof ctx.roundRect === 'function') {
@@ -842,6 +1014,25 @@ export class WebGLCompositor {
           ctx.rect(bx, by, bw, bh);
         }
         ctx.clip();
+      }
+
+      const mask = clip.mask;
+      if (mask && mask.shape !== 'none') {
+        const sizeNorm = Math.max(0.08, Math.min(1, mask.size ?? 0.82));
+        ctx.beginPath();
+        if (mask.invert) {
+          ctx.rect(bx, by, bw, bh);
+        }
+        traceCanvas2DMaskShape(
+          ctx,
+          mask.shape,
+          bx + bw / 2,
+          by + bh / 2,
+          bw,
+          bh,
+          sizeNorm
+        );
+        ctx.clip(mask.invert ? 'evenodd' : 'nonzero');
       }
 
       ctx.drawImage(

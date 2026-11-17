@@ -46,7 +46,7 @@ function blobToBase64(blob: Blob): Promise<string> {
   });
 }
 
-function resolveOrtBaseUrl(): string | undefined {
+export function resolveOrtBaseUrl(): string | undefined {
   if (typeof window === 'undefined') return undefined;
   try {
     const dir = new URL('.', window.location.href);

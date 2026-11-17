@@ -7,6 +7,7 @@ import {
   Copy,
   Cpu,
   Download,
+  Eraser,
   FolderOpen,
   FolderPlus,
   Gauge,
@@ -19,6 +20,7 @@ import {
   Music,
   PanelLeft,
   Pause,
+  Pipette,
   Play,
   Plus,
   QrCode,
@@ -27,6 +29,7 @@ import {
   Save,
   Scissors,
   Server,
+  Shapes,
   ShieldAlert,
   ShieldCheck,
   SlidersHorizontal,
@@ -540,6 +543,25 @@ export function VideoEditorPage() {
         },
         ...(selectedClip.type !== 'audio'
           ? [
+              ...(selectedClip.type !== 'text'
+                ? [
+                    {
+                      label: 'Potong Latar',
+                      icon: Eraser,
+                      onClick: () => setMobileSheet('inspector'),
+                    },
+                    {
+                      label: 'Kunci Chroma',
+                      icon: Pipette,
+                      onClick: () => setMobileSheet('inspector'),
+                    },
+                    {
+                      label: 'Masker',
+                      icon: Shapes,
+                      onClick: () => setMobileSheet('inspector'),
+                    },
+                  ]
+                : []),
               {
                 label: 'Lapisan',
                 icon: Layers,
