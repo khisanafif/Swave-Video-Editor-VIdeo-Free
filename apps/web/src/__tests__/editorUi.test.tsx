@@ -47,6 +47,8 @@ describe('VideoEditorPage UI Integration (Desktop, Tablet, Android & Multi-Devic
       await Promise.resolve();
     });
 
+    expect(screen.getAllByLabelText(/Logo SWAVE/i).length).toBeGreaterThanOrEqual(1);
+
     const addTextBtn = screen.getByRole('button', {
       name: /Tambah Teks Overlay/i,
     });
@@ -83,6 +85,8 @@ describe('VideoEditorPage UI Integration (Desktop, Tablet, Android & Multi-Devic
     await act(async () => {
       await Promise.resolve();
     });
+
+    expect(screen.getAllByLabelText(/Logo SWAVE/i).length).toBeGreaterThanOrEqual(1);
 
     // Cycle Desktop -> Mobile (HP)
     const modeToggle = screen.getByTitle(
@@ -127,6 +131,8 @@ describe('VideoEditorPage UI Integration (Desktop, Tablet, Android & Multi-Devic
       await Promise.resolve();
     });
 
+    expect(screen.getAllByLabelText(/Logo SWAVE/i).length).toBeGreaterThanOrEqual(1);
+
     const qrBtn = screen.getByTitle(
       /Buka Proyek Ini di HP, Tablet, atau Laptop Lain/i
     );
@@ -146,6 +152,8 @@ describe('VideoEditorPage UI Integration (Desktop, Tablet, Android & Multi-Devic
     await act(async () => {
       await Promise.resolve();
     });
+
+    expect(screen.getAllByLabelText(/Logo SWAVE/i).length).toBeGreaterThanOrEqual(1);
 
     // Switch to Teks tab and generate Auto-Captions
     fireEvent.click(screen.getByTitle(/Kategori Teks/i));
@@ -176,6 +184,8 @@ describe('VideoEditorPage UI Integration (Desktop, Tablet, Android & Multi-Devic
     await act(async () => {
       await Promise.resolve();
     });
+
+    expect(screen.getAllByLabelText(/Logo SWAVE/i).length).toBeGreaterThanOrEqual(1);
 
     // Starts in Pemula mode without technical clutter
     expect(
@@ -221,6 +231,8 @@ describe('VideoEditorPage UI Integration (Desktop, Tablet, Android & Multi-Devic
     await act(async () => {
       await Promise.resolve();
     });
+
+    expect(screen.getAllByLabelText(/Logo SWAVE/i).length).toBeGreaterThanOrEqual(1);
 
     // Save in standalone mode saves locally without complaining about Server Offline
     const saveBtn = screen.getByTitle(/Simpan Proyek Lokal di Perangkat/i);
@@ -300,6 +312,8 @@ describe('VideoEditorPage UI Integration (Desktop, Tablet, Android & Multi-Devic
       await Promise.resolve();
     });
 
+    expect(screen.getAllByLabelText(/Logo SWAVE/i).length).toBeGreaterThanOrEqual(1);
+
     // Video clip inspector exposes Extract .WAV, Crop, Blend Mode & Chroma Key
     expect(screen.getByRole('button', { name: /Ekstrak \.WAV/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Mute Klip/i })).toBeInTheDocument();
@@ -331,6 +345,8 @@ describe('VideoEditorPage UI Integration (Desktop, Tablet, Android & Multi-Devic
     await act(async () => {
       await Promise.resolve();
     });
+
+    expect(screen.getAllByLabelText(/Logo SWAVE/i).length).toBeGreaterThanOrEqual(1);
 
     // Desktop starts with [Pilih] (A) & [Blade] (B) timeline cursor tools
     fireEvent.keyDown(window, { key: 'b' });
@@ -437,6 +453,8 @@ describe('VideoEditorPage UI Integration (Desktop, Tablet, Android & Multi-Devic
     await act(async () => {
       await Promise.resolve();
     });
+
+    expect(screen.getAllByLabelText(/Logo SWAVE/i).length).toBeGreaterThanOrEqual(1);
 
     // Open CapCut Overlay Studio category -> lists both overlays & lets user reorder layer
     fireEvent.click(screen.getByTitle(/Kategori Overlay/i));

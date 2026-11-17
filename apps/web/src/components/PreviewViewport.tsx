@@ -30,6 +30,7 @@ import { type SafeGuideMode, useUiStore } from '../stores/uiStore';
 import { formatTimecode } from '../utils/format';
 import { CanvasOverlayGizmo } from './CanvasOverlayGizmo';
 import { ResolutionTriggerPopover } from './CapCutResolutionControl';
+import { SwaveLogoMark } from './SwaveLogoMark';
 
 function TimecodeReadout({ fps }: { fps: number }) {
   const currentTime = usePlaybackStore((s) => s.currentTime);
@@ -264,6 +265,7 @@ export function PreviewViewport({
                   e.target.value = '';
                 }}
               />
+              <SwaveLogoMark className="mb-2 h-11 w-11 shadow-lg shadow-cyan-500/15" />
               <p className="text-xs font-bold text-white sm:text-sm">
                 Mulai Proyek Video Anda
               </p>

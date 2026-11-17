@@ -86,57 +86,11 @@ import {
   PreviewViewport,
 } from './PreviewViewport';
 import { RuntimeModeModal } from './RuntimeModeModal';
+import { SwaveLogoMark } from './SwaveLogoMark';
 import { TimelineContainer } from './timeline/TimelineContainer';
 
 type DeviceLayoutMode = 'desktop' | 'tablet' | 'mobile';
 type MobileSheetType = 'none' | 'media' | 'inspector' | 'export';
-
-function SwaveLogoMark({ className = 'h-6 w-6' }: { className?: string }) {
-  return (
-    <svg
-      viewBox="0 0 512 512"
-      aria-hidden="true"
-      className={`shrink-0 ${className}`}
-    >
-      <defs>
-        <linearGradient id="swave-ui-bg" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0%" stopColor="#09090b" />
-          <stop offset="100%" stopColor="#0f172a" />
-        </linearGradient>
-        <linearGradient id="swave-ui-s" x1="0.15" y1="0.1" x2="0.85" y2="0.9">
-          <stop offset="0%" stopColor="#67e8f9" />
-          <stop offset="50%" stopColor="#00e5ff" />
-          <stop offset="100%" stopColor="#0284c7" />
-        </linearGradient>
-      </defs>
-      <rect width="512" height="512" rx="112" fill="url(#swave-ui-bg)" />
-      <rect
-        x="24"
-        y="24"
-        width="464"
-        height="464"
-        rx="96"
-        fill="none"
-        stroke="#00e5ff"
-        strokeOpacity="0.3"
-        strokeWidth="12"
-      />
-      <path
-        d="M 338 144 C 288 106, 170 112, 170 176 C 170 232, 342 222, 342 280 C 342 344, 222 350, 174 312"
-        fill="none"
-        stroke="url(#swave-ui-s)"
-        strokeWidth="60"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <rect x="132" y="394" width="36" height="22" rx="10" fill="#0ea5e9" />
-      <rect x="182" y="382" width="36" height="34" rx="10" fill="#22d3ee" />
-      <rect x="232" y="374" width="52" height="42" rx="12" fill="#00e5ff" />
-      <rect x="298" y="382" width="36" height="34" rx="10" fill="#22d3ee" />
-      <rect x="348" y="394" width="36" height="22" rx="10" fill="#0ea5e9" />
-    </svg>
-  );
-}
 
 interface ViewportGeometry {
   mode: DeviceLayoutMode;
@@ -771,6 +725,8 @@ export function VideoEditorPage() {
             >
               <Menu className="h-4 w-4" />
             </button>
+
+            <SwaveLogoMark className="h-5 w-5 rounded-md shadow-xs" />
 
             <button
               type="button"

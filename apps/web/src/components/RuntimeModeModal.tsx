@@ -30,6 +30,7 @@ import {
 import { usePlaybackStore } from '../stores/playbackStore';
 import { useTimelineStore } from '../stores/timelineStore';
 import { useUiStore } from '../stores/uiStore';
+import { SwaveLogoMark } from './SwaveLogoMark';
 
 const GITHUB_RELEASES_URL =
   'https://github.com/khisanafif/WEB-EDITOR-VID-SERVER/releases/latest';
@@ -140,7 +141,7 @@ export function RuntimeModeModal({
         {/* Header */}
         <div className="flex items-center justify-between border-b border-zinc-800 px-4 py-3">
           <div className="flex items-center gap-2">
-            <Smartphone className="h-4 w-4 text-cyan-400" />
+            <SwaveLogoMark className="h-5 w-5" />
             <h2 className="text-sm font-bold text-white">
               Mode Operasi & Unduh Aplikasi (Android · iOS · PC)
             </h2>

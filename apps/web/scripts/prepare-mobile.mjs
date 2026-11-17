@@ -117,34 +117,59 @@ function patchAndroidProject() {
   const icon512 = path.join(webDir, 'public/icons/icon-512.png');
   const iconMaskable512 = path.join(webDir, 'public/icons/icon-maskable-512.png');
   if (fs.existsSync(resDir) && fs.existsSync(icon192) && fs.existsSync(icon512)) {
+    const fgSource = fs.existsSync(iconMaskable512) ? iconMaskable512 : icon512;
+
     for (const entry of fs.readdirSync(resDir)) {
-      if (!entry.startsWith('mipmap-')) continue;
       const folder = path.join(resDir, entry);
+      if (!fs.statSync(folder).isDirectory()) continue;
+
+      // Remove stock Capacitor XML foreground/background vectors so PNG adaptive icon takes precedence
+      if (entry.startsWith('drawable')) {
+        for (const stockXml of ['ic_launcher_foreground.xml', 'ic_launcher_background.xml']) {
+          const p = path.join(folder, stockXml);
+          if (fs.existsSync(p)) fs.rmSync(p);
+        }
+        const splashPng = path.join(folder, 'splash.png');
+        if (fs.existsSync(splashPng)) {
+          fs.copyFileSync(fgSource, splashPng);
+        }
+        continue;
+      }
+
+      if (!entry.startsWith('mipmap-') || entry === 'mipmap-anydpi-v26') continue;
+
+      // Remove any .webp launcher icons so Android never ignores our .png icons
+      for (const webpName of ['ic_launcher.webp', 'ic_launcher_round.webp', 'ic_launcher_foreground.webp']) {
+        const wp = path.join(folder, webpName);
+        if (fs.existsSync(wp)) fs.rmSync(wp);
+      }
+
       const isHighDpi = entry.includes('xxhdpi') || entry.includes('xxxhdpi');
       const src = isHighDpi ? icon512 : icon192;
-      for (const targetName of ['ic_launcher.png', 'ic_launcher_round.png']) {
-        const dest = path.join(folder, targetName);
-        if (fs.existsSync(dest)) {
-          fs.copyFileSync(src, dest);
-        }
-      }
-      const fgDest = path.join(folder, 'ic_launcher_foreground.png');
-      if (fs.existsSync(fgDest)) {
-        fs.copyFileSync(
-          fs.existsSync(iconMaskable512) ? iconMaskable512 : src,
-          fgDest
-        );
-      }
+      fs.copyFileSync(src, path.join(folder, 'ic_launcher.png'));
+      fs.copyFileSync(src, path.join(folder, 'ic_launcher_round.png'));
+      fs.copyFileSync(fgSource, path.join(folder, 'ic_launcher_foreground.png'));
     }
-    const bgColorXml = path.join(resDir, 'values/ic_launcher_background.xml');
-    if (fs.existsSync(bgColorXml)) {
-      fs.writeFileSync(
-        bgColorXml,
-        '<?xml version="1.0" encoding="utf-8"?>\n<resources>\n    <color name="ic_launcher_background">#09090B</color>\n</resources>\n',
-        'utf8'
-      );
-    }
-    console.log('Updated Android mipmap and adaptive SWAVE launcher icons.');
+
+    const anydpiDir = path.join(resDir, 'mipmap-anydpi-v26');
+    fs.mkdirSync(anydpiDir, { recursive: true });
+    const adaptiveXml = `<?xml version="1.0" encoding="utf-8"?>
+<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+    <background android:drawable="@color/ic_launcher_background" />
+    <foreground android:drawable="@mipmap/ic_launcher_foreground" />
+</adaptive-icon>
+`;
+    fs.writeFileSync(path.join(anydpiDir, 'ic_launcher.xml'), adaptiveXml, 'utf8');
+    fs.writeFileSync(path.join(anydpiDir, 'ic_launcher_round.xml'), adaptiveXml, 'utf8');
+
+    const valuesDir = path.join(resDir, 'values');
+    fs.mkdirSync(valuesDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(valuesDir, 'ic_launcher_background.xml'),
+      '<?xml version="1.0" encoding="utf-8"?>\n<resources>\n    <color name="ic_launcher_background">#09090B</color>\n</resources>\n',
+      'utf8'
+    );
+    console.log('Updated Android mipmap, WebP-cleaned adaptive launcher, and splash icons to SWAVE wave.');
   }
 
   const mainActivityPath = path.join(
