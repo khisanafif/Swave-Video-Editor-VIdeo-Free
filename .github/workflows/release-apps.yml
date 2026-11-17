@@ -69,6 +69,7 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - id: deployment
+        continue-on-error: true
         uses: actions/deploy-pages@v4
 
   build-android-apk:
@@ -126,17 +127,21 @@ jobs:
 
       - name: Build Unsigned iOS App Bundle
         run: |
+          set -o pipefail
+          cd apps/web/ios/App
           xcodebuild \
-            -workspace apps/web/ios/App/App.xcworkspace \
+            -workspace App.xcworkspace \
             -scheme App \
             -configuration Release \
             -sdk iphoneos \
-            -derivedDataPath apps/web/ios/build \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath ../build \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
-            DEVELOPMENT_TEAM="" \
-            clean build
+            EXPANDED_CODE_SIGN_IDENTITY="" \
+            ENABLE_USER_SCRIPT_SANDBOXING=NO \
+            clean build 2>&1 | tee ../build.log | tail -n 120
 
       - name: Package Unsigned IPA (AltStore / Sideloadly / TrollStore)
         run: |
@@ -156,9 +161,22 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
+        continue-on-error: true
         with:
+          name: portable-web-zip
           path: release-files
-          merge-multiple: true
+
+      - uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          name: android-apk
+          path: release-files
+
+      - uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          name: ios-ipa
+          path: release-files
 
       - name: Publish GitHub Release Assets
         uses: softprops/action-gh-release@v2

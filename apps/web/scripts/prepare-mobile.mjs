@@ -248,32 +248,72 @@ function patchIosProject() {
     for (const [key, valueXml] of entries) {
       if (!plist.includes(`<key>${key}</key>`)) {
         plist = plist.replace(
-          '</dict>\n</plist>',
-          `  <key>${key}</key>\n  ${valueXml}\n</dict>\n</plist>`
+          /<\/dict>\s*<\/plist>/,
+          `\t<key>${key}</key>\n\t${valueXml}\n</dict>\n</plist>`
         );
       }
     }
 
     if (!plist.includes('NSAppTransportSecurity')) {
       plist = plist.replace(
-        '</dict>\n</plist>',
-        `  <key>NSAppTransportSecurity</key>\n  <dict>\n    <key>NSAllowsArbitraryLoads</key>\n    <true/>\n    <key>NSAllowsLocalNetworking</key>\n    <true/>\n  </dict>\n</dict>\n</plist>`
+        /<\/dict>\s*<\/plist>/,
+        `\t<key>NSAppTransportSecurity</key>\n\t<dict>\n\t\t<key>NSAllowsArbitraryLoads</key>\n\t\t<true/>\n\t\t<key>NSAllowsLocalNetworking</key>\n\t\t<true/>\n\t</dict>\n</dict>\n</plist>`
       );
     }
 
     fs.writeFileSync(plistPath, plist, 'utf8');
+    if (process.platform === 'darwin') {
+      run(`plutil -lint "${plistPath}"`, webDir);
+    }
     console.log('Patched iOS Info.plist with Photo Library, Mic, Files & LAN permissions.');
   }
 
-  // Copy 512px PNG as iOS AppIcon (removes missing icon errors in Xcode)
+  // Ensure Pods allow unsigned CI builds & modern deployment target
+  const podfilePath = path.join(iosDir, 'App/Podfile');
+  if (fs.existsSync(podfilePath)) {
+    let podfile = fs.readFileSync(podfilePath, 'utf8');
+    if (!podfile.includes('VELOCUT_UNSIGNED_PATCH')) {
+      const podSettingsRuby = `  # VELOCUT_UNSIGNED_PATCH
+  installer.pods_project.targets.each do |target|
+    target.build_configurations.each do |config|
+      config.build_settings['EXPANDED_CODE_SIGN_IDENTITY'] = ""
+      config.build_settings['CODE_SIGNING_REQUIRED'] = "NO"
+      config.build_settings['CODE_SIGNING_ALLOWED'] = "NO"
+      config.build_settings['ENABLE_USER_SCRIPT_SANDBOXING'] = "NO"
+      if config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'].to_f < 13.0
+        config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '13.0'
+      end
+    end
+  end`;
+      if (podfile.includes('post_install do |installer|')) {
+        podfile = podfile.replace(
+          'post_install do |installer|',
+          `post_install do |installer|\n${podSettingsRuby}`
+        );
+      } else {
+        podfile += `\npost_install do |installer|\n${podSettingsRuby}\nend\n`;
+      }
+      fs.writeFileSync(podfilePath, podfile, 'utf8');
+      console.log('Patched Podfile post_install for unsigned CI builds.');
+      if (process.platform === 'darwin') {
+        run('pod install', path.join(iosDir, 'App'));
+      }
+    }
+  }
+
+  // Generate true 1024x1024 PNG on macOS via sips so actool never rejects dimensions
   const iconSetDir = path.join(
     iosDir,
     'App/App/Assets.xcassets/AppIcon.appiconset'
   );
   const icon512 = path.join(webDir, 'public/icons/icon-512.png');
-  if (fs.existsSync(iconSetDir) && fs.existsSync(icon512)) {
+  if (
+    process.platform === 'darwin' &&
+    fs.existsSync(iconSetDir) &&
+    fs.existsSync(icon512)
+  ) {
     const dest = path.join(iconSetDir, 'AppIcon-512@2x.png');
-    fs.copyFileSync(icon512, dest);
+    run(`sips -s format png -z 1024 1024 "${icon512}" --out "${dest}"`, webDir);
     const contents = {
       images: [
         {
@@ -293,7 +333,7 @@ function patchIosProject() {
       JSON.stringify(contents, null, 2),
       'utf8'
     );
-    console.log('Updated iOS AppIcon asset.');
+    console.log('Updated 1024x1024 iOS AppIcon asset via sips.');
   }
 }
 
