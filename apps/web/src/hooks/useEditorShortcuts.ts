@@ -105,6 +105,14 @@ export function useEditorShortcuts(): void {
         return;
       }
 
+      if (!isMod && (key === 'a' || key === 'b')) {
+        event.preventDefault();
+        useUiStore
+          .getState()
+          .setTimelineToolMode(key === 'b' ? 'blade' : 'select');
+        return;
+      }
+
       // Pro '[' and ']' Trim-to-Playhead
       if (!isMod && (event.key === '[' || event.key === ']')) {
         const timeline = useTimelineStore.getState();

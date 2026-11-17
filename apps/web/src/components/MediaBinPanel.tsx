@@ -18,6 +18,7 @@ import {
   Upload,
   Volume2,
   Wand2,
+  X,
 } from 'lucide-react';
 import {
   FILTER_PRESETS,
@@ -43,13 +44,30 @@ import { AudioStudioTab } from './AudioStudioTab';
 import { SubtitleStudioTab } from './SubtitleStudioTab';
 
 interface MediaBinPanelProps {
-  mode?: 'sidebar' | 'sheet';
+  mode?: 'sidebar' | 'drawer' | 'sheet';
+  hideRail?: boolean;
   onClipAdded?: () => void;
+  onCloseDrawer?: () => void;
 }
+
+export const STUDIO_CATEGORIES: ReadonlyArray<{
+  id: MediaBinCategory;
+  label: string;
+  icon: typeof Film;
+}> = [
+  { id: 'media', label: 'Media', icon: Film },
+  { id: 'subtitle', label: 'Subtitle', icon: Captions },
+  { id: 'audio', label: 'Audio', icon: Volume2 },
+  { id: 'text', label: 'Teks', icon: Type },
+  { id: 'sticker', label: 'Stiker', icon: Smile },
+  { id: 'effects', label: 'Efek', icon: Wand2 },
+];
 
 export function MediaBinPanel({
   mode = 'sidebar',
+  hideRail = false,
   onClipAdded,
+  onCloseDrawer,
 }: MediaBinPanelProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const activeCategory = useUiStore((s) => s.activeMediaCategory);
@@ -225,89 +243,124 @@ export function MediaBinPanel({
       !assetList.some((local) => local.serverAssetId === sa.id || local.id === sa.id)
   );
 
-  const containerClass =
-    mode === 'sheet'
-      ? 'flex h-full w-full flex-col bg-zinc-950'
-      : 'flex w-80 shrink-0 flex-col border-r border-zinc-800 bg-zinc-950';
+  const showVerticalRail = (mode === 'sidebar' || mode === 'drawer') && !hideRail;
 
   return (
-    <aside className={containerClass}>
-      {/* Header + Free CapCut Badge + Demo Button */}
-      <div className="flex items-center justify-between border-b border-zinc-800/80 px-3 py-2">
-        <div className="flex items-center gap-1.5">
-          <h2 className="text-xs font-semibold tracking-wider text-zinc-200 uppercase">
-            Media Bin
-          </h2>
-          <span className="rounded bg-emerald-500/15 px-1.5 py-0.5 text-[9px] font-bold text-emerald-300">
-            GRATIS
-          </span>
-        </div>
-        <button
-          type="button"
-          disabled={isGeneratingDemo}
-          onClick={handleLoadDemo}
-          className="inline-flex items-center gap-1 rounded bg-cyan-500/15 px-2.5 py-1 text-[11px] font-medium text-cyan-300 hover:bg-cyan-500/25 active:scale-95 disabled:opacity-50"
+    <aside
+      className={`flex h-full w-full overflow-hidden ${
+        mode === 'sheet' ? 'flex-col bg-[#202026]' : 'flex-row bg-[#18181C]'
+      }`}
+    >
+      {/* Desktop / Sidebar Vertical Category Rail (52px) */}
+      {showVerticalRail && (
+        <div
+          aria-label="Kategori Studio"
+          className="flex w-[52px] shrink-0 flex-col items-center gap-1 border-r border-[#2A2A32] bg-[#111114] py-2"
         >
-          <Sparkles className="h-3 w-3" />
-          <span>{isGeneratingDemo ? 'Membuat...' : 'Muat Demo'}</span>
-        </button>
-      </div>
-
-      {/* CapCut Creative Category Bar */}
-      <div className="grid grid-cols-6 border-b border-zinc-800/80 bg-zinc-900/50 p-1">
-        {(
-          [
-            { id: 'media', label: 'Media', icon: Film },
-            { id: 'subtitle', label: 'Subtitle', icon: Captions },
-            { id: 'audio', label: 'Audio', icon: Volume2 },
-            { id: 'text', label: 'Teks', icon: Type },
-            { id: 'sticker', label: 'Stiker', icon: Smile },
-            { id: 'effects', label: 'Efek', icon: Wand2 },
-          ] as ReadonlyArray<{
-            id: MediaBinCategory;
-            label: string;
-            icon: typeof Film;
-          }>
-        ).map((tab) => {
-          const Icon = tab.icon;
-          const active = activeCategory === tab.id;
-          return (
-            <button
-              key={tab.id}
-              type="button"
-              title={`Kategori ${tab.label}`}
-              onClick={() => setActiveCategory(tab.id)}
-              className={`flex flex-col items-center justify-center gap-0.5 rounded py-1.5 text-[10px] font-medium transition ${active
-                ? 'bg-cyan-500/20 text-cyan-300 shadow-xs'
-                : 'text-zinc-400 hover:bg-zinc-800/60 hover:text-zinc-200'
+          {STUDIO_CATEGORIES.map((tab) => {
+            const Icon = tab.icon;
+            const active = activeCategory === tab.id;
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                title={`Kategori ${tab.label}`}
+                onClick={() => setActiveCategory(tab.id)}
+                className={`flex w-[44px] flex-col items-center justify-center gap-0.5 rounded-lg py-2 text-[9px] font-medium transition ${
+                  active
+                    ? 'bg-[#00E5FF]/20 text-[#00E5FF]'
+                    : 'text-zinc-400 hover:bg-[#242429] hover:text-zinc-100'
                 }`}
-            >
-              <Icon className="h-3.5 w-3.5" />
-              <span>{tab.label}</span>
-            </button>
-          );
-        })}
-      </div>
+              >
+                <Icon className="h-4 w-4" />
+                <span>{tab.label}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
 
-      {/* Quick Add Text Overlay button always accessible */}
-      <div className="border-b border-zinc-800/80 px-3 py-2">
-        <button
-          type="button"
-          onClick={() => {
-            useTimelineStore
-              .getState()
-              .addTextClip(
-                'Judul Overlay',
-                usePlaybackStore.getState().currentTime
+      {/* Content Area */}
+      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+        {/* Header + Free Badge + Demo Button + Optional Drawer Close */}
+        <div className="flex items-center justify-between border-b border-[#2A2A32] px-3 py-2">
+          <div className="flex min-w-0 items-center gap-1.5">
+            <h2 className="truncate text-xs font-semibold tracking-wider text-zinc-200 uppercase">
+              Media Bin
+            </h2>
+            <span className="rounded bg-emerald-500/15 px-1.5 py-0.5 text-[9px] font-bold text-emerald-300">
+              GRATIS
+            </span>
+          </div>
+          <div className="flex shrink-0 items-center gap-1">
+            <button
+              type="button"
+              disabled={isGeneratingDemo}
+              onClick={handleLoadDemo}
+              className="inline-flex items-center gap-1 rounded bg-[#00E5FF]/15 px-2 py-1 text-[11px] font-medium text-[#00E5FF] hover:bg-[#00E5FF]/25 active:scale-95 disabled:opacity-50"
+            >
+              <Sparkles className="h-3 w-3" />
+              <span>{isGeneratingDemo ? 'Membuat...' : 'Muat Demo'}</span>
+            </button>
+            {onCloseDrawer && (
+              <button
+                type="button"
+                onClick={onCloseDrawer}
+                className="rounded p-1 text-zinc-400 hover:bg-[#242429] hover:text-white"
+                title="Tutup panel aset"
+                aria-label="Tutup panel aset"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Sheet Mode Horizontal Category Bar */}
+        {mode === 'sheet' && (
+          <div className="grid grid-cols-6 border-b border-[#2A2A32] bg-[#18181C] p-1">
+            {STUDIO_CATEGORIES.map((tab) => {
+              const Icon = tab.icon;
+              const active = activeCategory === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  type="button"
+                  title={`Kategori ${tab.label}`}
+                  onClick={() => setActiveCategory(tab.id)}
+                  className={`flex flex-col items-center justify-center gap-0.5 rounded py-1.5 text-[10px] font-medium transition ${
+                    active
+                      ? 'bg-[#00E5FF]/20 text-[#00E5FF]'
+                      : 'text-zinc-400 hover:bg-[#242429] hover:text-zinc-200'
+                  }`}
+                >
+                  <Icon className="h-3.5 w-3.5" />
+                  <span>{tab.label}</span>
+                </button>
               );
-            onClipAdded?.();
-          }}
-          className="flex w-full items-center justify-center gap-1.5 rounded-md border border-zinc-800 bg-zinc-900 py-1.5 text-xs font-medium text-zinc-200 hover:border-violet-500/50 hover:bg-zinc-800 active:bg-zinc-800"
-        >
-          <Type className="h-3.5 w-3.5 text-violet-400" />
-          <span>Tambah Teks Overlay</span>
-        </button>
-      </div>
+            })}
+          </div>
+        )}
+
+        {/* Quick Add Text Overlay button always accessible */}
+        <div className="border-b border-[#2A2A32] px-3 py-2">
+          <button
+            type="button"
+            onClick={() => {
+              useTimelineStore
+                .getState()
+                .addTextClip(
+                  'Judul Overlay',
+                  usePlaybackStore.getState().currentTime
+                );
+              onClipAdded?.();
+            }}
+            className="flex w-full items-center justify-center gap-1.5 rounded-md border border-[#2A2A32] bg-[#242429] py-1.5 text-xs font-medium text-zinc-200 hover:border-violet-400/60 hover:bg-[#2c2c34]"
+          >
+            <Type className="h-3.5 w-3.5 text-violet-400" />
+            <span>Tambah Teks Overlay</span>
+          </button>
+        </div>
 
       {/* Tab 1: MEDIA */}
       {activeCategory === 'media' && (
@@ -782,6 +835,7 @@ export function MediaBinPanel({
           )}
         </div>
       )}
+      </div>
     </aside>
   );
 }

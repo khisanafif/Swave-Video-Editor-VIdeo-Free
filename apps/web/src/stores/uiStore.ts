@@ -11,6 +11,8 @@ import type {
 export type ExperienceMode = 'beginner' | 'pro';
 export type StudioRuntimeMode = 'standalone' | 'server';
 export type SafeGuideMode = 'none' | 'thirds' | 'tiktok' | 'youtube';
+export type TimelineToolMode = 'select' | 'blade';
+export type LayoutPreference = 'auto' | 'desktop' | 'tablet' | 'mobile';
 export type MediaBinCategory =
   | 'media'
   | 'subtitle'
@@ -82,6 +84,8 @@ export interface UiState {
   experienceMode: ExperienceMode;
   runtimeMode: StudioRuntimeMode;
   safeGuideMode: SafeGuideMode;
+  timelineToolMode: TimelineToolMode;
+  layoutPreference: LayoutPreference;
   activeMediaCategory: MediaBinCategory;
   clipboardStyle: CopiedClipStyle | null;
   showExportModal: boolean;
@@ -89,6 +93,8 @@ export interface UiState {
   setExperienceMode: (mode: ExperienceMode) => void;
   setRuntimeMode: (mode: StudioRuntimeMode, explicit?: boolean) => void;
   setSafeGuideMode: (mode: SafeGuideMode) => void;
+  setTimelineToolMode: (tool: TimelineToolMode) => void;
+  setLayoutPreference: (pref: LayoutPreference) => void;
   setActiveMediaCategory: (cat: MediaBinCategory) => void;
   setClipboardStyle: (style: CopiedClipStyle | null) => void;
   setShowExportModal: (open: boolean) => void;
@@ -99,6 +105,8 @@ export const useUiStore = create<UiState>((set) => ({
   experienceMode: readInitialMode(),
   runtimeMode: readInitialRuntimeMode(),
   safeGuideMode: 'none',
+  timelineToolMode: 'select',
+  layoutPreference: 'auto',
   activeMediaCategory: 'media',
   clipboardStyle: null,
   showExportModal: false,
@@ -130,6 +138,8 @@ export const useUiStore = create<UiState>((set) => ({
   },
 
   setSafeGuideMode: (safeGuideMode) => set({ safeGuideMode }),
+  setTimelineToolMode: (timelineToolMode) => set({ timelineToolMode }),
+  setLayoutPreference: (layoutPreference) => set({ layoutPreference }),
   setActiveMediaCategory: (activeMediaCategory) => set({ activeMediaCategory }),
   setClipboardStyle: (clipboardStyle) => set({ clipboardStyle }),
   setShowExportModal: (showExportModal) => set({ showExportModal }),

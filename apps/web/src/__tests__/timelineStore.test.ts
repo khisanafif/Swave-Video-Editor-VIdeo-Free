@@ -2,7 +2,11 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import type { MediaAsset } from '@swave/shared';
 import { encodeWavFromChannels } from '../engine/audioExtractor';
 import { usePlaybackStore } from '../stores/playbackStore';
-import { useTimelineStore } from '../stores/timelineStore';
+import {
+  getMainVideoTrackId,
+  getTimelineDisplayTrackOrder,
+  useTimelineStore,
+} from '../stores/timelineStore';
 
 const sampleVideoAsset: MediaAsset = {
   id: 'asset-vid-1',
@@ -315,6 +319,32 @@ describe('SWAVE Video Dual-Store & Zundo History', () => {
     const replaced = useTimelineStore.getState().replaceClipAsset(v2, sampleVideoAsset.id);
     expect(replaced).toBe(true);
     expect(useTimelineStore.getState().clips[v2].assetId).toBe(sampleVideoAsset.id);
+  });
+
+  it('orders tracks using vertical track polarity (overlays above main video track, audio below)', () => {
+    const store = useTimelineStore.getState();
+    const pipId = store.addTrack('overlay', 'PIP Overlay');
+    const txt2Id = store.addTrack('text', 'Subtitle Top');
+    const aud2Id = store.addTrack('audio', 'SFX 2');
+
+    const latest = useTimelineStore.getState();
+    const mainId = getMainVideoTrackId(latest.trackOrder, latest.tracks);
+    expect(mainId).toBe('track-1');
+
+    const displayOrder = getTimelineDisplayTrackOrder(
+      latest.trackOrder,
+      latest.tracks
+    );
+    const mainIdx = displayOrder.indexOf('track-1');
+    // Upper stack in reversed Z-order above Main Track
+    expect(displayOrder.indexOf(txt2Id)).toBeLessThan(displayOrder.indexOf(pipId));
+    expect(displayOrder.indexOf(pipId)).toBeLessThan(displayOrder.indexOf('track-2'));
+    expect(displayOrder.indexOf('track-2')).toBeLessThan(mainIdx);
+    // Lower audio tracks stack below Main Track
+    expect(displayOrder.indexOf('track-3')).toBeGreaterThan(mainIdx);
+    expect(displayOrder.indexOf(aud2Id)).toBeGreaterThan(
+      displayOrder.indexOf('track-3')
+    );
   });
 });
 

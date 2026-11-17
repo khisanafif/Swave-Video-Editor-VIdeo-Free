@@ -16,6 +16,8 @@ describe('VideoEditorPage UI Integration (Desktop, Tablet, Android & Multi-Devic
       experienceMode: 'beginner',
       runtimeMode: 'standalone',
       safeGuideMode: 'none',
+      timelineToolMode: 'select',
+      layoutPreference: 'auto',
       activeMediaCategory: 'media',
       clipboardStyle: null,
       showExportModal: false,
@@ -321,5 +323,41 @@ describe('VideoEditorPage UI Integration (Desktop, Tablet, Android & Multi-Devic
     // Open Export Modal -> Audio-only WAV export option exists alongside Video export
     fireEvent.click(screen.getByRole('button', { name: /Ekspor MP4/i }));
     expect(screen.getByRole('button', { name: /Audio \(\.WAV\)/i })).toBeInTheDocument();
+  });
+
+  it('supports Tri-Mode Adaptive Layout switching (Mobile 50vw center playhead + contextual dock, Tablet icon rail, Desktop Blade B / Select A tools)', async () => {
+    render(<VideoEditorPage />);
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    // Desktop starts with [Pilih] (A) & [Blade] (B) timeline cursor tools
+    fireEvent.keyDown(window, { key: 'b' });
+    expect(useUiStore.getState().timelineToolMode).toBe('blade');
+    fireEvent.keyDown(window, { key: 'a' });
+    expect(useUiStore.getState().timelineToolMode).toBe('select');
+
+    // Cycle Desktop -> Mobile (HP)
+    const modeToggle = screen.getByTitle(
+      /Beralih antara Tampilan Studio Android/i
+    );
+    fireEvent.click(modeToggle);
+    expect(screen.getByLabelText(/Playhead Tengah Mobile/i)).toBeInTheDocument();
+    expect(screen.getByTitle(/Bisukan suara track utama/i)).toBeInTheDocument();
+
+    // Selecting a clip changes Mobile Bottom Dock into Contextual Actions with Back [<] button
+    act(() => {
+      useTimelineStore.getState().addTextClip('Demo HP', 0);
+    });
+    expect(screen.getByRole('button', { name: /^Kembali$/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Kecepatan/i })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /^Kembali$/i }));
+    expect(useTimelineStore.getState().selectedClipIds).toEqual([]);
+
+    // Cycle Mobile -> Tablet (renders Tablet vertical Icon Rail)
+    fireEvent.click(modeToggle);
+    expect(
+      screen.getByRole('navigation', { name: /Rail Alat Tablet/i })
+    ).toBeInTheDocument();
   });
 });

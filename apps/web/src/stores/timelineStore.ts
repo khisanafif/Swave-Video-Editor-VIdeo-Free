@@ -240,6 +240,53 @@ export function getTimelineDuration(
   return Math.max(minSeconds, maxEnd);
 }
 
+/**
+ * Resolves the ID of the center axis Main Video Track (preferring 'track-1' or the first video track).
+ */
+export function getMainVideoTrackId(
+  trackOrder: string[],
+  tracks: Record<string, Track>
+): string | null {
+  if (tracks['track-1'] && tracks['track-1'].type === 'video') {
+    return 'track-1';
+  }
+  return (
+    trackOrder.find((id) => tracks[id] && tracks[id].type === 'video') || null
+  );
+}
+
+/**
+ * Orders timeline tracks using vertical track polarity:
+ * Top Zone (overlay / text / secondary video tracks stacked upward, topmost layer first),
+ * Center Axis (Main Video Track), Bottom Zone (Audio tracks stacked downward).
+ */
+export function getTimelineDisplayTrackOrder(
+  trackOrder: string[],
+  tracks: Record<string, Track>
+): string[] {
+  const mainId = getMainVideoTrackId(trackOrder, tracks);
+  const overlayStack: string[] = [];
+  const audioStack: string[] = [];
+
+  for (const id of trackOrder) {
+    const tr = tracks[id];
+    if (!tr || id === mainId) continue;
+    if (tr.type === 'audio') {
+      audioStack.push(id);
+    } else {
+      overlayStack.push(id);
+    }
+  }
+
+  overlayStack.reverse();
+  const result = [...overlayStack];
+  if (mainId && tracks[mainId]) {
+    result.push(mainId);
+  }
+  result.push(...audioStack);
+  return result;
+}
+
 const initialLayout = createDefaultTracks();
 
 export const useTimelineStore = create<TimelineState>()(
@@ -291,7 +338,18 @@ export const useTimelineStore = create<TimelineState>()(
             isLocked: false,
             clipIds: [],
           };
-          state.trackOrder.push(id);
+          if (type === 'audio') {
+            state.trackOrder.push(id);
+          } else {
+            const firstAudioIdx = state.trackOrder.findIndex(
+              (tid) => state.tracks[tid]?.type === 'audio'
+            );
+            if (firstAudioIdx >= 0) {
+              state.trackOrder.splice(firstAudioIdx, 0, id);
+            } else {
+              state.trackOrder.push(id);
+            }
+          }
         });
         return id;
       },

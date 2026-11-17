@@ -1,16 +1,36 @@
 @import "tailwindcss";
 
+:root {
+  --swave-layer-0: #0a0a0c;
+  --swave-layer-1: #111114;
+  --swave-layer-2: #18181c;
+  --swave-layer-3: #242429;
+  --swave-layer-4: #202026;
+  --swave-divider: #2a2a32;
+  --swave-accent: #00e5ff;
+}
+
 @layer base {
   html,
   body,
   #root {
+    width: 100vw;
     height: 100%;
     height: 100dvh;
     overflow: hidden;
     overscroll-behavior: none;
-    background-color: #09090b;
-    color: #f4f4f5;
+    user-select: none;
+    -webkit-user-select: none;
+    background-color: #0e0e10;
+    color: #f4f4f6;
     -webkit-tap-highlight-color: transparent;
+  }
+
+  input,
+  textarea,
+  [contenteditable='true'] {
+    user-select: text;
+    -webkit-user-select: text;
   }
 
   button,
@@ -18,6 +38,15 @@
   input[type="range"] {
     touch-action: manipulation;
   }
+}
+
+.no-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
 }
 
 /* Custom sleek studio scrollbars */
@@ -31,10 +60,10 @@
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #27272a;
+  background: #2a2a32;
   border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #3f3f46;
+  background: #3f3f4c;
 }

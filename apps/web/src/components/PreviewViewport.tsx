@@ -44,7 +44,34 @@ function TimecodeReadout({ fps }: { fps: number }) {
   );
 }
 
-export function PreviewViewport() {
+interface PreviewViewportProps {
+  layoutMode?: 'desktop' | 'tablet' | 'mobile';
+}
+
+export function captureCurrentCanvasSnapshot(): void {
+  const canvas = document.querySelector(
+    'canvas[data-swave-preview-canvas="true"]'
+  ) as HTMLCanvasElement | null;
+  if (!canvas || Object.keys(useTimelineStore.getState().clips).length === 0) {
+    return;
+  }
+  const t = usePlaybackStore.getState().currentTime;
+  mediaRuntime.renderFrameAt(t, false);
+  if (typeof canvas.toBlob !== 'function') return;
+
+  canvas.toBlob((blob) => {
+    if (!blob) return;
+    const fname = `swave-snapshot-${t.toFixed(1).replace('.', '_')}s.png`;
+    void saveBlobToDevice(blob, fname);
+    void probeAndRegisterMediaFile(blob, fname, 'image/png').then((asset) => {
+      useTimelineStore.getState().registerAsset(asset);
+    });
+  }, 'image/png');
+}
+
+export function PreviewViewport({
+  layoutMode = 'desktop',
+}: PreviewViewportProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const stageBoxRef = useRef<HTMLDivElement>(null);
   const quickImportRef = useRef<HTMLInputElement>(null);
@@ -131,99 +158,36 @@ export function PreviewViewport() {
   };
 
   const handleCaptureSnapshot = () => {
-    const canvas = canvasRef.current;
-    if (!canvas || Object.keys(clips).length === 0) return;
-    const t = usePlaybackStore.getState().currentTime;
-    mediaRuntime.renderFrameAt(t, false);
-    if (typeof canvas.toBlob !== 'function') return;
-
-    canvas.toBlob((blob) => {
-      if (!blob) return;
-      const fname = `swave-snapshot-${t.toFixed(1).replace('.', '_')}s.png`;
-      void saveBlobToDevice(blob, fname);
-      void probeAndRegisterMediaFile(blob, fname, 'image/png').then((asset) => {
-        useTimelineStore.getState().registerAsset(asset);
-      });
-    }, 'image/png');
+    captureCurrentCanvasSnapshot();
   };
 
   return (
-    <main className="flex min-h-[195px] min-w-0 shrink-0 flex-col bg-[#09090c] max-lg:h-[34dvh] sm:max-lg:h-[38dvh] lg:min-h-0 lg:flex-1">
-      {/* Stage Top Bar */}
-      <div className="flex items-center justify-between border-b border-zinc-800/80 px-2.5 py-1.5 lg:px-4 lg:py-2">
-        <div className="flex items-center gap-2">
-          <span className="rounded bg-zinc-800/90 px-1.5 py-0.5 font-mono text-[10px] uppercase text-cyan-300">
-            {experienceMode === 'pro'
-              ? backendLabel === 'webgl2'
-                ? 'WebGL2 GLSL'
-                : 'Canvas2D'
-              : 'Pratinjau'}
-          </span>
-          <span className="hidden text-xs text-zinc-400 sm:inline">
-            {resolution.width} × {resolution.height} @ {fps}fps
-          </span>
-        </div>
-
-        <div className="flex items-center gap-1.5">
-          <select
-            aria-label="Resolusi Kanvas"
-            value={`${resolution.width}x${resolution.height}x${resolution.fps}`}
-            onChange={(e) => {
-              const found = PRESET_RESOLUTIONS.find(
-                (r) => `${r.width}x${r.height}x${r.fps}` === e.target.value
-              );
-              if (found) useTimelineStore.getState().setResolution(found);
-            }}
-            className="max-w-[165px] rounded border border-zinc-800 bg-zinc-900 px-2 py-1 text-[11px] text-zinc-200 outline-none focus:border-cyan-500 sm:max-w-none sm:text-xs"
-          >
-            {PRESET_RESOLUTIONS.map((r) => (
-              <option
-                key={`${r.width}x${r.height}x${r.fps}`}
-                value={`${r.width}x${r.height}x${r.fps}`}
-              >
-                {r.label}
-              </option>
-            ))}
-          </select>
-
-          <button
-            type="button"
-            disabled={Object.keys(clips).length === 0}
-            onClick={handleCaptureSnapshot}
-            className="inline-flex items-center gap-1 rounded px-2 py-1 text-[10px] font-medium text-zinc-300 hover:bg-zinc-800 hover:text-cyan-300 disabled:cursor-not-allowed disabled:opacity-35"
-            title="Tangkap Frame Saat Ini sebagai Gambar PNG (juga masuk Media Bin)"
-          >
-            <Camera className="h-3.5 w-3.5" />
-            <span className="hidden sm:inline">Snapshot</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={cycleSafeGuide}
-            className={`inline-flex items-center gap-1 rounded px-2 py-1 text-[10px] font-medium transition-colors ${
-              safeGuideMode !== 'none'
-                ? 'bg-cyan-500/20 text-cyan-300'
-                : 'text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100'
-            }`}
-            title="Ganti Panduan Bingkai / Zona Aman (Grid 3x3 / TikTok / YouTube)"
-          >
-            <Grid className="h-3.5 w-3.5" />
-            {safeGuideMode !== 'none' && (
-              <span className="hidden uppercase sm:inline">{safeGuideMode}</span>
-            )}
-          </button>
-        </div>
-      </div>
-
-      {/* Canvas Container */}
+    <main className="flex min-h-0 flex-1 flex-col bg-[#0A0A0C]">
+      {/* Canvas Container (min 12px p-3 margin around canvas stage on all screens) */}
       <div
-        className="relative flex min-h-0 flex-1 items-center justify-center p-2 lg:p-4"
+        className="relative flex min-h-0 flex-1 items-center justify-center p-3 lg:p-4"
         onPointerDown={(e) => {
           if (e.target === e.currentTarget) {
             useTimelineStore.getState().clearSelection();
           }
         }}
       >
+        {/* Subtle pro engine pill in top-left corner of stage */}
+        {layoutMode !== 'mobile' && (
+          <div className="pointer-events-none absolute top-2.5 left-3 z-20 flex items-center gap-1.5">
+            <span className="rounded bg-[#18181C]/90 px-1.5 py-0.5 font-mono text-[10px] uppercase text-[#00E5FF] ring-1 ring-[#2A2A32]">
+              {experienceMode === 'pro'
+                ? backendLabel === 'webgl2'
+                  ? 'WebGL2'
+                  : 'Canvas2D'
+                : 'Pratinjau'}
+            </span>
+            <span className="hidden rounded bg-[#18181C]/80 px-1.5 py-0.5 font-mono text-[10px] text-zinc-400 sm:inline">
+              {resolution.width}×{resolution.height} @ {fps}fps
+            </span>
+          </div>
+        )}
+
         <div
           ref={stageBoxRef}
           onPointerDown={(e) => {
@@ -231,11 +195,12 @@ export function PreviewViewport() {
               useTimelineStore.getState().clearSelection();
             }
           }}
-          className="relative flex max-h-full max-w-full items-center justify-center overflow-hidden rounded-lg border border-zinc-800 bg-black shadow-2xl"
+          className="relative flex max-h-full max-w-full items-center justify-center overflow-hidden rounded-lg border border-[#2A2A32] bg-black shadow-2xl"
           style={{ aspectRatio: `${resolution.width} / ${resolution.height}` }}
         >
           <canvas
             ref={canvasRef}
+            data-swave-preview-canvas="true"
             width={resolution.width}
             height={resolution.height}
             className="h-full w-full object-contain"
@@ -356,128 +321,177 @@ export function PreviewViewport() {
         </div>
       </div>
 
-      {/* Transport Controls */}
-      <div className="flex items-center justify-between border-t border-zinc-800/80 bg-zinc-900/50 px-2.5 py-1.5 lg:px-4 lg:py-2">
-        <TimecodeReadout fps={fps} />
+      {/* Desktop / Tablet Bottom Transport & Control Strip (36px) */}
+      {layoutMode !== 'mobile' && (
+        <div className="flex h-9 shrink-0 items-center justify-between gap-2 border-t border-[#2A2A32] bg-[#18181C] px-3">
+          <div className="flex items-center gap-2">
+            <TimecodeReadout fps={fps} />
+          </div>
 
-        <div className="flex items-center gap-1 sm:gap-1.5">
-          <button
-            type="button"
-            onClick={() => {
-              usePlaybackStore.getState().seekTo(0);
-              mediaRuntime.renderFrameAt(0, usePlaybackStore.getState().isPlaying);
-            }}
-            className="rounded p-1.5 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100 active:bg-zinc-700"
-            title="Ke Awal (00:00)"
-          >
-            <SkipBack className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-          </button>
-
-          <button
-            type="button"
-            onClick={() => {
-              usePlaybackStore.getState().stepTime(-1 / fps, maxDur);
-              mediaRuntime.renderFrameAt(
-                usePlaybackStore.getState().currentTime,
-                false
-              );
-            }}
-            className="rounded p-1.5 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100 active:bg-zinc-700"
-            title="Mundur 1 Frame (ArrowLeft)"
-          >
-            <ChevronLeft className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-          </button>
-
-          <button
-            type="button"
-            onClick={() => {
-              mediaRuntime.unlockAudio();
-              usePlaybackStore.getState().togglePlay();
-            }}
-            aria-label={isPlaying ? 'Pause' : 'Play'}
-            className="flex h-8 w-10 items-center justify-center rounded-md bg-cyan-500 text-zinc-950 shadow-md shadow-cyan-500/20 transition hover:bg-cyan-400 active:scale-95"
-            title="Play / Pause (Space)"
-          >
-            {isPlaying ? (
-              <Pause className="h-4 w-4 fill-current" />
-            ) : (
-              <Play className="h-4 w-4 fill-current" />
-            )}
-          </button>
-
-          <button
-            type="button"
-            onClick={() => {
-              usePlaybackStore.getState().stepTime(1 / fps, maxDur);
-              mediaRuntime.renderFrameAt(
-                usePlaybackStore.getState().currentTime,
-                false
-              );
-            }}
-            className="rounded p-1.5 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100 active:bg-zinc-700"
-            title="Maju 1 Frame (ArrowRight)"
-          >
-            <ChevronRight className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-          </button>
-
-          <button
-            type="button"
-            onClick={() => usePlaybackStore.getState().toggleLoop()}
-            className={`rounded p-1.5 transition-colors ${
-              isLooping
-                ? 'bg-cyan-500/20 text-cyan-300'
-                : 'text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100'
-            }`}
-            title="Loop Playback"
-          >
-            <Repeat className="h-3.5 w-3.5" />
-          </button>
-
-          {experienceMode === 'pro' && (
+          <div className="flex items-center gap-1">
             <button
               type="button"
               onClick={() => {
-                const rates = [0.5, 1, 1.5, 2];
-                const idx = rates.indexOf(playbackRate);
-                usePlaybackStore
-                  .getState()
-                  .setPlaybackRate(rates[(idx + 1) % rates.length]);
+                usePlaybackStore.getState().seekTo(0);
+                mediaRuntime.renderFrameAt(0, usePlaybackStore.getState().isPlaying);
               }}
-              className="hidden rounded border border-zinc-800 bg-zinc-900 px-1.5 py-0.5 font-mono text-[10px] font-semibold text-cyan-300 hover:border-cyan-400 sm:inline-block"
-              title="Kecepatan Preview Shuttle (J / K / L)"
+              className="rounded p-1 text-zinc-400 hover:bg-[#242429] hover:text-zinc-100"
+              title="Ke Awal (00:00)"
             >
-              {playbackRate}x
+              <SkipBack className="h-3.5 w-3.5" />
             </button>
-          )}
-        </div>
 
-        <div className="flex items-center gap-1.5">
-          <button
-            type="button"
-            onClick={() => usePlaybackStore.getState().toggleMute()}
-            className="rounded p-1.5 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100"
-            aria-label="Toggle Mute"
-          >
-            {isMuted || volume === 0 ? (
-              <VolumeX className="h-4 w-4 text-rose-400" />
-            ) : (
-              <Volume2 className="h-4 w-4" />
+            <button
+              type="button"
+              onClick={() => {
+                usePlaybackStore.getState().stepTime(-1 / fps, maxDur);
+                mediaRuntime.renderFrameAt(
+                  usePlaybackStore.getState().currentTime,
+                  false
+                );
+              }}
+              className="rounded p-1 text-zinc-400 hover:bg-[#242429] hover:text-zinc-100"
+              title="Mundur 1 Frame (ArrowLeft)"
+            >
+              <ChevronLeft className="h-3.5 w-3.5" />
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                mediaRuntime.unlockAudio();
+                usePlaybackStore.getState().togglePlay();
+              }}
+              aria-label={isPlaying ? 'Pause' : 'Play'}
+              className="flex h-7 w-9 items-center justify-center rounded-md bg-[#00E5FF] text-zinc-950 shadow-sm transition hover:brightness-110 active:scale-95"
+              title="Play / Pause (Space)"
+            >
+              {isPlaying ? (
+                <Pause className="h-3.5 w-3.5 fill-current" />
+              ) : (
+                <Play className="h-3.5 w-3.5 fill-current" />
+              )}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                usePlaybackStore.getState().stepTime(1 / fps, maxDur);
+                mediaRuntime.renderFrameAt(
+                  usePlaybackStore.getState().currentTime,
+                  false
+                );
+              }}
+              className="rounded p-1 text-zinc-400 hover:bg-[#242429] hover:text-zinc-100"
+              title="Maju 1 Frame (ArrowRight)"
+            >
+              <ChevronRight className="h-3.5 w-3.5" />
+            </button>
+
+            <button
+              type="button"
+              onClick={() => usePlaybackStore.getState().toggleLoop()}
+              className={`rounded p-1 transition-colors ${
+                isLooping
+                  ? 'bg-[#00E5FF]/20 text-[#00E5FF]'
+                  : 'text-zinc-400 hover:bg-[#242429] hover:text-zinc-100'
+              }`}
+              title="Loop Playback"
+            >
+              <Repeat className="h-3.5 w-3.5" />
+            </button>
+
+            {experienceMode === 'pro' && (
+              <button
+                type="button"
+                onClick={() => {
+                  const rates = [0.5, 1, 1.5, 2];
+                  const idx = rates.indexOf(playbackRate);
+                  usePlaybackStore
+                    .getState()
+                    .setPlaybackRate(rates[(idx + 1) % rates.length]);
+                }}
+                className="hidden rounded border border-[#2A2A32] bg-[#242429] px-1.5 py-0.5 font-mono text-[10px] font-semibold text-[#00E5FF] hover:border-[#00E5FF] sm:inline-block"
+                title="Kecepatan Preview Shuttle (J / K / L)"
+              >
+                {playbackRate}x
+              </button>
             )}
-          </button>
-          <input
-            type="range"
-            aria-label="Master Volume"
-            min={0}
-            max={1}
-            step={0.05}
-            value={isMuted ? 0 : volume}
-            onChange={(e) =>
-              usePlaybackStore.getState().setVolume(Number(e.target.value))
-            }
-            className="hidden h-1.5 w-20 accent-cyan-400 sm:block"
-          />
+          </div>
+
+          <div className="flex items-center gap-1.5">
+            <select
+              aria-label="Resolusi Kanvas"
+              value={`${resolution.width}x${resolution.height}x${resolution.fps}`}
+              onChange={(e) => {
+                const found = PRESET_RESOLUTIONS.find(
+                  (r) => `${r.width}x${r.height}x${r.fps}` === e.target.value
+                );
+                if (found) useTimelineStore.getState().setResolution(found);
+              }}
+              className="max-w-[115px] rounded border border-[#2A2A32] bg-[#242429] px-1.5 py-1 text-[10px] text-zinc-200 outline-none focus:border-[#00E5FF] xl:max-w-[155px]"
+            >
+              {PRESET_RESOLUTIONS.map((r) => (
+                <option
+                  key={`${r.width}x${r.height}x${r.fps}`}
+                  value={`${r.width}x${r.height}x${r.fps}`}
+                >
+                  {r.label}
+                </option>
+              ))}
+            </select>
+
+            <button
+              type="button"
+              disabled={Object.keys(clips).length === 0}
+              onClick={handleCaptureSnapshot}
+              className="inline-flex items-center gap-1 rounded px-1.5 py-1 text-[10px] font-medium text-zinc-300 hover:bg-[#242429] hover:text-[#00E5FF] disabled:cursor-not-allowed disabled:opacity-35"
+              title="Tangkap Frame Saat Ini sebagai Gambar PNG (juga masuk Media Bin)"
+            >
+              <Camera className="h-3.5 w-3.5" />
+              <span className="hidden xl:inline">Snapshot</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={cycleSafeGuide}
+              className={`inline-flex items-center gap-1 rounded px-1.5 py-1 text-[10px] font-medium transition-colors ${
+                safeGuideMode !== 'none'
+                  ? 'bg-[#00E5FF]/20 text-[#00E5FF]'
+                  : 'text-zinc-400 hover:bg-[#242429] hover:text-zinc-100'
+              }`}
+              title="Ganti Panduan Bingkai / Zona Aman"
+            >
+              <Grid className="h-3.5 w-3.5" />
+            </button>
+
+            <button
+              type="button"
+              onClick={() => usePlaybackStore.getState().toggleMute()}
+              className="rounded p-1 text-zinc-400 hover:bg-[#242429] hover:text-zinc-100"
+              aria-label="Toggle Mute"
+            >
+              {isMuted || volume === 0 ? (
+                <VolumeX className="h-3.5 w-3.5 text-rose-400" />
+              ) : (
+                <Volume2 className="h-3.5 w-3.5" />
+              )}
+            </button>
+            <input
+              type="range"
+              aria-label="Master Volume"
+              min={0}
+              max={1}
+              step={0.05}
+              value={isMuted ? 0 : volume}
+              onChange={(e) =>
+                usePlaybackStore.getState().setVolume(Number(e.target.value))
+              }
+              className="hidden h-1 w-14 accent-[#00E5FF] xl:block"
+            />
+          </div>
         </div>
-      </div>
+      )}
     </main>
   );
 }

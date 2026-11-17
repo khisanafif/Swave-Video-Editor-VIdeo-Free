@@ -1,12 +1,15 @@
+import { useEffect, useRef } from 'react';
 import {
   AlignHorizontalSpaceAround,
   ChevronLeft,
   ChevronRight,
   Copy,
   FlipHorizontal2,
+  Image as ImageIcon,
   Lock,
   Magnet,
   Maximize2,
+  MousePointer2,
   Plus,
   Redo2,
   Scissors,
@@ -20,9 +23,13 @@ import {
   ZoomIn,
   ZoomOut,
 } from 'lucide-react';
+import type { Track, TrackType } from '@swave/shared';
 import { useStore } from 'zustand';
+import { mediaRuntime } from '../../engine/mediaRuntime';
 import { usePlaybackStore } from '../../stores/playbackStore';
 import {
+  getMainVideoTrackId,
+  getTimelineDisplayTrackOrder,
   getTimelineDuration,
   useTimelineStore,
 } from '../../stores/timelineStore';
@@ -31,10 +38,51 @@ import { ClipItem } from './ClipItem';
 import { Playhead } from './Playhead';
 import { TimeRuler } from './TimeRuler';
 
-const TRACK_ROW_HEIGHT = 54;
+export type TimelineLayoutMode = 'desktop' | 'tablet' | 'mobile';
 
-export function TimelineContainer() {
+interface TimelineContainerProps {
+  layoutMode?: TimelineLayoutMode;
+  onAddMediaClick?: () => void;
+  onCoverClick?: () => void;
+}
+
+function getTrackRowHeight(
+  trackType: TrackType,
+  isMain: boolean,
+  mode: TimelineLayoutMode
+): number {
+  if (isMain) return 56;
+  if (mode === 'mobile') {
+    if (trackType === 'text') return 28;
+    if (trackType === 'audio') return 36;
+    return 40;
+  }
+  if (trackType === 'text') return 38;
+  if (trackType === 'audio') return 40;
+  return 44;
+}
+
+function trackTypeBadgeClass(type: Track['type'], isMain: boolean): string {
+  if (isMain) return 'bg-[#00E5FF]';
+  if (type === 'audio') return 'bg-emerald-400';
+  if (type === 'text') return 'bg-violet-400';
+  return 'bg-amber-400';
+}
+
+export function TimelineContainer({
+  layoutMode = 'desktop',
+  onAddMediaClick,
+  onCoverClick,
+}: TimelineContainerProps) {
+  const rulerScrollRef = useRef<HTMLDivElement>(null);
+  const headersScrollRef = useRef<HTMLDivElement>(null);
+  const canvasScrollRef = useRef<HTMLDivElement>(null);
+  const mobileScrollRef = useRef<HTMLDivElement>(null);
+  const isProgrammaticMobileScroll = useRef(false);
+
   const experienceMode = useUiStore((s) => s.experienceMode);
+  const timelineToolMode = useUiStore((s) => s.timelineToolMode);
+  const setTimelineToolMode = useUiStore((s) => s.setTimelineToolMode);
   const tracks = useTimelineStore((s) => s.tracks);
   const trackOrder = useTimelineStore((s) => s.trackOrder);
   const clips = useTimelineStore((s) => s.clips);
@@ -45,9 +93,42 @@ export function TimelineContainer() {
   const pastStates = useStore(useTimelineStore.temporal, (s) => s.pastStates);
   const futureStates = useStore(useTimelineStore.temporal, (s) => s.futureStates);
 
+  const displayTrackOrder = getTimelineDisplayTrackOrder(trackOrder, tracks);
+  const mainVideoTrackId = getMainVideoTrackId(trackOrder, tracks);
+
   const totalDuration = getTimelineDuration(clips, 20) + 10;
   const laneWidth = Math.max(800, Math.ceil(totalDuration * pixelsPerSecond));
-  const lanesTotalHeight = Math.max(150, trackOrder.length * TRACK_ROW_HEIGHT + 28);
+  const gapPx = layoutMode === 'mobile' ? 6 : 0;
+
+  const lanesTotalHeight = Math.max(
+    140,
+    displayTrackOrder.reduce((sum, tid) => {
+      const tr = tracks[tid];
+      if (!tr) return sum;
+      return sum + getTrackRowHeight(tr.type, tid === mainVideoTrackId, layoutMode) + gapPx;
+    }, 0)
+  );
+
+  // Sync mobile scroll position when playback advances or external seek happens
+  useEffect(() => {
+    if (layoutMode !== 'mobile') return;
+    const syncToTime = (time: number) => {
+      const el = mobileScrollRef.current;
+      if (!el) return;
+      const targetLeft = Math.max(0, time * pixelsPerSecond);
+      if (Math.abs(el.scrollLeft - targetLeft) < 2) return;
+      isProgrammaticMobileScroll.current = true;
+      el.scrollLeft = targetLeft;
+      requestAnimationFrame(() => {
+        isProgrammaticMobileScroll.current = false;
+      });
+    };
+
+    syncToTime(usePlaybackStore.getState().currentTime);
+    return usePlaybackStore.subscribe((state) => {
+      syncToTime(state.currentTime);
+    });
+  }, [layoutMode, pixelsPerSecond]);
 
   const handleSplitAtPlayhead = () => {
     const playhead = usePlaybackStore.getState().currentTime;
@@ -56,92 +137,316 @@ export function TimelineContainer() {
       state.selectedClipIds.length > 0
         ? state.selectedClipIds
         : Object.values(state.clips)
-          .filter((c) => playhead > c.start && playhead < c.start + c.duration)
-          .map((c) => c.id);
+            .filter((c) => playhead > c.start && playhead < c.start + c.duration)
+            .map((c) => c.id);
 
     for (const cid of targetIds) {
       state.splitClipAtTime(cid, playhead);
     }
   };
 
+  // ============================================================================
+  // MOBILE TIMELINE (< 768px — Fixed Center Playhead + 50vw Horizontal Buffer)
+  // ============================================================================
+  if (layoutMode === 'mobile') {
+    const rulerHeight = 22;
+    const mainTrackIndex = displayTrackOrder.indexOf(mainVideoTrackId || '');
+    const mainTrackOffsetTop = displayTrackOrder
+      .slice(0, Math.max(0, mainTrackIndex))
+      .reduce((acc, tid) => {
+        const tr = tracks[tid];
+        return acc + (tr ? getTrackRowHeight(tr.type, false, 'mobile') + 6 : 0);
+      }, rulerHeight + 6);
+
+    return (
+      <section
+        aria-label="Multi-Track Timeline"
+        className="relative flex h-[34dvh] min-h-[175px] shrink-0 flex-col overflow-hidden border-t border-[#2A2A32] bg-[#0A0A0C]"
+      >
+        {/* Fixed Static White Playhead pinned horizontally at X = 50% */}
+        <Playhead
+          variant="static-center"
+          height={Math.max(220, lanesTotalHeight + rulerHeight + 16)}
+        />
+
+        {/* Floating White Circle [+] Add Clip Button aligned with Main Video Track */}
+        {onAddMediaClick && (
+          <button
+            type="button"
+            onClick={onAddMediaClick}
+            aria-label="Tambah Media ke Track Utama"
+            style={{ top: Math.max(30, mainTrackOffsetTop + 10) }}
+            className="absolute right-3 z-40 flex h-9 w-9 items-center justify-center rounded-full bg-white text-zinc-950 shadow-lg transition active:scale-95"
+          >
+            <Plus className="h-5 w-5 stroke-[2.5]" />
+          </button>
+        )}
+
+        {/* Horizontally & Vertically Scrollable Inner Tracks with 50vw left/right padding */}
+        <div
+          ref={mobileScrollRef}
+          onScroll={(e) => {
+            if (isProgrammaticMobileScroll.current) return;
+            const target = e.currentTarget;
+            const time = Math.max(
+              0,
+              Number((target.scrollLeft / pixelsPerSecond).toFixed(3))
+            );
+            usePlaybackStore.getState().seekTo(time);
+            mediaRuntime.renderFrameAt(time, false);
+          }}
+          onPointerDown={(e) => {
+            if (e.target === e.currentTarget) {
+              useTimelineStore.getState().clearSelection();
+            }
+          }}
+          className="no-scrollbar relative min-h-0 flex-1 overflow-auto bg-[#0A0A0C]"
+        >
+          <div
+            className="relative flex flex-col gap-[6px] pb-4"
+            style={{
+              width: `calc(${laneWidth}px + 100vw)`,
+              paddingLeft: '50vw',
+              paddingRight: '50vw',
+            }}
+          >
+            {/* Sticky Top Time Ruler (22px) */}
+            <div className="sticky top-0 z-20 -ml-[50vw] pl-[50vw] bg-[#111114]/95">
+              <TimeRuler totalDuration={totalDuration} height={rulerHeight} />
+            </div>
+
+            {displayTrackOrder.map((trackId) => {
+              const track = tracks[trackId];
+              if (!track) return null;
+              const isMain = track.id === mainVideoTrackId;
+              const rowH = getTrackRowHeight(track.type, isMain, 'mobile');
+
+              return (
+                <div
+                  key={track.id}
+                  data-track-id={track.id}
+                  style={{ height: rowH, width: laneWidth }}
+                  onPointerDown={(e) => {
+                    if (e.target === e.currentTarget) {
+                      useTimelineStore.getState().clearSelection();
+                    }
+                  }}
+                  className={`relative rounded-md border border-[#2A2A32]/60 ${
+                    isMain
+                      ? 'bg-[#181820]'
+                      : track.isMuted
+                      ? 'bg-[#111114]/50 opacity-55'
+                      : 'bg-[#111114]'
+                  }`}
+                >
+                  {/* Inline Left-of-00:00 Controls inside padding-left: 50vw */}
+                  {isMain ? (
+                    <div
+                      style={{ right: 'calc(100% + 10px)' }}
+                      className="absolute top-1/2 flex -translate-y-1/2 items-center gap-1.5"
+                    >
+                      <button
+                        type="button"
+                        onClick={() =>
+                          useTimelineStore.getState().toggleTrackMute(track.id)
+                        }
+                        className={`flex h-9 w-9 flex-col items-center justify-center rounded-md border border-[#2A2A32] text-[9px] leading-tight ${
+                          track.isMuted
+                            ? 'bg-rose-500/20 text-rose-300'
+                            : 'bg-[#18181C] text-zinc-300'
+                        }`}
+                        title="Bisukan suara track utama"
+                      >
+                        {track.isMuted ? (
+                          <VolumeX className="h-3.5 w-3.5" />
+                        ) : (
+                          <Volume2 className="h-3.5 w-3.5" />
+                        )}
+                        <span>Bisu</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={onCoverClick}
+                        className="flex h-9 w-11 flex-col items-center justify-center rounded-md border border-[#2A2A32] bg-[#18181C] text-[9px] leading-tight text-zinc-300"
+                        title="Ambil frame sampul PNG"
+                      >
+                        <ImageIcon className="h-3.5 w-3.5 text-[#00E5FF]" />
+                        <span>Sampul</span>
+                      </button>
+                    </div>
+                  ) : (
+                    <div
+                      style={{ right: 'calc(100% + 10px)' }}
+                      className="pointer-events-none absolute top-1/2 -translate-y-1/2 whitespace-nowrap rounded bg-[#18181C] px-1.5 py-0.5 text-[9px] font-medium text-zinc-400"
+                    >
+                      {track.name}
+                    </div>
+                  )}
+
+                  {track.clipIds.map((cid) => {
+                    const clip = clips[cid];
+                    if (!clip) return null;
+                    return (
+                      <ClipItem
+                        key={clip.id}
+                        clip={clip}
+                        isLocked={track.isLocked}
+                        isMainTrack={isMain}
+                        compactCapsule={track.type === 'text'}
+                        touchHandles
+                      />
+                    );
+                  })}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </section>
+    );
+  }
+
+  // ============================================================================
+  // DESKTOP & TABLET (2x2 Synchronized Sticky Matrix Timeline)
+  // ============================================================================
+  const isTablet = layoutMode === 'tablet';
+  const headerColWidth = isTablet ? 96 : 140;
+  const toolbarHeightClass = isTablet ? 'h-[44px]' : 'h-9';
+  const rulerHeight = 24;
+
+  const syncMatrixScroll = () => {
+    const canvasEl = canvasScrollRef.current;
+    if (!canvasEl) return;
+    if (rulerScrollRef.current) {
+      rulerScrollRef.current.scrollLeft = canvasEl.scrollLeft;
+    }
+    if (headersScrollRef.current) {
+      headersScrollRef.current.scrollTop = canvasEl.scrollTop;
+    }
+  };
+
   return (
     <section
       aria-label="Multi-Track Timeline"
-      className="flex min-h-[180px] flex-1 flex-col border-t border-zinc-800 bg-zinc-950 lg:h-72 lg:flex-none"
+      className="flex min-h-0 flex-1 flex-col border-t border-[#2A2A32] bg-[#111114]"
     >
-      {/* TimelineToolbar — horizontally scrollable on narrow Android viewports */}
-      <div className="flex items-center justify-between gap-2 overflow-x-auto border-b border-zinc-800/80 bg-zinc-900/70 px-2.5 py-1.5 lg:px-3">
+      {/* Timeline Toolbar (36px Desktop / 44px Touch Tablet) */}
+      <div
+        className={`flex shrink-0 items-center justify-between gap-2 overflow-x-auto border-b border-[#2A2A32] bg-[#18181C] px-2.5 lg:px-3 ${toolbarHeightClass}`}
+      >
         <div className="flex shrink-0 items-center gap-1">
+          {/* Desktop Cursor Mode Switcher: [A] Select vs [B] Blade */}
+          {!isTablet && (
+            <div className="mr-1 inline-flex items-center rounded border border-[#2A2A32] bg-[#111114] p-0.5">
+              <button
+                type="button"
+                onClick={() => setTimelineToolMode('select')}
+                className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] font-medium ${
+                  timelineToolMode === 'select'
+                    ? 'bg-[#00E5FF] text-zinc-950'
+                    : 'text-zinc-400 hover:text-zinc-100'
+                }`}
+                title="Alat Pilih & Geser Klip (A)"
+              >
+                <MousePointer2 className="h-3 w-3" />
+                <span>Pilih</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setTimelineToolMode('blade')}
+                className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] font-medium ${
+                  timelineToolMode === 'blade'
+                    ? 'bg-rose-500 text-white'
+                    : 'text-zinc-400 hover:text-zinc-100'
+                }`}
+                title="Alat Potong / Blade — Klik klip di timeline untuk memotong langsung (B)"
+              >
+                <Scissors className="h-3 w-3" />
+                <span>Blade</span>
+              </button>
+            </div>
+          )}
+
           <button
             type="button"
             disabled={pastStates.length === 0}
             onClick={() => useTimelineStore.temporal.getState().undo()}
-            className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs text-zinc-200 hover:bg-zinc-800 active:bg-zinc-700 disabled:cursor-not-allowed disabled:opacity-35"
+            className={`inline-flex items-center gap-1 rounded px-2 text-xs text-zinc-200 hover:bg-[#242429] active:bg-zinc-700 disabled:cursor-not-allowed disabled:opacity-35 ${
+              isTablet ? 'h-9' : 'py-1'
+            }`}
             title="Undo (Ctrl+Z)"
           >
             <Undo2 className="h-3.5 w-3.5" />
-            <span className="hidden sm:inline">Undo</span>
+            <span className="hidden xl:inline">Undo</span>
           </button>
           <button
             type="button"
             disabled={futureStates.length === 0}
             onClick={() => useTimelineStore.temporal.getState().redo()}
-            className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs text-zinc-200 hover:bg-zinc-800 active:bg-zinc-700 disabled:cursor-not-allowed disabled:opacity-35"
+            className={`inline-flex items-center gap-1 rounded px-2 text-xs text-zinc-200 hover:bg-[#242429] active:bg-zinc-700 disabled:cursor-not-allowed disabled:opacity-35 ${
+              isTablet ? 'h-9' : 'py-1'
+            }`}
             title="Redo (Ctrl+Y)"
           >
             <Redo2 className="h-3.5 w-3.5" />
-            <span className="hidden sm:inline">Redo</span>
+            <span className="hidden xl:inline">Redo</span>
           </button>
 
-          <div className="mx-1 h-4 w-px bg-zinc-800" />
+          <div className="mx-1 h-4 w-px bg-[#2A2A32]" />
 
           <button
             type="button"
             onClick={handleSplitAtPlayhead}
-            className="inline-flex items-center gap-1 rounded bg-zinc-800/70 px-2.5 py-1 text-xs font-medium text-zinc-100 hover:bg-zinc-800 active:bg-zinc-700"
+            className={`inline-flex items-center gap-1 rounded bg-[#242429] px-2.5 text-xs font-medium text-zinc-100 hover:bg-[#2f2f38] ${
+              isTablet ? 'h-9' : 'py-1'
+            }`}
             title="Split clip di posisi Playhead (S)"
           >
-            <Scissors className="h-3.5 w-3.5 text-cyan-400" />
+            <Scissors className="h-3.5 w-3.5 text-[#00E5FF]" />
             <span>Split</span>
           </button>
 
-          <button
-            type="button"
-            disabled={selectedClipIds.length !== 1}
-            onClick={() =>
-              selectedClipIds[0] &&
-              useTimelineStore
-                .getState()
-                .trimClipToPlayhead(
-                  selectedClipIds[0],
-                  'left',
-                  usePlaybackStore.getState().currentTime
-                )
-            }
-            className="hidden items-center gap-0.5 rounded px-1.5 py-1 font-mono text-[11px] text-zinc-200 hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-35 sm:inline-flex"
-            title="Pangkas Awal Klip ke Playhead ([)"
-          >
-            <span>[ Trim</span>
-          </button>
+          {!isTablet && (
+            <>
+              <button
+                type="button"
+                disabled={selectedClipIds.length !== 1}
+                onClick={() =>
+                  selectedClipIds[0] &&
+                  useTimelineStore
+                    .getState()
+                    .trimClipToPlayhead(
+                      selectedClipIds[0],
+                      'left',
+                      usePlaybackStore.getState().currentTime
+                    )
+                }
+                className="inline-flex items-center gap-0.5 rounded px-1.5 py-1 font-mono text-[11px] text-zinc-200 hover:bg-[#242429] disabled:cursor-not-allowed disabled:opacity-35"
+                title="Pangkas Awal Klip ke Playhead ([)"
+              >
+                <span>[ Trim</span>
+              </button>
 
-          <button
-            type="button"
-            disabled={selectedClipIds.length !== 1}
-            onClick={() =>
-              selectedClipIds[0] &&
-              useTimelineStore
-                .getState()
-                .trimClipToPlayhead(
-                  selectedClipIds[0],
-                  'right',
-                  usePlaybackStore.getState().currentTime
-                )
-            }
-            className="hidden items-center gap-0.5 rounded px-1.5 py-1 font-mono text-[11px] text-zinc-200 hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-35 sm:inline-flex"
-            title="Pangkas Akhir Klip ke Playhead (])"
-          >
-            <span>Trim ]</span>
-          </button>
+              <button
+                type="button"
+                disabled={selectedClipIds.length !== 1}
+                onClick={() =>
+                  selectedClipIds[0] &&
+                  useTimelineStore
+                    .getState()
+                    .trimClipToPlayhead(
+                      selectedClipIds[0],
+                      'right',
+                      usePlaybackStore.getState().currentTime
+                    )
+                }
+                className="inline-flex items-center gap-0.5 rounded px-1.5 py-1 font-mono text-[11px] text-zinc-200 hover:bg-[#242429] disabled:cursor-not-allowed disabled:opacity-35"
+                title="Pangkas Akhir Klip ke Playhead (])"
+              >
+                <span>Trim ]</span>
+              </button>
+            </>
+          )}
 
           <button
             type="button"
@@ -155,11 +460,13 @@ export function TimelineContainer() {
                   usePlaybackStore.getState().currentTime
                 )
             }
-            className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs text-zinc-200 hover:bg-zinc-800 active:bg-zinc-700 disabled:cursor-not-allowed disabled:opacity-35"
+            className={`inline-flex items-center gap-1 rounded px-2 text-xs text-zinc-200 hover:bg-[#242429] disabled:cursor-not-allowed disabled:opacity-35 ${
+              isTablet ? 'h-9' : 'py-1'
+            }`}
             title="Freeze Frame 1.5s"
           >
-            <Snowflake className="h-3.5 w-3.5 text-cyan-400" />
-            <span className="hidden sm:inline">Freeze</span>
+            <Snowflake className="h-3.5 w-3.5 text-[#00E5FF]" />
+            <span className="hidden md:inline">Freeze</span>
           </button>
 
           <button
@@ -169,21 +476,23 @@ export function TimelineContainer() {
               selectedClipIds[0] &&
               useTimelineStore.getState().flipClip(selectedClipIds[0], 'h')
             }
-            className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs text-zinc-200 hover:bg-zinc-800 active:bg-zinc-700 disabled:cursor-not-allowed disabled:opacity-35"
+            className={`inline-flex items-center gap-1 rounded px-2 text-xs text-zinc-200 hover:bg-[#242429] disabled:cursor-not-allowed disabled:opacity-35 ${
+              isTablet ? 'h-9' : 'py-1'
+            }`}
             title="Mirror Horizontal"
           >
             <FlipHorizontal2 className="h-3.5 w-3.5 text-violet-400" />
-            <span className="hidden sm:inline">Mirror</span>
+            <span className="hidden lg:inline">Mirror</span>
           </button>
 
           {selectedClipIds.length === 1 && (
-            <div className="hidden items-center rounded border border-zinc-800 bg-zinc-900/80 md:inline-flex">
+            <div className="hidden items-center rounded border border-[#2A2A32] bg-[#111114] md:inline-flex">
               <button
                 type="button"
                 onClick={() =>
                   useTimelineStore.getState().nudgeClip(selectedClipIds[0], -0.1)
                 }
-                className="px-1 py-0.5 text-[10px] text-zinc-300 hover:bg-zinc-800"
+                className="px-1 py-0.5 text-[10px] text-zinc-300 hover:bg-[#242429]"
                 title="Geser klip mundur 0.1 detik"
               >
                 <ChevronLeft className="inline h-3 w-3" />
@@ -194,7 +503,7 @@ export function TimelineContainer() {
                 onClick={() =>
                   useTimelineStore.getState().nudgeClip(selectedClipIds[0], 0.1)
                 }
-                className="border-l border-zinc-800 px-1 py-0.5 text-[10px] text-zinc-300 hover:bg-zinc-800"
+                className="border-l border-[#2A2A32] px-1 py-0.5 text-[10px] text-zinc-300 hover:bg-[#242429]"
                 title="Geser klip maju 0.1 detik"
               >
                 0.1s
@@ -210,11 +519,13 @@ export function TimelineContainer() {
               selectedClipIds[0] &&
               useTimelineStore.getState().duplicateClip(selectedClipIds[0])
             }
-            className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs text-zinc-200 hover:bg-zinc-800 active:bg-zinc-700 disabled:cursor-not-allowed disabled:opacity-35"
+            className={`inline-flex items-center gap-1 rounded px-2 text-xs text-zinc-200 hover:bg-[#242429] disabled:cursor-not-allowed disabled:opacity-35 ${
+              isTablet ? 'h-9' : 'py-1'
+            }`}
             title="Duplikat klip terpilih"
           >
             <Copy className="h-3.5 w-3.5" />
-            <span className="hidden sm:inline">Duplikat</span>
+            <span className="hidden xl:inline">Duplikat</span>
           </button>
 
           <button
@@ -223,11 +534,13 @@ export function TimelineContainer() {
             onClick={() =>
               useTimelineStore.getState().deleteClips(selectedClipIds)
             }
-            className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs text-rose-300 hover:bg-rose-950/60 active:bg-rose-900/50 disabled:cursor-not-allowed disabled:opacity-35"
+            className={`inline-flex items-center gap-1 rounded px-2 text-xs text-rose-300 hover:bg-rose-950/60 disabled:cursor-not-allowed disabled:opacity-35 ${
+              isTablet ? 'h-9' : 'py-1'
+            }`}
             title="Hapus klip terpilih (Delete)"
           >
             <Trash2 className="h-3.5 w-3.5" />
-            <span className="hidden sm:inline">Hapus</span>
+            <span className="hidden xl:inline">Hapus</span>
           </button>
 
           <button
@@ -236,11 +549,13 @@ export function TimelineContainer() {
             onClick={() =>
               useTimelineStore.getState().rippleDeleteClips(selectedClipIds)
             }
-            className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs text-amber-300 hover:bg-amber-950/50 active:bg-amber-900/50 disabled:cursor-not-allowed disabled:opacity-35"
+            className={`inline-flex items-center gap-1 rounded px-2 text-xs text-amber-300 hover:bg-amber-950/50 disabled:cursor-not-allowed disabled:opacity-35 ${
+              isTablet ? 'h-9' : 'py-1'
+            }`}
             title="Hapus & Rapatkan celah otomatis (Shift+Delete)"
           >
             <AlignHorizontalSpaceAround className="h-3.5 w-3.5" />
-            <span className="hidden md:inline">Rapatkan</span>
+            <span className="hidden xl:inline">Rapatkan</span>
           </button>
 
           {experienceMode === 'pro' && selectedClipIds.length === 1 && (
@@ -248,48 +563,32 @@ export function TimelineContainer() {
               type="button"
               onClick={() => {
                 const c = clips[selectedClipIds[0]];
-                if (c) {
-                  useTimelineStore.getState().closeTrackGaps(c.trackId);
-                }
+                if (c) useTimelineStore.getState().closeTrackGaps(c.trackId);
               }}
-              className="hidden items-center gap-1 rounded px-2 py-1 text-xs text-zinc-200 hover:bg-zinc-800 lg:inline-flex"
+              className="hidden items-center gap-1 rounded px-2 py-1 text-xs text-zinc-200 hover:bg-[#242429] lg:inline-flex"
               title="Tutup semua celah kosong di track klip terpilih"
             >
               <span>Tutup Celah</span>
             </button>
           )}
-
-          <div className="mx-1 h-4 w-px bg-zinc-800" />
-
-          <button
-            type="button"
-            onClick={() => useTimelineStore.getState().toggleSnap()}
-            className={`inline-flex items-center gap-1 rounded px-2 py-1 text-xs transition-colors ${snapEnabled
-              ? 'bg-cyan-500/20 text-cyan-300'
-              : 'text-zinc-400 hover:bg-zinc-800'
-              }`}
-            title="Toggle Magnetic Snap"
-          >
-            <Magnet className="h-3.5 w-3.5" />
-            <span className="hidden sm:inline">Snap</span>
-          </button>
         </div>
 
         <div className="flex shrink-0 items-center gap-1.5">
+          {/* Add Tracks */}
           <div className="flex items-center gap-1">
             <button
               type="button"
               onClick={() => useTimelineStore.getState().addTrack('video')}
-              className="inline-flex items-center gap-0.5 rounded border border-zinc-700/80 bg-zinc-800/70 px-1.5 py-1 text-[11px] text-zinc-200 hover:bg-zinc-700"
-              title="Tambah Track Video"
+              className="inline-flex items-center gap-0.5 rounded border border-[#2A2A32] bg-[#242429] px-1.5 py-1 text-[11px] text-zinc-200 hover:border-[#00E5FF]"
+              title="Tambah Track Video / PIP"
             >
-              <Plus className="h-3 w-3 text-sky-400" />
+              <Plus className="h-3 w-3 text-[#00E5FF]" />
               <span>Vid</span>
             </button>
             <button
               type="button"
               onClick={() => useTimelineStore.getState().addTrack('text')}
-              className="inline-flex items-center gap-0.5 rounded border border-zinc-700/80 bg-zinc-800/70 px-1.5 py-1 text-[11px] text-zinc-200 hover:bg-zinc-700"
+              className="inline-flex items-center gap-0.5 rounded border border-[#2A2A32] bg-[#242429] px-1.5 py-1 text-[11px] text-zinc-200 hover:border-violet-400"
               title="Tambah Track Teks"
             >
               <Plus className="h-3 w-3 text-violet-400" />
@@ -298,7 +597,7 @@ export function TimelineContainer() {
             <button
               type="button"
               onClick={() => useTimelineStore.getState().addTrack('audio')}
-              className="inline-flex items-center gap-0.5 rounded border border-zinc-700/80 bg-zinc-800/70 px-1.5 py-1 text-[11px] text-zinc-200 hover:bg-zinc-700"
+              className="inline-flex items-center gap-0.5 rounded border border-[#2A2A32] bg-[#242429] px-1.5 py-1 text-[11px] text-zinc-200 hover:border-emerald-400"
               title="Tambah Track Audio"
             >
               <Plus className="h-3 w-3 text-emerald-400" />
@@ -306,13 +605,29 @@ export function TimelineContainer() {
             </button>
           </div>
 
+          <div className="h-4 w-px bg-[#2A2A32]" />
+
+          <button
+            type="button"
+            onClick={() => useTimelineStore.getState().toggleSnap()}
+            className={`inline-flex items-center gap-1 rounded px-2 py-1 text-xs transition-colors ${
+              snapEnabled
+                ? 'bg-[#00E5FF]/20 text-[#00E5FF]'
+                : 'text-zinc-400 hover:bg-[#242429]'
+            }`}
+            title="Toggle Magnetic Snap"
+          >
+            <Magnet className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">Snap</span>
+          </button>
+
           <div className="flex items-center gap-1 pl-1">
             <button
               type="button"
               onClick={() =>
                 useTimelineStore.getState().setPixelsPerSecond(pixelsPerSecond - 15)
               }
-              className="rounded p-1 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100"
+              className="rounded p-1 text-zinc-400 hover:bg-[#242429] hover:text-zinc-100"
               aria-label="Zoom out timeline"
             >
               <ZoomOut className="h-3.5 w-3.5" />
@@ -328,14 +643,14 @@ export function TimelineContainer() {
                   .getState()
                   .setPixelsPerSecond(Number(e.target.value))
               }
-              className="hidden h-1.5 w-20 accent-cyan-400 sm:block"
+              className="hidden h-1.5 w-20 accent-[#00E5FF] sm:block"
             />
             <button
               type="button"
               onClick={() =>
                 useTimelineStore.getState().setPixelsPerSecond(pixelsPerSecond + 15)
               }
-              className="rounded p-1 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100"
+              className="rounded p-1 text-zinc-400 hover:bg-[#242429] hover:text-zinc-100"
               aria-label="Zoom in timeline"
             >
               <ZoomIn className="h-3.5 w-3.5" />
@@ -347,7 +662,7 @@ export function TimelineContainer() {
                 const fitPps = Math.max(15, Math.min(180, Math.round(640 / dur)));
                 useTimelineStore.getState().setPixelsPerSecond(fitPps);
               }}
-              className="hidden rounded p-1 text-zinc-400 hover:bg-zinc-800 hover:text-cyan-300 sm:inline-flex"
+              className="hidden rounded p-1 text-zinc-400 hover:bg-[#242429] hover:text-[#00E5FF] sm:inline-flex"
               aria-label="Fit timeline"
               title="Paskan seluruh durasi timeline ke layar"
             >
@@ -357,158 +672,193 @@ export function TimelineContainer() {
         </div>
       </div>
 
-      {/* TimelineWorkspace */}
-      <div className="flex min-h-0 flex-1 overflow-hidden">
-        {/* TrackHeaderList — compact on Android phones (w-24), spacious on desktop (lg:w-44) */}
-        <div className="w-24 shrink-0 border-r border-zinc-800 bg-zinc-900/50 sm:w-32 lg:w-44">
-          <div className="flex h-7 items-center border-b border-zinc-800 px-2 text-[10px] font-semibold tracking-wider text-zinc-500 uppercase lg:px-3">
-            Tracks
-          </div>
-          <div className="overflow-y-auto">
-            {trackOrder.map((trackId) => {
-              const track = tracks[trackId];
-              if (!track) return null;
-              const badgeColor =
-                track.type === 'audio'
-                  ? 'bg-emerald-400'
-                  : track.type === 'text'
-                    ? 'bg-violet-400'
-                    : 'bg-sky-400';
+      {/* Synchronized 2x2 Matrix Grid: Corner (140x24 / 96x24) | Ruler (1fr x 24) / Headers (140x1fr) | Canvas (1fr x 1fr) */}
+      <div
+        className="grid min-h-0 flex-1 overflow-hidden"
+        style={{
+          gridTemplateColumns: `${headerColWidth}px minmax(0, 1fr)`,
+          gridTemplateRows: `${rulerHeight}px minmax(0, 1fr)`,
+        }}
+      >
+        {/* Cell 1: Top-Left Static Corner Box */}
+        <div className="z-20 flex items-center justify-between border-r border-b border-[#2A2A32] bg-[#18181C] px-2.5 text-[10px] font-semibold tracking-wider text-zinc-400 uppercase">
+          <span>Tracks</span>
+          <Magnet className="h-3 w-3 text-[#00E5FF]" />
+        </div>
 
-              return (
-                <div
-                  key={track.id}
-                  style={{ height: TRACK_ROW_HEIGHT }}
-                  className="flex items-center justify-between border-b border-zinc-800/70 px-1.5 lg:px-2.5"
-                >
-                  <div className="flex min-w-0 items-center gap-1.5">
-                    <span className={`h-2.5 w-1 shrink-0 rounded-full ${badgeColor}`} />
-                    <span
-                      onDoubleClick={() => {
-                        if (experienceMode !== 'pro') return;
-                        const nextName = window.prompt(
-                          'Ubah nama track:',
-                          track.name
-                        );
-                        if (nextName) {
-                          useTimelineStore
-                            .getState()
-                            .renameTrack(track.id, nextName);
-                        }
-                      }}
-                      title={
-                        experienceMode === 'pro'
-                          ? `${track.name} (Klik ganda untuk ganti nama)`
-                          : track.name
-                      }
-                      className="truncate text-[11px] font-medium text-zinc-200 lg:text-xs"
-                    >
-                      {track.name}
-                    </span>
-                  </div>
-                  <div className="flex shrink-0 items-center gap-0.5">
-                    <button
-                      type="button"
-                      onClick={() =>
-                        useTimelineStore.getState().toggleTrackMute(track.id)
-                      }
-                      className={`rounded p-1 ${track.isMuted
-                        ? 'bg-amber-500/20 text-amber-300'
-                        : 'text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200'
-                        }`}
-                      title={track.isMuted ? 'Unmute track' : 'Mute track'}
-                    >
-                      {track.isMuted ? (
-                        <VolumeX className="h-3 w-3 lg:h-3.5 lg:w-3.5" />
-                      ) : (
-                        <Volume2 className="h-3 w-3 lg:h-3.5 lg:w-3.5" />
-                      )}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() =>
-                        useTimelineStore.getState().toggleTrackLock(track.id)
-                      }
-                      className={`rounded p-1 ${track.isLocked
-                        ? 'bg-rose-500/20 text-rose-300'
-                        : 'text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200'
-                        }`}
-                      title={track.isLocked ? 'Unlock track' : 'Lock track'}
-                    >
-                      {track.isLocked ? (
-                        <Lock className="h-3 w-3 lg:h-3.5 lg:w-3.5" />
-                      ) : (
-                        <Unlock className="h-3 w-3 lg:h-3.5 lg:w-3.5" />
-                      )}
-                    </button>
-                    {trackOrder.length > 1 && !track.isLocked && (
-                      <button
-                        type="button"
-                        onClick={() =>
-                          useTimelineStore.getState().deleteTrack(track.id)
-                        }
-                        className="inline-flex rounded p-1 text-zinc-500 hover:bg-zinc-800 hover:text-rose-400"
-                        title="Hapus track"
-                      >
-                        <X className="h-3 w-3" />
-                      </button>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
+        {/* Cell 2: Top-Right Sticky Time Ruler Header (Synced Horizontal Scroll) */}
+        <div
+          ref={rulerScrollRef}
+          className="no-scrollbar z-20 overflow-x-hidden overflow-y-hidden border-b border-[#2A2A32] bg-[#111114]"
+        >
+          <div className="relative" style={{ width: laneWidth, height: rulerHeight }}>
+            <TimeRuler totalDuration={totalDuration} height={rulerHeight} />
+            <Playhead variant="ruler-head" height={rulerHeight} />
           </div>
         </div>
 
-        {/* TimelineScrollArea */}
+        {/* Cell 3: Bottom-Left Sticky Track Headers (Synced Vertical Scroll) */}
         <div
-          className="relative min-w-0 flex-1 overflow-auto bg-[#0d0d10]"
+          ref={headersScrollRef}
+          className="no-scrollbar z-20 overflow-x-hidden overflow-y-hidden border-r border-[#2A2A32] bg-[#18181C]"
+        >
+          {displayTrackOrder.map((trackId) => {
+            const track = tracks[trackId];
+            if (!track) return null;
+            const isMain = track.id === mainVideoTrackId;
+            const rowH = getTrackRowHeight(track.type, isMain, layoutMode);
+            const badgeColor = trackTypeBadgeClass(track.type, isMain);
+
+            return (
+              <div
+                key={track.id}
+                style={{ height: rowH }}
+                className={`flex items-center justify-between border-b border-[#2A2A32] px-1.5 lg:px-2.5 ${
+                  isMain ? 'bg-[#181820]' : 'bg-[#18181C]'
+                }`}
+              >
+                <div className="flex min-w-0 items-center gap-1.5">
+                  <span className={`h-3 w-1 shrink-0 rounded-full ${badgeColor}`} />
+                  <span
+                    onDoubleClick={() => {
+                      if (experienceMode !== 'pro') return;
+                      const nextName = window.prompt(
+                        'Ubah nama track:',
+                        track.name
+                      );
+                      if (nextName) {
+                        useTimelineStore
+                          .getState()
+                          .renameTrack(track.id, nextName);
+                      }
+                    }}
+                    title={
+                      isMain
+                        ? `${track.name} (Poros Utama)`
+                        : experienceMode === 'pro'
+                        ? `${track.name} (Klik ganda untuk ganti nama)`
+                        : track.name
+                    }
+                    className={`truncate text-[11px] font-medium ${
+                      isMain ? 'font-bold text-white' : 'text-zinc-300'
+                    }`}
+                  >
+                    {track.name}
+                  </span>
+                </div>
+
+                <div className="flex shrink-0 items-center gap-0.5">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      useTimelineStore.getState().toggleTrackMute(track.id)
+                    }
+                    className={`rounded p-1 ${
+                      track.isMuted
+                        ? 'bg-rose-500/20 text-rose-300'
+                        : 'text-zinc-400 hover:bg-[#242429] hover:text-zinc-100'
+                    }`}
+                    title={track.isMuted ? 'Unmute track' : 'Mute track'}
+                  >
+                    {track.isMuted ? (
+                      <VolumeX className="h-3 w-3" />
+                    ) : (
+                      <Volume2 className="h-3 w-3" />
+                    )}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      useTimelineStore.getState().toggleTrackLock(track.id)
+                    }
+                    className={`rounded p-1 ${
+                      track.isLocked
+                        ? 'bg-amber-500/20 text-amber-300'
+                        : 'text-zinc-400 hover:bg-[#242429] hover:text-zinc-100'
+                    }`}
+                    title={track.isLocked ? 'Unlock track' : 'Lock track'}
+                  >
+                    {track.isLocked ? (
+                      <Lock className="h-3 w-3" />
+                    ) : (
+                      <Unlock className="h-3 w-3" />
+                    )}
+                  </button>
+                  {trackOrder.length > 1 && !track.isLocked && !isMain && (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        useTimelineStore.getState().deleteTrack(track.id)
+                      }
+                      className="inline-flex rounded p-1 text-zinc-500 hover:bg-[#242429] hover:text-rose-400"
+                      title="Hapus track"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Cell 4: Bottom-Right 2-Axis Scrollable Main Tracks Canvas */}
+        <div
+          ref={canvasScrollRef}
+          onScroll={syncMatrixScroll}
           onPointerDown={(e) => {
             if (e.target === e.currentTarget) {
               useTimelineStore.getState().clearSelection();
             }
           }}
+          className="relative min-h-0 overflow-auto bg-[#0A0A0C]"
         >
-          <div className="relative" style={{ width: laneWidth }}>
-            <div className="sticky top-0 z-20">
-              <TimeRuler totalDuration={totalDuration} />
-            </div>
+          <div className="relative" style={{ width: laneWidth, minHeight: lanesTotalHeight }}>
+            <Playhead
+              variant="moving"
+              height={Math.max(lanesTotalHeight, 260)}
+            />
 
-            <Playhead height={lanesTotalHeight} />
+            {displayTrackOrder.map((trackId) => {
+              const track = tracks[trackId];
+              if (!track) return null;
+              const isMain = track.id === mainVideoTrackId;
+              const rowH = getTrackRowHeight(track.type, isMain, layoutMode);
 
-            {/* TrackLaneList */}
-            <div>
-              {trackOrder.map((trackId) => {
-                const track = tracks[trackId];
-                if (!track) return null;
-                return (
-                  <div
-                    key={track.id}
-                    data-track-id={track.id}
-                    style={{ height: TRACK_ROW_HEIGHT }}
-                    onPointerDown={(e) => {
-                      if (e.target === e.currentTarget) {
-                        useTimelineStore.getState().clearSelection();
-                      }
-                    }}
-                    className={`relative border-b border-zinc-800/70 ${track.isMuted ? 'bg-zinc-950/80 opacity-60' : 'bg-zinc-900/20'
-                      }`}
-                  >
-                    {track.clipIds.map((cid) => {
-                      const clip = clips[cid];
-                      if (!clip) return null;
-                      return (
-                        <ClipItem
-                          key={clip.id}
-                          clip={clip}
-                          isLocked={track.isLocked}
-                        />
-                      );
-                    })}
-                  </div>
-                );
-              })}
-            </div>
+              return (
+                <div
+                  key={track.id}
+                  data-track-id={track.id}
+                  style={{ height: rowH }}
+                  onPointerDown={(e) => {
+                    if (e.target === e.currentTarget) {
+                      useTimelineStore.getState().clearSelection();
+                    }
+                  }}
+                  className={`relative border-b border-[#2A2A32]/70 ${
+                    isMain
+                      ? 'bg-[#181820]'
+                      : track.isMuted
+                      ? 'bg-[#111114]/45 opacity-55'
+                      : 'bg-[#111114]'
+                  }`}
+                >
+                  {track.clipIds.map((cid) => {
+                    const clip = clips[cid];
+                    if (!clip) return null;
+                    return (
+                      <ClipItem
+                        key={clip.id}
+                        clip={clip}
+                        isLocked={track.isLocked}
+                        isMainTrack={isMain}
+                        touchHandles={isTablet}
+                      />
+                    );
+                  })}
+                </div>
+              );
+            })}
           </div>
         </div>
       </div>

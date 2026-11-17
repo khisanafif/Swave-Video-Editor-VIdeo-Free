@@ -30,6 +30,7 @@ import {
   Volume2,
   VolumeX,
   Wand2,
+  X,
 } from 'lucide-react';
 import {
   DEFAULT_CHROMA_KEY,
@@ -123,14 +124,10 @@ function SliderRow({
   onChange,
 }: SliderRowProps) {
   return (
-    <label className="block space-y-1">
-      <div className="flex items-center justify-between text-[11px]">
-        <span className="text-zinc-400">{label}</span>
-        <span className="font-mono text-zinc-200">
-          {Number(value).toFixed(step < 1 ? 2 : 0)}
-          {suffix}
-        </span>
-      </div>
+    <label className="grid grid-cols-[78px_1fr_46px] items-center gap-2">
+      <span className="truncate text-[11px] text-zinc-400" title={label}>
+        {label}
+      </span>
       <input
         type="range"
         min={min}
@@ -141,20 +138,26 @@ function SliderRow({
         onPointerUp={() => useTimelineStore.temporal.getState().resume()}
         onPointerCancel={() => useTimelineStore.temporal.getState().resume()}
         onChange={(e) => onChange(Number(e.target.value))}
-        className="h-2 w-full accent-cyan-400"
+        className="h-5 w-full accent-[#00E5FF]"
       />
+      <span className="rounded bg-[#242429] px-1.5 py-0.5 text-right font-mono text-[10px] text-zinc-200">
+        {Number(value).toFixed(step < 1 ? 2 : 0)}
+        {suffix}
+      </span>
     </label>
   );
 }
 
 interface InspectorPanelProps {
-  mode?: 'sidebar' | 'sheet';
+  mode?: 'sidebar' | 'drawer' | 'sheet';
   initialTab?: 'inspector' | 'export';
+  onClosePanel?: () => void;
 }
 
 export function InspectorPanel({
   mode = 'sidebar',
   initialTab = 'inspector',
+  onClosePanel,
 }: InspectorPanelProps) {
   const [activeTab, setActiveTab] = useState<'inspector' | 'export'>(initialTab);
   const [renderMode, setRenderMode] = useState<RenderMode>('client-webcodecs');
@@ -377,8 +380,8 @@ export function InspectorPanel({
 
   const containerClass =
     mode === 'sheet'
-      ? 'flex h-full w-full flex-col bg-zinc-950'
-      : 'flex w-80 shrink-0 flex-col border-l border-zinc-800 bg-zinc-950';
+      ? 'flex h-full w-full flex-col bg-[#202026]'
+      : 'flex h-full w-full flex-col bg-[#18181C]';
 
   const clipAnim = selectedClip?.animation || DEFAULT_CLIP_ANIMATION;
   const clipSpeed = selectedClip?.speed || 1;
@@ -389,31 +392,44 @@ export function InspectorPanel({
   return (
     <aside className={containerClass}>
       {/* Tab Header */}
-      <div className="grid grid-cols-2 border-b border-zinc-800">
-        <button
-          type="button"
-          onClick={() => setActiveTab('inspector')}
-          className={`flex items-center justify-center gap-1.5 py-2.5 text-xs font-semibold transition ${
-            activeTab === 'inspector'
-              ? 'border-b-2 border-cyan-400 bg-zinc-900/60 text-cyan-300'
-              : 'text-zinc-400 hover:text-zinc-200'
-          }`}
-        >
-          <SlidersHorizontal className="h-3.5 w-3.5" />
-          <span>Inspektor</span>
-        </button>
-        <button
-          type="button"
-          onClick={() => setActiveTab('export')}
-          className={`flex items-center justify-center gap-1.5 py-2.5 text-xs font-semibold transition ${
-            activeTab === 'export'
-              ? 'border-b-2 border-cyan-400 bg-zinc-900/60 text-cyan-300'
-              : 'text-zinc-400 hover:text-zinc-200'
-          }`}
-        >
-          <Download className="h-3.5 w-3.5" />
-          <span>Hybrid Export</span>
-        </button>
+      <div className="flex items-center border-b border-[#2A2A32] bg-[#18181C]">
+        <div className="grid flex-1 grid-cols-2">
+          <button
+            type="button"
+            onClick={() => setActiveTab('inspector')}
+            className={`flex items-center justify-center gap-1.5 py-2.5 text-xs font-semibold transition ${
+              activeTab === 'inspector'
+                ? 'border-b-2 border-[#00E5FF] bg-[#242429]/60 text-[#00E5FF]'
+                : 'text-zinc-400 hover:text-zinc-200'
+            }`}
+          >
+            <SlidersHorizontal className="h-3.5 w-3.5" />
+            <span>Inspektor</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('export')}
+            className={`flex items-center justify-center gap-1.5 py-2.5 text-xs font-semibold transition ${
+              activeTab === 'export'
+                ? 'border-b-2 border-[#00E5FF] bg-[#242429]/60 text-[#00E5FF]'
+                : 'text-zinc-400 hover:text-zinc-200'
+            }`}
+          >
+            <Download className="h-3.5 w-3.5" />
+            <span>Hybrid Export</span>
+          </button>
+        </div>
+        {onClosePanel && (
+          <button
+            type="button"
+            onClick={onClosePanel}
+            className="mr-2 rounded p-1.5 text-zinc-400 hover:bg-[#242429] hover:text-white"
+            title="Tutup panel inspektor"
+            aria-label="Tutup panel inspektor"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        )}
       </div>
 
       {/* Tab Body */}

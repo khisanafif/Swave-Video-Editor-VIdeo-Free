@@ -5,6 +5,8 @@ import { useTimelineStore } from '../../stores/timelineStore';
 
 interface TimeRulerProps {
   totalDuration: number;
+  height?: number;
+  minWidth?: number;
 }
 
 function chooseTickStep(pps: number): { major: number; minor: number } {
@@ -14,16 +16,19 @@ function chooseTickStep(pps: number): { major: number; minor: number } {
   return { major: 10, minor: 2 };
 }
 
-export function TimeRuler({ totalDuration }: TimeRulerProps) {
+export function TimeRuler({
+  totalDuration,
+  height = 24,
+  minWidth = 800,
+}: TimeRulerProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const pixelsPerSecond = useTimelineStore((s) => s.pixelsPerSecond);
-  const width = Math.max(800, Math.ceil(totalDuration * pixelsPerSecond));
+  const width = Math.max(minWidth, Math.ceil(totalDuration * pixelsPerSecond));
 
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const dpr = window.devicePixelRatio || 1;
-    const height = 32;
     canvas.width = width * dpr;
     canvas.height = height * dpr;
     canvas.style.width = `${width}px`;
@@ -36,7 +41,7 @@ export function TimeRuler({ totalDuration }: TimeRulerProps) {
     ctx.fillStyle = '#111114';
     ctx.fillRect(0, 0, width, height);
 
-    ctx.strokeStyle = '#27272a';
+    ctx.strokeStyle = '#2A2A32';
     ctx.beginPath();
     ctx.moveTo(0, height - 0.5);
     ctx.lineTo(width, height - 0.5);
@@ -48,23 +53,24 @@ export function TimeRuler({ totalDuration }: TimeRulerProps) {
 
     for (let t = 0; t <= totalDuration; t += minor) {
       const x = Math.round(t * pixelsPerSecond) + 0.5;
-      const isMajor = Math.abs(t % major) < 0.001 || Math.abs((t % major) - major) < 0.001;
+      const isMajor =
+        Math.abs(t % major) < 0.001 || Math.abs((t % major) - major) < 0.001;
 
-      ctx.strokeStyle = isMajor ? '#71717a' : '#3f3f46';
+      ctx.strokeStyle = isMajor ? '#8E8E93' : '#3A3A44';
       ctx.beginPath();
-      ctx.moveTo(x, isMajor ? 10 : 19);
+      ctx.moveTo(x, isMajor ? Math.max(6, height - 11) : height - 6);
       ctx.lineTo(x, height);
       ctx.stroke();
 
       if (isMajor) {
-        ctx.fillStyle = '#a1a1aa';
+        ctx.fillStyle = '#8E8E93';
         const mins = Math.floor(t / 60);
         const secs = Math.floor(t % 60);
-        const label = `${mins}:${String(secs).padStart(2, '0')}`;
-        ctx.fillText(label, x + 4, 3);
+        const label = `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+        ctx.fillText(label, x + 4, 2);
       }
     }
-  }, [width, pixelsPerSecond, totalDuration]);
+  }, [width, height, pixelsPerSecond, totalDuration]);
 
   const seekFromPointer = (clientX: number) => {
     const canvas = canvasRef.current;
@@ -96,4 +102,3 @@ export function TimeRuler({ totalDuration }: TimeRulerProps) {
     />
   );
 }
-
