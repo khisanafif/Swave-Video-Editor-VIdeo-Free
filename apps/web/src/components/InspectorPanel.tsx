@@ -391,46 +391,48 @@ export function InspectorPanel({
 
   return (
     <aside className={containerClass}>
-      {/* Tab Header */}
-      <div className="flex items-center border-b border-[#2A2A32] bg-[#18181C]">
-        <div className="grid flex-1 grid-cols-2">
-          <button
-            type="button"
-            onClick={() => setActiveTab('inspector')}
-            className={`flex items-center justify-center gap-1.5 py-2.5 text-xs font-semibold transition ${
-              activeTab === 'inspector'
-                ? 'border-b-2 border-[#00E5FF] bg-[#242429]/60 text-[#00E5FF]'
-                : 'text-zinc-400 hover:text-zinc-200'
-            }`}
-          >
-            <SlidersHorizontal className="h-3.5 w-3.5" />
-            <span>Inspektor</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveTab('export')}
-            className={`flex items-center justify-center gap-1.5 py-2.5 text-xs font-semibold transition ${
-              activeTab === 'export'
-                ? 'border-b-2 border-[#00E5FF] bg-[#242429]/60 text-[#00E5FF]'
-                : 'text-zinc-400 hover:text-zinc-200'
-            }`}
-          >
-            <Download className="h-3.5 w-3.5" />
-            <span>Hybrid Export</span>
-          </button>
+      {/* Tab Header (omitted inside mobile inspector sheet to maximize slider space) */}
+      {(mode !== 'sheet' || initialTab === 'export') && (
+        <div className="flex items-center border-b border-[#2A2A32] bg-[#18181C]">
+          <div className="grid flex-1 grid-cols-2">
+            <button
+              type="button"
+              onClick={() => setActiveTab('inspector')}
+              className={`flex items-center justify-center gap-1.5 py-2.5 text-xs font-semibold transition ${
+                activeTab === 'inspector'
+                  ? 'border-b-2 border-[#00E5FF] bg-[#242429]/60 text-[#00E5FF]'
+                  : 'text-zinc-400 hover:text-zinc-200'
+              }`}
+            >
+              <SlidersHorizontal className="h-3.5 w-3.5" />
+              <span>Inspektor</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab('export')}
+              className={`flex items-center justify-center gap-1.5 py-2.5 text-xs font-semibold transition ${
+                activeTab === 'export'
+                  ? 'border-b-2 border-[#00E5FF] bg-[#242429]/60 text-[#00E5FF]'
+                  : 'text-zinc-400 hover:text-zinc-200'
+              }`}
+            >
+              <Download className="h-3.5 w-3.5" />
+              <span>Hybrid Export</span>
+            </button>
+          </div>
+          {onClosePanel && (
+            <button
+              type="button"
+              onClick={onClosePanel}
+              className="mr-2 rounded p-1.5 text-zinc-400 hover:bg-[#242429] hover:text-white"
+              title="Tutup panel inspektor"
+              aria-label="Tutup panel inspektor"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          )}
         </div>
-        {onClosePanel && (
-          <button
-            type="button"
-            onClick={onClosePanel}
-            className="mr-2 rounded p-1.5 text-zinc-400 hover:bg-[#242429] hover:text-white"
-            title="Tutup panel inspektor"
-            aria-label="Tutup panel inspektor"
-          >
-            <X className="h-3.5 w-3.5" />
-          </button>
-        )}
-      </div>
+      )}
 
       {/* Tab Body */}
       <div className="flex-1 overflow-y-auto p-3.5">

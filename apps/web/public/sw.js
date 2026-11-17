@@ -1,4 +1,4 @@
-const CACHE_NAME = 'swave-video-shell-v3';
+const CACHE_NAME = 'swave-video-shell-v6';
 
 function scopedUrl(relPath) {
   return new URL(relPath, self.registration.scope).toString();
@@ -13,21 +13,6 @@ function getAppShellUrls() {
     scopedUrl('icons/icon-512.png'),
     scopedUrl('icons/icon.svg'),
   ];
-}
-
-function withIsolationHeaders(response) {
-  const headers = new Headers(response.headers);
-  if (!headers.has('Cross-Origin-Opener-Policy')) {
-    headers.set('Cross-Origin-Opener-Policy', 'same-origin');
-  }
-  if (!headers.has('Cross-Origin-Embedder-Policy')) {
-    headers.set('Cross-Origin-Embedder-Policy', 'credentialless');
-  }
-  return new Response(response.body, {
-    status: response.status,
-    statusText: response.statusText,
-    headers,
-  });
 }
 
 self.addEventListener('install', (event) => {
@@ -62,45 +47,34 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return;
 
-  // Never intercept API calls, chunk uploads, or byte-range media streams
-  if (url.pathname.startsWith('/api/') || url.pathname.startsWith('/media/')) {
+  // Never intercept API calls, uploads, media streams, or large WASM/ONNX binaries
+  if (
+    url.pathname.startsWith('/api/') ||
+    url.pathname.startsWith('/media/') ||
+    url.pathname.endsWith('.wasm') ||
+    url.pathname.endsWith('.onnx')
+  ) {
     return;
   }
 
-  // Navigation requests: network-first with COOP/COEP-preserving cache fallback
-  if (request.mode === 'navigate') {
-    event.respondWith(
-      fetch(request)
-        .then((res) => {
+  // Navigation & same-origin JS/MJS/CSS assets: Network-First so deployed workers
+  // and ORT runtime modules never mismatch stale shell cache; cache serves offline fallback.
+  event.respondWith(
+    fetch(request)
+      .then((res) => {
+        if (res.ok) {
           const clone = res.clone();
           caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
-          return withIsolationHeaders(res);
-        })
-        .catch(async () => {
-          const cached =
-            (await caches.match(request)) ||
-            (await caches.match(scopedUrl('index.html')));
-          return cached ? withIsolationHeaders(cached) : Response.error();
-        })
-    );
-    return;
-  }
-
-  // Static JS/CSS/icon assets: stale-while-revalidate
-  event.respondWith(
-    caches.match(request).then((cached) => {
-      const networkFetch = fetch(request)
-        .then((res) => {
-          if (res.ok) {
-            const clone = res.clone();
-            caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
-          }
-          return res;
-        })
-        .catch(() => cached || Response.error());
-
-      return cached || networkFetch;
-    })
+        }
+        return res;
+      })
+      .catch(async () => {
+        const cached = await caches.match(request);
+        if (cached) return cached;
+        if (request.mode === 'navigate') {
+          return (await caches.match(scopedUrl('index.html'))) || Response.error();
+        }
+        return Response.error();
+      })
   );
 });
-

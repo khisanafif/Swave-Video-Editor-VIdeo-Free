@@ -18,28 +18,28 @@ const CLIP_THEME: Record<
   { bg: string; border: string; activeBorder: string; accent: string }
 > = {
   video: {
-    bg: 'bg-[#1b3146]',
-    border: 'border-sky-600/45',
-    activeBorder: 'border-2 border-white ring-1 ring-[#00E5FF]/50',
-    accent: 'text-sky-300',
+    bg: 'bg-[#19283a]',
+    border: 'border-[#2f455e]',
+    activeBorder: 'border-2 border-white shadow-[0_0_10px_rgba(255,255,255,0.28)]',
+    accent: 'text-sky-200',
   },
   audio: {
-    bg: 'bg-[#12382c]',
-    border: 'border-emerald-600/45',
-    activeBorder: 'border-2 border-white ring-1 ring-emerald-400/60',
-    accent: 'text-emerald-300',
+    bg: 'bg-[#0f3f3c]',
+    border: 'border-[#1d635d]',
+    activeBorder: 'border-2 border-white shadow-[0_0_10px_rgba(255,255,255,0.28)]',
+    accent: 'text-emerald-200',
   },
   text: {
-    bg: 'bg-[#362052]',
-    border: 'border-violet-500/50',
-    activeBorder: 'border-2 border-white ring-1 ring-violet-400/60',
-    accent: 'text-violet-300',
+    bg: 'bg-[#46296b]',
+    border: 'border-[#6d45a3]',
+    activeBorder: 'border-2 border-white shadow-[0_0_10px_rgba(255,255,255,0.28)]',
+    accent: 'text-violet-200',
   },
   overlay: {
-    bg: 'bg-[#422a13]',
-    border: 'border-amber-500/50',
-    activeBorder: 'border-2 border-white ring-1 ring-amber-400/60',
-    accent: 'text-amber-300',
+    bg: 'bg-[#3b2918]',
+    border: 'border-[#734f2c]',
+    activeBorder: 'border-2 border-white shadow-[0_0_10px_rgba(255,255,255,0.28)]',
+    accent: 'text-amber-200',
   },
 };
 
@@ -93,9 +93,18 @@ export function ClipItem({
   const asset = useTimelineStore((s) => s.assets[clip.assetId]);
 
   const isSelected = selectedClipIds.includes(clip.id);
-  const theme = CLIP_THEME[clip.type];
+  const theme =
+    clip.type === 'text' && clip.isSubtitle
+      ? {
+          bg: 'bg-[#8f5d0c]',
+          border: 'border-[#c4841b]',
+          activeBorder: 'border-2 border-white shadow-[0_0_10px_rgba(255,255,255,0.28)]',
+          accent: 'text-amber-200',
+        }
+      : CLIP_THEME[clip.type];
+
   const leftPx = clip.start * pixelsPerSecond;
-  const widthPx = Math.max(18, clip.duration * pixelsPerSecond);
+  const widthPx = Math.max(22, clip.duration * pixelsPerSecond);
 
   const handleMovePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     if (e.button !== 0) return;
@@ -209,18 +218,18 @@ export function ClipItem({
       : Film;
 
   const peaks = asset?.waveform || [];
-
-  const handleWidthClass = touchHandles
-    ? 'w-4'
-    : 'w-3.5 lg:w-2.5';
+  const handleWidthClass = touchHandles ? 'w-4' : 'w-3 lg:w-2.5';
+  const hasVisualFilmstrip =
+    (clip.type === 'video' || clip.type === 'overlay') &&
+    Boolean(asset?.thumbnailUrl);
 
   return (
     <div
       data-clip-id={clip.id}
       onPointerDown={handleMovePointerDown}
       style={{ left: leftPx, width: widthPx }}
-      className={`group absolute top-[2px] bottom-[2px] flex touch-none flex-col justify-between overflow-hidden border select-none transition-shadow ${
-        compactCapsule ? 'rounded-full px-1' : 'rounded-md'
+      className={`group absolute top-[1px] bottom-[1px] flex touch-none flex-col justify-between overflow-hidden border select-none transition-shadow ${
+        compactCapsule ? 'rounded-md' : 'rounded-[7px]'
       } ${theme.bg} ${isSelected ? theme.activeBorder : theme.border} ${
         timelineToolMode === 'blade' && !isLocked
           ? 'cursor-crosshair'
@@ -229,103 +238,104 @@ export function ClipItem({
           : 'cursor-grab active:cursor-grabbing'
       }`}
     >
-      {/* Left Trim Handle */}
+      {/* Full-height continuous CapCut filmstrip background for Video/Image clips */}
+      {hasVisualFilmstrip && (
+        <div
+          className="pointer-events-none absolute inset-0 bg-repeat-x"
+          style={{
+            backgroundImage: `url(${asset!.thumbnailUrl})`,
+            backgroundSize: isMainTrack ? 'auto 100%' : 'auto 100%',
+            backgroundPosition: 'left center',
+          }}
+        />
+      )}
+
+      {/* Full-height mirrored CapCut Audio waveform */}
+      {clip.type === 'audio' && peaks.length > 0 && (
+        <div className="pointer-events-none absolute inset-0 flex items-center gap-[2px] px-2 opacity-65">
+          {peaks.slice(0, 64).map((p, idx) => (
+            <div
+              key={idx}
+              className="flex-1 rounded-full bg-emerald-300/85"
+              style={{ height: `${Math.max(18, Math.round(p * 88))}%` }}
+            />
+          ))}
+        </div>
+      )}
+
+      {/* Subtle dark readability gradient over filmstrip */}
+      {hasVisualFilmstrip && (
+        <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-black/55 via-transparent to-black/40" />
+      )}
+
+      {/* Left White Trim Ear */}
       <div
         role="separator"
         aria-label="Trim start"
         onPointerDown={(e) => handleTrimPointerDown('left', e)}
-        className={`absolute top-0 bottom-0 left-0 z-20 flex touch-none items-center justify-center cursor-ew-resize transition-colors ${handleWidthClass} ${
+        className={`absolute top-0 bottom-0 left-0 z-20 flex touch-none items-center justify-center gap-[2px] cursor-ew-resize transition-colors ${handleWidthClass} ${
           isSelected
-            ? 'bg-white text-zinc-950'
+            ? 'bg-white text-zinc-900'
             : 'bg-transparent hover:bg-white/30'
         }`}
       >
         {isSelected && (
-          <span className="h-3.5 w-[2px] rounded-full bg-zinc-900" />
+          <>
+            <span className="h-3.5 w-[1.5px] rounded-full bg-zinc-900" />
+            {touchHandles && (
+              <span className="h-3.5 w-[1.5px] rounded-full bg-zinc-900" />
+            )}
+          </>
         )}
       </div>
 
-      {/* Header */}
+      {/* Compact Overlay Label */}
       <div
-        className={`relative z-10 flex items-center gap-1 font-medium text-zinc-100 ${
+        className={`relative z-10 flex items-center gap-1 font-medium text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.85)] ${
           compactCapsule
             ? 'h-full px-2 text-[10px]'
-            : 'px-2 pt-1 text-[11px]'
+            : 'px-2 pt-1 text-[10px]'
         }`}
       >
-        <Icon className={`h-3 w-3 shrink-0 ${theme.accent}`} />
+        {!hasVisualFilmstrip && <Icon className={`h-3 w-3 shrink-0 ${theme.accent}`} />}
         {clip.isSubtitle && (
-          <span className="shrink-0 rounded bg-yellow-400/25 px-1 font-mono text-[9px] font-extrabold text-yellow-200">
+          <span className="shrink-0 rounded bg-black/35 px-1 font-mono text-[9px] font-extrabold text-amber-200">
             CC
           </span>
         )}
-        <span className="truncate">{clip.name}</span>
+        <span className="truncate">
+          {clip.type === 'text' ? clip.textStyle?.content || clip.name : clip.name}
+        </span>
         {!compactCapsule && clip.speed && Math.abs(clip.speed - 1) > 0.02 && (
-          <span className="shrink-0 rounded bg-cyan-500/25 px-1 py-0.2 font-mono text-[9px] font-bold text-cyan-200">
+          <span className="shrink-0 rounded bg-black/60 px-1 py-0.2 font-mono text-[9px] font-bold text-[#00E5FF]">
             {clip.speed}x
           </span>
         )}
-        {!compactCapsule &&
-          clip.animation &&
-          (clip.animation.in !== 'none' || clip.animation.out !== 'none') && (
-            <span className="shrink-0 rounded bg-violet-500/25 px-1 py-0.2 text-[9px] font-semibold text-violet-200">
-              Anim
-            </span>
-          )}
-        <span className="ml-auto shrink-0 font-mono text-[10px] text-zinc-300/80">
+        <span className="ml-auto shrink-0 rounded bg-black/45 px-1 font-mono text-[9px] text-zinc-100">
           {clip.duration.toFixed(1)}s
         </span>
       </div>
 
-      {/* Waveform or Filmstrip visual hint */}
-      {!compactCapsule && (
-        peaks.length > 0 ? (
-          <div className="pointer-events-none flex h-5 items-end gap-[2px] px-2 pb-1 opacity-75">
-            {peaks.slice(0, 48).map((p, idx) => (
-              <div
-                key={idx}
-                className={`flex-1 rounded-t-xs ${
-                  clip.type === 'audio' ? 'bg-emerald-400/75' : 'bg-cyan-400/50'
-                }`}
-                style={{ height: `${Math.max(15, Math.round(p * 100))}%` }}
-              />
-            ))}
-          </div>
-        ) : asset?.thumbnailUrl ? (
-          <div
-            className={`pointer-events-none mx-1 mb-1 rounded-xs bg-repeat-x ${
-              isMainTrack ? 'h-6 opacity-85' : 'h-4 opacity-65'
-            }`}
-            style={{
-              backgroundImage: `url(${asset.thumbnailUrl})`,
-              backgroundSize: 'auto 100%',
-            }}
-          />
-        ) : (
-          <div className="pointer-events-none truncate px-2 pb-1 text-[10px] text-zinc-400/85">
-            {clip.type === 'text'
-              ? clip.textStyle?.content
-              : `${asset?.width ?? ''}x${asset?.height ?? ''}`}
-          </div>
-        )
-      )}
-
-      {/* Right Trim Handle */}
+      {/* Right White Trim Ear */}
       <div
         role="separator"
         aria-label="Trim end"
         onPointerDown={(e) => handleTrimPointerDown('right', e)}
-        className={`absolute top-0 right-0 bottom-0 z-20 flex touch-none items-center justify-center cursor-ew-resize transition-colors ${handleWidthClass} ${
+        className={`absolute top-0 right-0 bottom-0 z-20 flex touch-none items-center justify-center gap-[2px] cursor-ew-resize transition-colors ${handleWidthClass} ${
           isSelected
-            ? 'bg-white text-zinc-950'
+            ? 'bg-white text-zinc-900'
             : 'bg-transparent hover:bg-white/30'
         }`}
       >
         {isSelected && (
-          <span className="h-3.5 w-[2px] rounded-full bg-zinc-900" />
+          <>
+            <span className="h-3.5 w-[1.5px] rounded-full bg-zinc-900" />
+            {touchHandles && (
+              <span className="h-3.5 w-[1.5px] rounded-full bg-zinc-900" />
+            )}
+          </>
         )}
       </div>
     </div>
   );
 }
-

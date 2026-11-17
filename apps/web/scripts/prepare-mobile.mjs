@@ -61,6 +61,21 @@ function patchAndroidProject() {
         '<application\n        android:usesCleartextTraffic="true"'
       );
     }
+    if (!manifest.includes('android:screenOrientation=')) {
+      manifest = manifest.replace(
+        '<activity',
+        '<activity\n            android:screenOrientation="fullSensor"'
+      );
+    }
+    if (!manifest.includes('smallestScreenSize')) {
+      manifest = manifest.replace(
+        /<activity([^>]*?)>/,
+        (m, attrs) =>
+          attrs.includes('android:configChanges')
+            ? m
+            : `<activity${attrs}\n            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode">`
+      );
+    }
 
     const permissions = [
       'android.permission.INTERNET',
@@ -131,6 +146,7 @@ import android.os.Bundle;
 import android.os.Environment;
 import android.provider.MediaStore;
 import android.util.Base64;
+import android.view.WindowManager;
 import android.webkit.JavascriptInterface;
 import android.webkit.WebView;
 import android.widget.Toast;
@@ -145,8 +161,15 @@ public class MainActivity extends BridgeActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            WindowManager.LayoutParams lp = getWindow().getAttributes();
+            lp.layoutInDisplayCutoutMode =
+                WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES;
+            getWindow().setAttributes(lp);
+        }
         if (getBridge() != null && getBridge().getWebView() != null) {
             WebView webView = getBridge().getWebView();
+            webView.getSettings().setMediaPlaybackRequiresUserGesture(false);
             webView.addJavascriptInterface(new SwaveNativeBridge(), "SwaveNative");
         }
     }

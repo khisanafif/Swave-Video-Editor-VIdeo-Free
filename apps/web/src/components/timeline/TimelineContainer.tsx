@@ -42,15 +42,25 @@ export type TimelineLayoutMode = 'desktop' | 'tablet' | 'mobile';
 
 interface TimelineContainerProps {
   layoutMode?: TimelineLayoutMode;
+  compactLandscape?: boolean;
   onAddMediaClick?: () => void;
+  onQuickAudioClick?: () => void;
+  onQuickTextClick?: () => void;
   onCoverClick?: () => void;
 }
 
 function getTrackRowHeight(
   trackType: TrackType,
   isMain: boolean,
-  mode: TimelineLayoutMode
+  mode: TimelineLayoutMode,
+  compactLandscape = false
 ): number {
+  if (mode === 'mobile' && compactLandscape) {
+    if (isMain) return 44;
+    if (trackType === 'text') return 24;
+    if (trackType === 'audio') return 28;
+    return 32;
+  }
   if (isMain) return 56;
   if (mode === 'mobile') {
     if (trackType === 'text') return 28;
@@ -71,7 +81,10 @@ function trackTypeBadgeClass(type: Track['type'], isMain: boolean): string {
 
 export function TimelineContainer({
   layoutMode = 'desktop',
+  compactLandscape = false,
   onAddMediaClick,
+  onQuickAudioClick,
+  onQuickTextClick,
   onCoverClick,
 }: TimelineContainerProps) {
   const rulerScrollRef = useRef<HTMLDivElement>(null);
@@ -101,11 +114,15 @@ export function TimelineContainer({
   const gapPx = layoutMode === 'mobile' ? 6 : 0;
 
   const lanesTotalHeight = Math.max(
-    140,
+    120,
     displayTrackOrder.reduce((sum, tid) => {
       const tr = tracks[tid];
       if (!tr) return sum;
-      return sum + getTrackRowHeight(tr.type, tid === mainVideoTrackId, layoutMode) + gapPx;
+      return (
+        sum +
+        getTrackRowHeight(tr.type, tid === mainVideoTrackId, layoutMode, compactLandscape) +
+        gapPx
+      );
     }, 0)
   );
 
@@ -146,7 +163,7 @@ export function TimelineContainer({
   };
 
   // ============================================================================
-  // MOBILE TIMELINE (< 768px — Fixed Center Playhead + 50vw Horizontal Buffer)
+  // MOBILE TIMELINE (Portrait & Landscape — Fixed Center Playhead + 50vw Buffer)
   // ============================================================================
   if (layoutMode === 'mobile') {
     const rulerHeight = 22;
@@ -155,13 +172,20 @@ export function TimelineContainer({
       .slice(0, Math.max(0, mainTrackIndex))
       .reduce((acc, tid) => {
         const tr = tracks[tid];
-        return acc + (tr ? getTrackRowHeight(tr.type, false, 'mobile') + 6 : 0);
+        return (
+          acc +
+          (tr ? getTrackRowHeight(tr.type, false, 'mobile', compactLandscape) + 6 : 0)
+        );
       }, rulerHeight + 6);
 
     return (
       <section
         aria-label="Multi-Track Timeline"
-        className="relative flex h-[34dvh] min-h-[175px] shrink-0 flex-col overflow-hidden border-t border-[#2A2A32] bg-[#0A0A0C]"
+        className={`relative flex flex-col overflow-hidden bg-[#0A0A0C] ${
+          compactLandscape
+            ? 'min-h-[120px] flex-1'
+            : 'h-[34dvh] min-h-[175px] shrink-0'
+        }`}
       >
         {/* Fixed Static White Playhead pinned horizontally at X = 50% */}
         <Playhead
@@ -169,14 +193,14 @@ export function TimelineContainer({
           height={Math.max(220, lanesTotalHeight + rulerHeight + 16)}
         />
 
-        {/* Floating White Circle [+] Add Clip Button aligned with Main Video Track */}
+        {/* Floating White Rounded-Square [+] Add Clip Button aligned with Main Video Track */}
         {onAddMediaClick && (
           <button
             type="button"
             onClick={onAddMediaClick}
             aria-label="Tambah Media ke Track Utama"
-            style={{ top: Math.max(30, mainTrackOffsetTop + 10) }}
-            className="absolute right-3 z-40 flex h-9 w-9 items-center justify-center rounded-full bg-white text-zinc-950 shadow-lg transition active:scale-95"
+            style={{ top: Math.max(28, mainTrackOffsetTop + (compactLandscape ? 4 : 10)) }}
+            className="absolute right-3 z-40 flex h-8 w-8 items-center justify-center rounded-lg bg-white text-zinc-950 shadow-lg transition active:scale-95 sm:h-9 sm:w-9"
           >
             <Plus className="h-5 w-5 stroke-[2.5]" />
           </button>
@@ -210,8 +234,11 @@ export function TimelineContainer({
               paddingRight: '50vw',
             }}
           >
-            {/* Sticky Top Time Ruler (22px) */}
-            <div className="sticky top-0 z-20 -ml-[50vw] pl-[50vw] bg-[#111114]/95">
+            {/* Sticky Top Time Ruler (22px, aligned pixel-perfect at 50vw -> 00:00) */}
+            <div
+              className="sticky top-0 z-20 -ml-[50vw] bg-[#0A0A0C] pl-[50vw]"
+              style={{ width: `calc(${laneWidth}px + 100vw)` }}
+            >
               <TimeRuler totalDuration={totalDuration} height={rulerHeight} />
             </div>
 
@@ -219,7 +246,13 @@ export function TimelineContainer({
               const track = tracks[trackId];
               if (!track) return null;
               const isMain = track.id === mainVideoTrackId;
-              const rowH = getTrackRowHeight(track.type, isMain, 'mobile');
+              const rowH = getTrackRowHeight(
+                track.type,
+                isMain,
+                'mobile',
+                compactLandscape
+              );
+              const isEmpty = track.clipIds.length === 0;
 
               return (
                 <div
@@ -231,16 +264,12 @@ export function TimelineContainer({
                       useTimelineStore.getState().clearSelection();
                     }
                   }}
-                  className={`relative rounded-md border border-[#2A2A32]/60 ${
-                    isMain
-                      ? 'bg-[#181820]'
-                      : track.isMuted
-                      ? 'bg-[#111114]/50 opacity-55'
-                      : 'bg-[#111114]'
+                  className={`relative bg-transparent ${
+                    track.isMuted ? 'opacity-50' : ''
                   }`}
                 >
-                  {/* Inline Left-of-00:00 Controls inside padding-left: 50vw */}
-                  {isMain ? (
+                  {/* Main Track Inline Left-of-00:00 CapCut Mute & Cover Pills */}
+                  {isMain && (
                     <div
                       style={{ right: 'calc(100% + 10px)' }}
                       className="absolute top-1/2 flex -translate-y-1/2 items-center gap-1.5"
@@ -250,10 +279,10 @@ export function TimelineContainer({
                         onClick={() =>
                           useTimelineStore.getState().toggleTrackMute(track.id)
                         }
-                        className={`flex h-9 w-9 flex-col items-center justify-center rounded-md border border-[#2A2A32] text-[9px] leading-tight ${
+                        className={`flex h-10 w-10 flex-col items-center justify-center rounded-md text-[9px] leading-tight ${
                           track.isMuted
-                            ? 'bg-rose-500/20 text-rose-300'
-                            : 'bg-[#18181C] text-zinc-300'
+                            ? 'bg-rose-500/25 text-rose-200 ring-1 ring-rose-500/40'
+                            : 'bg-[#18181C] text-zinc-200 ring-1 ring-[#2A2A32]'
                         }`}
                         title="Bisukan suara track utama"
                       >
@@ -267,20 +296,45 @@ export function TimelineContainer({
                       <button
                         type="button"
                         onClick={onCoverClick}
-                        className="flex h-9 w-11 flex-col items-center justify-center rounded-md border border-[#2A2A32] bg-[#18181C] text-[9px] leading-tight text-zinc-300"
+                        className="flex h-10 w-11 flex-col items-center justify-center rounded-md bg-[#18181C] text-[9px] leading-tight text-zinc-200 ring-1 ring-[#2A2A32]"
                         title="Ambil frame sampul PNG"
                       >
-                        <ImageIcon className="h-3.5 w-3.5 text-[#00E5FF]" />
+                        <ImageIcon className="h-3.5 w-3.5 text-zinc-100" />
                         <span>Sampul</span>
                       </button>
                     </div>
-                  ) : (
-                    <div
-                      style={{ right: 'calc(100% + 10px)' }}
-                      className="pointer-events-none absolute top-1/2 -translate-y-1/2 whitespace-nowrap rounded bg-[#18181C] px-1.5 py-0.5 text-[9px] font-medium text-zinc-400"
+                  )}
+
+                  {/* CapCut-style Clean Inline Prompt Pills on Empty Tracks */}
+                  {isEmpty && isMain && onAddMediaClick && (
+                    <button
+                      type="button"
+                      onClick={onAddMediaClick}
+                      className="flex h-full items-center gap-1.5 rounded-lg border border-dashed border-[#2A2A32] bg-[#181820]/90 px-3 text-[11px] font-medium text-zinc-300 hover:border-[#00E5FF]"
                     >
-                      {track.name}
-                    </div>
+                      <Plus className="h-3.5 w-3.5 text-[#00E5FF]" />
+                      <span>Tambah Video / Foto</span>
+                    </button>
+                  )}
+
+                  {isEmpty && track.type === 'audio' && onQuickAudioClick && (
+                    <button
+                      type="button"
+                      onClick={onQuickAudioClick}
+                      className="inline-flex h-full items-center gap-1.5 rounded-md border border-[#2A2A32] bg-[#18181C] px-2.5 text-[10px] font-medium text-zinc-300"
+                    >
+                      <span>♪ Tambah Audio</span>
+                    </button>
+                  )}
+
+                  {isEmpty && track.type === 'text' && onQuickTextClick && (
+                    <button
+                      type="button"
+                      onClick={onQuickTextClick}
+                      className="inline-flex h-full items-center gap-1 rounded-full border border-[#2A2A32] bg-[#18181C]/70 px-2.5 text-[10px] font-medium text-zinc-400"
+                    >
+                      <span>T Tambah Teks</span>
+                    </button>
                   )}
 
                   {track.clipIds.map((cid) => {

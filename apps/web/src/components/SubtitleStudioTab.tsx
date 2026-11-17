@@ -521,8 +521,20 @@ export function SubtitleStudioTab({ onClipAdded }: SubtitleStudioTabProps) {
         )}
 
         {errorMsg && (
-          <div className="rounded-lg border border-rose-500/40 bg-rose-950/40 px-2.5 py-1.5 text-[11px] text-rose-200">
-            {errorMsg}
+          <div className="space-y-2 rounded-lg border border-rose-500/40 bg-rose-950/40 px-2.5 py-2 text-[11px] text-rose-200">
+            <p>{errorMsg}</p>
+            {engine === 'browser-whisper' && (
+              <button
+                type="button"
+                onClick={() => {
+                  setEngine('vad-script');
+                  setErrorMsg(null);
+                }}
+                className="rounded border border-cyan-400/40 bg-cyan-500/15 px-2 py-1 text-[10px] font-semibold text-cyan-200 hover:bg-cyan-500/25"
+              >
+                Gunakan Mode Offline (Naskah + Deteksi Suara VAD)
+              </button>
+            )}
           </div>
         )}
       </div>

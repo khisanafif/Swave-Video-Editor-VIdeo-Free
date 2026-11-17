@@ -355,9 +355,38 @@ describe('VideoEditorPage UI Integration (Desktop, Tablet, Android & Multi-Devic
     expect(useTimelineStore.getState().selectedClipIds).toEqual([]);
 
     // Cycle Mobile -> Tablet (renders Tablet vertical Icon Rail)
-    fireEvent.click(modeToggle);
+    fireEvent.click(
+      screen.getByTitle(/Beralih antara Tampilan Studio Android/i)
+    );
     expect(
       screen.getByRole('navigation', { name: /Rail Alat Tablet/i })
     ).toBeInTheDocument();
+  });
+
+  it('adapts smoothly when rotated into Phone/APK Landscape mode (844x390) with right vertical dock', async () => {
+    const prevW = window.innerWidth;
+    const prevH = window.innerHeight;
+    Object.defineProperty(window, 'innerWidth', { value: 844, configurable: true });
+    Object.defineProperty(window, 'innerHeight', { value: 390, configurable: true });
+
+    try {
+      render(<VideoEditorPage />);
+      await act(async () => {
+        await Promise.resolve();
+      });
+
+      expect(screen.getByText(/HP Lanskap/i)).toBeInTheDocument();
+      expect(screen.getByLabelText(/Playhead Tengah Mobile/i)).toBeInTheDocument();
+      expect(
+        screen.getByRole('navigation', { name: /Navigasi Studio Android/i })
+      ).toHaveClass('flex-col');
+
+      // Mobile overflow menu popover opens Studio settings cleanly
+      fireEvent.click(screen.getByRole('button', { name: /Menu Studio/i }));
+      expect(screen.getByText(/Multi-Device \/ QR Hub/i)).toBeInTheDocument();
+    } finally {
+      Object.defineProperty(window, 'innerWidth', { value: prevW, configurable: true });
+      Object.defineProperty(window, 'innerHeight', { value: prevH, configurable: true });
+    }
   });
 });

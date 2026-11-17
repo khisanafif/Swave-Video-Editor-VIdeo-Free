@@ -8,7 +8,7 @@ import {
 import type { SubtitleCue } from '@swave/shared';
 
 env.allowLocalModels = false;
-env.useBrowserCache = true;
+env.useBrowserCache = typeof caches !== 'undefined';
 
 interface WorkerTranscribeMessage {
   type: 'transcribe';
@@ -17,16 +17,54 @@ interface WorkerTranscribeMessage {
   language?: string;
   startOffsetSec?: number;
   audioDurationSec?: number;
+  ortBaseUrl?: string;
+  preferCdnWasm?: boolean;
 }
 
 const pipelineCache = new Map<string, AutomaticSpeechRecognitionPipeline>();
 
+function configureOnnxWasmRuntime(options: {
+  ortBaseUrl?: string;
+  preferCdnWasm?: boolean;
+}): void {
+  const onnxEnv = env.backends?.onnx as
+    | {
+        wasm?: {
+          numThreads?: number;
+          proxy?: boolean;
+          wasmPaths?: string | { mjs?: string; wasm?: string };
+        };
+      }
+    | undefined;
+  if (!onnxEnv?.wasm) return;
+
+  // Single-thread WASM prevents cross-origin pthread Worker crashes on GitHub Pages,
+  // iOS Safari, Firefox, and Capacitor APK where SharedArrayBuffer/COOP varies.
+  onnxEnv.wasm.numThreads = 1;
+  onnxEnv.wasm.proxy = false;
+
+  if (!options.preferCdnWasm && options.ortBaseUrl) {
+    const base = options.ortBaseUrl.endsWith('/')
+      ? options.ortBaseUrl
+      : `${options.ortBaseUrl}/`;
+    onnxEnv.wasm.wasmPaths = {
+      mjs: `${base}ort-wasm-simd-threaded.mjs`,
+      wasm: `${base}ort-wasm-simd-threaded.wasm`,
+    };
+  }
+}
+
 async function getTranscriber(
   modelId: string,
+  ortBaseUrl: string | undefined,
+  preferCdnWasm: boolean | undefined,
   onProgress: (pct: number, statusText: string) => void
 ): Promise<AutomaticSpeechRecognitionPipeline> {
-  const cached = pipelineCache.get(modelId);
+  const cacheKey = `${modelId}::${preferCdnWasm ? 'cdn' : 'local'}`;
+  const cached = pipelineCache.get(cacheKey);
   if (cached) return cached;
+
+  configureOnnxWasmRuntime({ ortBaseUrl, preferCdnWasm });
 
   const progress_callback = (info: ProgressInfo) => {
     if (info.status === 'progress' && typeof info.progress === 'number') {
@@ -38,39 +76,15 @@ async function getTranscriber(
     }
   };
 
-  let device: 'webgpu' | 'wasm' = 'wasm';
-  if (
-    typeof navigator !== 'undefined' &&
-    'gpu' in navigator &&
-    typeof (navigator as unknown as { gpu?: { requestAdapter?: () => Promise<unknown> } })
-      .gpu?.requestAdapter === 'function'
-  ) {
-    try {
-      const adapter = await (
-        navigator as unknown as { gpu: { requestAdapter: () => Promise<unknown> } }
-      ).gpu.requestAdapter();
-      if (adapter) device = 'webgpu';
-    } catch {
-      device = 'wasm';
-    }
-  }
+  // Quantized q8 WASM (~41MB) is consistent across GitHub Pages, Android APK, iOS, and PCs
+  // without risking 155MB WebGPU fp32 OOM or GPU shader compilation failures.
+  const pipe = await pipeline('automatic-speech-recognition', modelId, {
+    device: 'wasm',
+    dtype: 'q8',
+    progress_callback,
+  });
 
-  let pipe: AutomaticSpeechRecognitionPipeline;
-  try {
-    pipe = await pipeline('automatic-speech-recognition', modelId, {
-      device,
-      dtype: device === 'webgpu' ? 'fp32' : 'q8',
-      progress_callback,
-    });
-  } catch {
-    pipe = await pipeline('automatic-speech-recognition', modelId, {
-      device: 'wasm',
-      dtype: 'q8',
-      progress_callback,
-    });
-  }
-
-  pipelineCache.set(modelId, pipe);
+  pipelineCache.set(cacheKey, pipe);
   return pipe;
 }
 
@@ -103,9 +117,13 @@ function chunksToCues(
     if (!text) continue;
     const rawStart = Array.isArray(ch.timestamp) ? ch.timestamp[0] : 0;
     const rawEnd = Array.isArray(ch.timestamp) ? ch.timestamp[1] : null;
-    const start = Math.max(0, (typeof rawStart === 'number' ? rawStart : 0) + offsetSec);
+    const start = Math.max(
+      0,
+      (typeof rawStart === 'number' ? rawStart : 0) + offsetSec
+    );
     const computedEnd =
-      typeof rawEnd === 'number' && rawEnd > (typeof rawStart === 'number' ? rawStart : 0)
+      typeof rawEnd === 'number' &&
+      rawEnd > (typeof rawStart === 'number' ? rawStart : 0)
         ? rawEnd + offsetSec
         : start + Math.max(0.8, text.split(/\s+/).length * 0.42);
     const end = Math.max(start + 0.25, Math.min(maxEnd, computedEnd));
@@ -127,8 +145,13 @@ self.onmessage = async (event: MessageEvent<WorkerTranscribeMessage>) => {
   };
 
   try {
-    postProgress(5, 'Menyiapkan mesin AI Whisper di browser...');
-    const transcriber = await getTranscriber(msg.modelId, postProgress);
+    postProgress(5, 'Menyiapkan mesin AI Whisper (WASM)...');
+    const transcriber = await getTranscriber(
+      msg.modelId,
+      msg.ortBaseUrl,
+      msg.preferCdnWasm,
+      postProgress
+    );
     postProgress(65, 'Mentranskripsi suara menjadi subtitle...');
 
     const langOpt =
@@ -162,10 +185,10 @@ self.onmessage = async (event: MessageEvent<WorkerTranscribeMessage>) => {
     postProgress(100, 'Transkripsi selesai!');
     self.postMessage({ type: 'result', cues, rawText: result.text || '' });
   } catch (err) {
-    const rawMsg = (err as Error).message || '';
+    const rawMsg = (err as Error)?.message || String(err || '');
     const friendly =
       /fetch|network|offline|ENOTFOUND|Failed to/i.test(rawMsg)
-        ? 'Gagal mengunduh model AI Whisper untuk pemakaian pertama. Periksa internet Anda, atau gunakan mode "Sinkronisasi Naskah + Deteksi Suara" / "Dikte Mikrofon" yang 100% offline.'
+        ? 'Gagal mengunduh model AI Whisper untuk pemakaian pertama. Periksa koneksi internet Anda, atau gunakan mode "Sinkronisasi Naskah + Deteksi Suara" / "Dikte Mikrofon" yang 100% offline.'
         : rawMsg || 'Gagal menjalankan Whisper di browser.';
     self.postMessage({
       type: 'error',

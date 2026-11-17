@@ -34,14 +34,10 @@ export function Playhead({ height, variant = 'moving' }: PlayheadProps) {
     return (
       <div
         aria-label="Playhead Tengah Mobile"
-        className="pointer-events-none absolute top-0 left-1/2 z-30 -translate-x-1/2"
-        style={{ height }}
+        className="pointer-events-none absolute top-0 bottom-0 left-1/2 z-30 -translate-x-1/2"
       >
-        <div className="mx-auto h-2.5 w-2.5 rounded-full border border-zinc-950 bg-white shadow-sm" />
-        <div
-          className="mx-auto w-[2px] bg-white shadow-[0_0_8px_rgba(255,255,255,0.85)]"
-          style={{ height: Math.max(0, height - 8) }}
-        />
+        <div className="mx-auto h-1.5 w-3 rounded-b-sm bg-white shadow-xs" />
+        <div className="mx-auto h-full w-[2px] bg-white shadow-[0_0_8px_rgba(255,255,255,0.75)]" />
       </div>
     );
   }
@@ -70,7 +66,10 @@ export function Playhead({ height, variant = 'moving' }: PlayheadProps) {
       className="pointer-events-none absolute top-0 left-0 z-30 will-change-transform"
       style={{ height }}
     >
-      <div className="w-[2px] bg-[#00E5FF] shadow-[0_0_8px_rgba(0,229,255,0.8)]" style={{ height }} />
+      <div
+        className="w-[2px] bg-[#00E5FF] shadow-[0_0_8px_rgba(0,229,255,0.8)]"
+        style={{ height }}
+      />
     </div>
   );
 }

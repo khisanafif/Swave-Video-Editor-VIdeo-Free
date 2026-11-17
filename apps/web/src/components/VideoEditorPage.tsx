@@ -13,6 +13,7 @@ import {
   Gauge,
   HelpCircle,
   Maximize2,
+  Menu,
   Minimize2,
   Monitor,
   Music,
@@ -29,6 +30,7 @@ import {
   ShieldCheck,
   SlidersHorizontal,
   Smartphone,
+  Smile,
   Sparkles,
   Tablet,
   Trash2,
@@ -87,26 +89,48 @@ import { TimelineContainer } from './timeline/TimelineContainer';
 type DeviceLayoutMode = 'desktop' | 'tablet' | 'mobile';
 type MobileSheetType = 'none' | 'media' | 'inspector' | 'export';
 
-function detectDeviceLayout(): DeviceLayoutMode {
-  if (typeof window === 'undefined') return 'desktop';
-  if (typeof window.matchMedia === 'function') {
-    if (window.matchMedia('(max-width: 767px)').matches) return 'mobile';
-    if (window.matchMedia('(max-width: 1023px)').matches) return 'tablet';
+interface ViewportGeometry {
+  mode: DeviceLayoutMode;
+  isLandscape: boolean;
+}
+
+function detectViewportGeometry(): ViewportGeometry {
+  if (typeof window === 'undefined') {
+    return { mode: 'desktop', isLandscape: true };
   }
-  const w = window.innerWidth;
-  if (w > 0 && w < 768) return 'mobile';
-  if (w >= 768 && w < 1024) return 'tablet';
-  return 'desktop';
+  const w = window.innerWidth || 1024;
+  const h = window.innerHeight || 768;
+  const isLandscape = w > h;
+
+  // Rotated phone / Android APK sideways (short landscape screen height)
+  if (isLandscape && h > 0 && h < 520) {
+    return { mode: 'mobile', isLandscape: true };
+  }
+
+  if (typeof window.matchMedia === 'function') {
+    if (window.matchMedia('(max-width: 767px)').matches) {
+      return { mode: 'mobile', isLandscape };
+    }
+    if (window.matchMedia('(max-width: 1023px)').matches) {
+      return { mode: 'tablet', isLandscape };
+    }
+  }
+
+  if (w < 768) return { mode: 'mobile', isLandscape };
+  if (w < 1024) return { mode: 'tablet', isLandscape };
+  return { mode: 'desktop', isLandscape: true };
 }
 
 function MobileTransportStrip({
-  onSave,
+  compactLandscape,
   isFullscreen,
   onToggleFullscreen,
+  onSave,
 }: {
-  onSave: () => void;
+  compactLandscape: boolean;
   isFullscreen: boolean;
   onToggleFullscreen: () => void;
+  onSave: () => void;
 }) {
   const isPlaying = usePlaybackStore((s) => s.isPlaying);
   const currentTime = usePlaybackStore((s) => s.currentTime);
@@ -118,7 +142,11 @@ function MobileTransportStrip({
   const fps = resolution.fps || 30;
 
   return (
-    <div className="flex h-10 shrink-0 items-center justify-between border-y border-[#2A2A32] bg-[#111114] px-2.5">
+    <div
+      className={`flex shrink-0 items-center justify-between border-y border-[#1E1E24] bg-[#0A0A0C] px-3 ${
+        compactLandscape ? 'h-8' : 'h-10'
+      }`}
+    >
       <div className="flex items-center gap-1.5">
         <button
           type="button"
@@ -127,28 +155,30 @@ function MobileTransportStrip({
             usePlaybackStore.getState().togglePlay();
           }}
           aria-label={isPlaying ? 'Pause' : 'Play'}
-          className="flex h-7 w-9 items-center justify-center rounded-md bg-[#00E5FF] text-zinc-950 shadow-sm active:scale-95"
+          className="flex h-7 w-8 items-center justify-center rounded-md text-white transition hover:text-[#00E5FF] active:scale-95"
         >
           {isPlaying ? (
-            <Pause className="h-3.5 w-3.5 fill-current" />
+            <Pause className="h-4 w-4 fill-current" />
           ) : (
-            <Play className="h-3.5 w-3.5 fill-current" />
+            <Play className="h-4 w-4 fill-current" />
           )}
         </button>
       </div>
 
-      <div className="font-mono text-[11px] tabular-nums text-zinc-200">
-        <span className="text-[#00E5FF]">{formatTimecode(currentTime, fps)}</span>
+      <div className="font-mono text-[11px] tabular-nums">
+        <span className="font-semibold text-white">
+          {formatTimecode(currentTime, fps)}
+        </span>
         <span className="mx-1 text-zinc-600">/</span>
-        <span className="text-zinc-400">{formatTimecode(totalDur, fps)}</span>
+        <span className="text-zinc-500">{formatTimecode(totalDur, fps)}</span>
       </div>
 
-      <div className="flex items-center gap-1">
+      <div className="flex items-center gap-0.5">
         <button
           type="button"
           disabled={pastStates.length === 0}
           onClick={() => useTimelineStore.temporal.getState().undo()}
-          className="rounded p-1.5 text-zinc-300 hover:bg-[#242429] disabled:opacity-35"
+          className="rounded p-1.5 text-zinc-200 hover:bg-[#18181C] disabled:opacity-30"
           title="Undo"
           aria-label="Undo"
         >
@@ -158,34 +188,26 @@ function MobileTransportStrip({
           type="button"
           disabled={futureStates.length === 0}
           onClick={() => useTimelineStore.temporal.getState().redo()}
-          className="rounded p-1.5 text-zinc-300 hover:bg-[#242429] disabled:opacity-35"
+          className="rounded p-1.5 text-zinc-200 hover:bg-[#18181C] disabled:opacity-30"
           title="Redo"
           aria-label="Redo"
         >
           <Redo2 className="h-3.5 w-3.5" />
         </button>
-        <button
-          type="button"
-          disabled={Object.keys(clips).length === 0}
-          onClick={() => captureCurrentCanvasSnapshot()}
-          className="rounded p-1.5 text-zinc-300 hover:bg-[#242429] disabled:opacity-35"
-          title="Snapshot PNG"
-          aria-label="Snapshot"
-        >
-          <Camera className="h-3.5 w-3.5" />
-        </button>
-        <button
-          type="button"
-          onClick={onSave}
-          className="rounded p-1.5 text-zinc-300 hover:bg-[#242429]"
-          title="Simpan Lokal"
-        >
-          <Save className="h-3.5 w-3.5 text-[#00E5FF]" />
-        </button>
+        {compactLandscape && (
+          <button
+            type="button"
+            onClick={onSave}
+            className="rounded p-1.5 text-zinc-200 hover:bg-[#18181C]"
+            title="Simpan Lokal"
+          >
+            <Save className="h-3.5 w-3.5 text-[#00E5FF]" />
+          </button>
+        )}
         <button
           type="button"
           onClick={onToggleFullscreen}
-          className="rounded p-1.5 text-zinc-300 hover:bg-[#242429]"
+          className="rounded p-1.5 text-zinc-200 hover:bg-[#18181C]"
           title="Perbesar Pratinjau"
           aria-label="Toggle Fullscreen Preview"
         >
@@ -220,6 +242,7 @@ export function VideoEditorPage() {
   );
   const [serverCaps, setServerCaps] = useState<ServerCapabilities | null>(null);
   const [showDiagnostics, setShowDiagnostics] = useState(false);
+  const [showMobileMenu, setShowMobileMenu] = useState(false);
   const [modeModalState, setModeModalState] = useState<{
     open: boolean;
     tab: 'mode' | 'download';
@@ -231,20 +254,28 @@ export function VideoEditorPage() {
   const [autoSaveEnabled, setAutoSaveEnabled] = useState(true);
   const [saveFeedback, setSaveFeedback] = useState<string | null>(null);
 
-  const [detectedLayout, setDetectedLayout] = useState<DeviceLayoutMode>(() =>
-    detectDeviceLayout()
+  const [viewportGeom, setViewportGeom] = useState<ViewportGeometry>(() =>
+    detectViewportGeometry()
   );
   const layoutPreference = useUiStore((s) => s.layoutPreference);
   const setLayoutPreference = useUiStore((s) => s.setLayoutPreference);
   const layoutMode: DeviceLayoutMode =
-    layoutPreference === 'auto' ? detectedLayout : layoutPreference;
+    layoutPreference === 'auto' ? viewportGeom.mode : layoutPreference;
 
-  // Mobile state
+  // Landscape mobile only activates automatically when physical screen is short & wide (or rotated tablet phone)
+  const isMobileLandscape =
+    layoutMode === 'mobile' && viewportGeom.mode === 'mobile' && viewportGeom.isLandscape;
+  const isTabletLandscape =
+    layoutMode === 'tablet' && viewportGeom.isLandscape;
+
+  // Mobile sheet state
   const [mobileSheet, setMobileSheet] = useState<MobileSheetType>('none');
   const [mobileFullscreen, setMobileFullscreen] = useState(false);
 
-  // Tablet slide-over drawers state (with mutual exclusion below 900px)
-  const [tabletAssetOpen, setTabletAssetOpen] = useState(true);
+  // Tablet slide-over drawers state
+  const [tabletAssetOpen, setTabletAssetOpen] = useState(() =>
+    detectViewportGeometry().isLandscape
+  );
   const [tabletInspectorOpen, setTabletInspectorOpen] = useState(false);
 
   // Desktop resizable 4-pane splitters state
@@ -315,31 +346,35 @@ export function VideoEditorPage() {
             useTimelineStore.getState().loadProjectDocument(doc);
             usePlaybackStore.getState().seekTo(0);
           } catch {
-            // Project does not exist on server yet
+            // Ignore when server project doesn't exist yet
           }
         }
       });
     }
 
-    const onResize = () => {
-      setDetectedLayout(detectDeviceLayout());
+    const onViewportChange = () => {
+      setViewportGeom(detectViewportGeometry());
     };
-    window.addEventListener('resize', onResize);
-    return () => window.removeEventListener('resize', onResize);
+    window.addEventListener('resize', onViewportChange);
+    window.addEventListener('orientationchange', onViewportChange);
+    return () => {
+      window.removeEventListener('resize', onViewportChange);
+      window.removeEventListener('orientationchange', onViewportChange);
+    };
   }, [setRuntimeMode]);
 
-  // Tablet rule: auto-show inspector when clip selected, closing left drawer if narrow <= 900px
+  // Tablet rule: auto-show inspector when clip selected, keeping canvas spacious in Portrait / narrow widths
   useEffect(() => {
     if (layoutMode !== 'tablet') return;
     if (selectedClip) {
       setTabletInspectorOpen(true);
-      if (window.innerWidth <= 900) {
+      if (!isTabletLandscape || window.innerWidth <= 900) {
         setTabletAssetOpen(false);
       }
     }
-  }, [layoutMode, selectedClip]);
+  }, [layoutMode, isTabletLandscape, selectedClip]);
 
-  // Debounced Live Auto-Save
+  // Live Debounced Auto-Save
   useEffect(() => {
     if (Object.keys(clips).length === 0 && Object.keys(assets).length === 0) {
       return;
@@ -404,6 +439,7 @@ export function VideoEditorPage() {
         : layoutMode === 'mobile'
         ? 'tablet'
         : 'desktop';
+    setShowMobileMenu(false);
     setLayoutPreference(next);
   };
 
@@ -448,387 +484,790 @@ export function VideoEditorPage() {
     window.addEventListener('pointerup', onUp);
   };
 
-  const headerHeightClass = layoutMode === 'desktop' ? 'h-10' : 'h-12';
+  const mobileClipActions = selectedClip
+    ? [
+        {
+          label: 'Bagi',
+          icon: Scissors,
+          onClick: () =>
+            useTimelineStore
+              .getState()
+              .splitClipAtTime(
+                selectedClip.id,
+                usePlaybackStore.getState().currentTime
+              ),
+        },
+        {
+          label: 'Kecepatan',
+          icon: Gauge,
+          onClick: () => setMobileSheet('inspector'),
+        },
+        {
+          label: 'Volume',
+          icon: Volume2,
+          onClick: () => setMobileSheet('inspector'),
+        },
+        {
+          label: 'Animasi',
+          icon: Sparkles,
+          onClick: () => setMobileSheet('inspector'),
+        },
+        {
+          label: 'Filter',
+          icon: Wand2,
+          onClick: () => {
+            setActiveMediaCategory('effects');
+            setMobileSheet('media');
+          },
+        },
+        {
+          label: 'Edit',
+          icon: SlidersHorizontal,
+          onClick: () => setMobileSheet('inspector'),
+        },
+        {
+          label: 'Salin',
+          icon: Copy,
+          onClick: () =>
+            useTimelineStore.getState().duplicateClip(selectedClip.id),
+        },
+        {
+          label: 'Hapus',
+          icon: Trash2,
+          onClick: () =>
+            useTimelineStore.getState().deleteClips([selectedClip.id]),
+        },
+      ]
+    : [];
+
+  const mobileMainDockItems = [
+    {
+      label: 'Edit',
+      icon: Scissors,
+      onClick: () => {
+        setActiveMediaCategory('media');
+        toggleMobileSheet('media');
+      },
+    },
+    {
+      label: 'Audio',
+      icon: Music,
+      onClick: () => {
+        setActiveMediaCategory('audio');
+        setMobileSheet('media');
+      },
+    },
+    {
+      label: '+ Teks',
+      icon: Type,
+      onClick: () => {
+        useTimelineStore
+          .getState()
+          .addTextClip('Judul Overlay', usePlaybackStore.getState().currentTime);
+        setMobileSheet('inspector');
+      },
+    },
+    {
+      label: 'Subtitle',
+      icon: Captions,
+      onClick: () => {
+        setActiveMediaCategory('subtitle');
+        setMobileSheet('media');
+      },
+    },
+    {
+      label: 'Stiker',
+      icon: Smile,
+      onClick: () => {
+        setActiveMediaCategory('sticker');
+        setMobileSheet('media');
+      },
+    },
+    {
+      label: 'Efek',
+      icon: Wand2,
+      onClick: () => {
+        setActiveMediaCategory('effects');
+        setMobileSheet('media');
+      },
+    },
+    {
+      label: 'App APK',
+      icon: Smartphone,
+      onClick: () => setModeModalState({ open: true, tab: 'download' }),
+    },
+  ];
+
+  const headerHeightClass =
+    layoutMode === 'desktop'
+      ? 'h-10'
+      : isMobileLandscape
+      ? 'h-9'
+      : 'h-12';
 
   return (
-    <div className="flex h-[100dvh] w-screen flex-col overflow-hidden bg-[#0E0E10] pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] text-[#F4F4F6] select-none">
-      {/* Studio Global Top Bar (40px Desktop / 48px Tablet & Mobile) */}
-      <header
-        className={`relative z-40 flex shrink-0 items-center justify-between border-b border-[#2A2A32] bg-[#18181C] px-2.5 lg:px-3.5 ${headerHeightClass}`}
-      >
-        <div className="flex min-w-0 items-center gap-2">
-          {layoutMode === 'tablet' && (
+    <div className="flex h-[100dvh] w-screen flex-col overflow-hidden bg-[#0A0A0C] pt-[env(safe-area-inset-top)] pr-[env(safe-area-inset-right)] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] text-[#F4F4F6] select-none">
+      {/* ===================================================================== */}
+      {/* TOP HEADER BAR: Minimal CapCut Android Header on Mobile vs Full Bar   */}
+      {/* ===================================================================== */}
+      {layoutMode === 'mobile' ? (
+        <header
+          className={`relative z-40 flex shrink-0 items-center justify-between border-b border-[#1E1E24] bg-[#0A0A0C] px-3 ${headerHeightClass}`}
+        >
+          {/* Left: [X] Reset/Clear, [≡] Studio Menu, [📱] Mode Switcher */}
+          <div className="flex items-center gap-1">
             <button
               type="button"
               onClick={() => {
-                const next = !tabletAssetOpen;
-                setTabletAssetOpen(next);
-                if (next && window.innerWidth <= 900) {
-                  setTabletInspectorOpen(false);
-                }
+                clearLocalProjectSnapshot();
+                useTimelineStore.getState().resetProject();
               }}
-              className={`rounded border border-[#2A2A32] p-1.5 text-xs ${
-                tabletAssetOpen
-                  ? 'bg-[#00E5FF]/15 text-[#00E5FF]'
-                  : 'bg-[#242429] text-zinc-300'
-              }`}
-              title="Buka / Tutup Panel Aset"
+              className="rounded-md p-1.5 text-zinc-200 hover:bg-[#18181C]"
+              title="Reset Proyek Baru"
+              aria-label="Reset Proyek"
             >
-              <PanelLeft className="h-4 w-4" />
+              <X className="h-4 w-4" />
             </button>
-          )}
 
+            <button
+              type="button"
+              onClick={() => setShowMobileMenu((v) => !v)}
+              className={`rounded-md p-1.5 ${
+                showMobileMenu
+                  ? 'bg-[#242429] text-[#00E5FF]'
+                  : 'text-zinc-200 hover:bg-[#18181C]'
+              }`}
+              title="Menu Studio (QR, Server PC, Simpan, Pemula/Pro)"
+              aria-label="Menu Studio"
+            >
+              <Menu className="h-4 w-4" />
+            </button>
+
+            <button
+              type="button"
+              onClick={cycleLayoutMode}
+              className="inline-flex items-center gap-1 rounded-md bg-[#18181C] px-2 py-1 text-[10px] font-medium text-[#00E5FF] ring-1 ring-[#2A2A32]"
+              title="Beralih antara Tampilan Studio Android (Mobile), Tablet, dan Desktop"
+            >
+              <Smartphone className="h-3.5 w-3.5" />
+              <span className="hidden xs:inline">
+                {isMobileLandscape ? 'HP Lanskap' : 'HP'}
+              </span>
+            </button>
+          </div>
+
+          {/* Center: Clean CapCut Android Resolution Pill [1080P ▾] */}
+          <select
+            aria-label="Resolusi Kanvas"
+            value={`${resolution.width}x${resolution.height}x${resolution.fps}`}
+            onChange={(e) => {
+              const found = PRESET_RESOLUTIONS.find(
+                (r) => `${r.width}x${r.height}x${r.fps}` === e.target.value
+              );
+              if (found) useTimelineStore.getState().setResolution(found);
+            }}
+            className="rounded-md bg-[#18181C] px-2.5 py-1 text-[11px] font-semibold text-zinc-100 ring-1 ring-[#2A2A32] outline-none"
+          >
+            {PRESET_RESOLUTIONS.map((r) => (
+              <option
+                key={`${r.width}x${r.height}x${r.fps}`}
+                value={`${r.width}x${r.height}x${r.fps}`}
+              >
+                {r.height >= 1080 ? '1080P' : '720P'} · {r.fps}fps ({r.width}×{r.height})
+              </option>
+            ))}
+          </select>
+
+          {/* Right: [?] + Bright Cyan CapCut Export Pill */}
           <div className="flex items-center gap-1.5">
-            <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-gradient-to-br from-[#00E5FF] to-sky-500 text-zinc-950 shadow-xs">
-              <Film className="h-3.5 w-3.5" />
+            <button
+              type="button"
+              onClick={() => setShowHelpModal(true)}
+              className="rounded-md p-1.5 text-zinc-300 hover:bg-[#18181C]"
+              title="Panduan & Shortcut"
+              aria-label="Bantuan"
+            >
+              <HelpCircle className="h-4 w-4" />
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setShowExportModal(true)}
+              aria-label="Ekspor MP4"
+              className="inline-flex items-center gap-1 rounded-md bg-[#00E5FF] px-3 py-1 text-xs font-extrabold text-zinc-950 shadow-sm active:scale-95"
+              title="Ekspor Video MP4 Tanpa Watermark"
+            >
+              <span>Ekspor</span>
+            </button>
+          </div>
+
+          {/* Mobile Overflow Studio Menu Popover */}
+          {showMobileMenu && (
+            <div
+              role="menu"
+              className="absolute top-12 left-3 z-60 w-64 space-y-2.5 rounded-xl border border-[#2A2A32] bg-[#202026] p-3 text-xs shadow-2xl"
+            >
+              <div className="flex items-center justify-between border-b border-[#2A2A32] pb-2">
+                <span className="font-bold text-white">
+                  SWAVE <span className="text-[#00E5FF]">Video</span>
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setShowMobileMenu(false)}
+                  className="text-zinc-400 hover:text-white"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+
+              <label className="block space-y-1">
+                <span className="text-[10px] text-zinc-400">Nama Proyek</span>
+                <input
+                  type="text"
+                  aria-label="Nama Proyek"
+                  value={projectName}
+                  onChange={(e) =>
+                    useTimelineStore.getState().setProjectName(e.target.value)
+                  }
+                  className="w-full rounded border border-[#2A2A32] bg-[#111114] px-2 py-1 text-xs text-white"
+                />
+              </label>
+
+              <div className="grid grid-cols-2 gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => setExperienceMode('beginner')}
+                  className={`rounded py-1 font-semibold ${
+                    experienceMode === 'beginner'
+                      ? 'bg-[#00E5FF] text-zinc-950'
+                      : 'bg-[#18181C] text-zinc-400'
+                  }`}
+                >
+                  Pemula
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setExperienceMode('pro')}
+                  className={`rounded py-1 font-semibold ${
+                    experienceMode === 'pro'
+                      ? 'bg-violet-500 text-zinc-950'
+                      : 'bg-[#18181C] text-zinc-400'
+                  }`}
+                >
+                  Pro
+                </button>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setShowMobileMenu(false);
+                  void handleSaveProject();
+                }}
+                className="flex w-full items-center gap-2 rounded-lg bg-[#242429] px-2.5 py-2 text-left text-zinc-100"
+              >
+                <Save className="h-3.5 w-3.5 text-[#00E5FF]" />
+                <span>{saveFeedback || 'Simpan Proyek ke Perangkat'}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setShowMobileMenu(false);
+                  setModeModalState({ open: true, tab: 'mode' });
+                }}
+                className="flex w-full items-center gap-2 rounded-lg bg-[#242429] px-2.5 py-2 text-left text-zinc-100"
+              >
+                {runtimeMode === 'server' ? (
+                  <Server className="h-3.5 w-3.5 text-emerald-400" />
+                ) : (
+                  <Cpu className="h-3.5 w-3.5 text-[#00E5FF]" />
+                )}
+                <span>
+                  Mode: {runtimeMode === 'server' ? 'Server PC' : 'Mandiri di HP'}
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setShowMobileMenu(false);
+                  setHubModalState({ open: true, tab: 'connect' });
+                }}
+                className="flex w-full items-center gap-2 rounded-lg bg-[#242429] px-2.5 py-2 text-left text-zinc-100"
+              >
+                <QrCode className="h-3.5 w-3.5 text-[#00E5FF]" />
+                <span>Multi-Device / QR Hub</span>
+              </button>
             </div>
-            <div className="flex items-center">
+          )}
+        </header>
+      ) : (
+        /* DESKTOP & TABLET TOP HEADER BAR */
+        <header
+          className={`relative z-40 flex shrink-0 items-center justify-between border-b border-[#2A2A32] bg-[#18181C] px-3 ${headerHeightClass}`}
+        >
+          <div className="flex min-w-0 items-center gap-2">
+            {layoutMode === 'tablet' && (
+              <button
+                type="button"
+                onClick={() => {
+                  const next = !tabletAssetOpen;
+                  setTabletAssetOpen(next);
+                  if (next && (!isTabletLandscape || window.innerWidth <= 900)) {
+                    setTabletInspectorOpen(false);
+                  }
+                }}
+                className={`rounded border border-[#2A2A32] p-1.5 text-xs ${
+                  tabletAssetOpen
+                    ? 'bg-[#00E5FF]/15 text-[#00E5FF]'
+                    : 'bg-[#242429] text-zinc-300'
+                }`}
+                title="Buka / Tutup Panel Aset"
+              >
+                <PanelLeft className="h-4 w-4" />
+              </button>
+            )}
+
+            <div className="flex items-center gap-1.5">
+              <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-gradient-to-br from-[#00E5FF] to-sky-500 text-zinc-950 shadow-xs">
+                <Film className="h-3.5 w-3.5" />
+              </div>
               <span className="text-xs font-extrabold tracking-tight text-white sm:text-sm">
                 SWAVE <span className="text-[#00E5FF]">Video</span>
               </span>
-              <span className="ml-1.5 hidden rounded bg-emerald-500/20 px-1.5 py-0.5 font-mono text-[9px] font-bold text-emerald-300 xl:inline">
+              <span className="ml-1 hidden rounded bg-emerald-500/20 px-1.5 py-0.5 font-mono text-[9px] font-bold text-emerald-300 xl:inline">
                 100% GRATIS
               </span>
             </div>
-          </div>
 
-          <div className="h-4 w-px bg-[#2A2A32]" />
+            <div className="h-4 w-px bg-[#2A2A32]" />
 
-          <input
-            type="text"
-            aria-label="Nama Proyek"
-            value={projectName}
-            onChange={(e) =>
-              useTimelineStore.getState().setProjectName(e.target.value)
-            }
-            className="w-20 truncate rounded border border-transparent bg-transparent px-1.5 py-0.5 text-xs font-medium text-zinc-200 hover:border-[#2A2A32] focus:border-[#00E5FF] focus:bg-[#242429] focus:outline-none sm:w-36 lg:w-48"
-          />
-
-          {layoutMode === 'mobile' && (
-            <select
-              aria-label="Resolusi Kanvas"
-              value={`${resolution.width}x${resolution.height}x${resolution.fps}`}
-              onChange={(e) => {
-                const found = PRESET_RESOLUTIONS.find(
-                  (r) => `${r.width}x${r.height}x${r.fps}` === e.target.value
-                );
-                if (found) useTimelineStore.getState().setResolution(found);
-              }}
-              className="max-w-[92px] rounded border border-[#2A2A32] bg-[#242429] px-1.5 py-1 text-[10px] font-medium text-zinc-200"
-            >
-              {PRESET_RESOLUTIONS.map((r) => (
-                <option
-                  key={`${r.width}x${r.height}x${r.fps}`}
-                  value={`${r.width}x${r.height}x${r.fps}`}
-                >
-                  {r.width}×{r.height}
-                </option>
-              ))}
-            </select>
-          )}
-
-          <button
-            type="button"
-            onClick={() => setHubModalState({ open: true, tab: 'projects' })}
-            className="hidden items-center gap-1 rounded border border-[#2A2A32] bg-[#242429] px-2 py-1 text-[11px] text-zinc-300 hover:border-[#00E5FF]/60 hover:text-[#00E5FF] lg:inline-flex"
-            title="Buka atau ganti Proyek Bersama di Server PC"
-          >
-            <FolderOpen className="h-3.5 w-3.5 text-[#00E5FF]" />
-            <span>Proyek</span>
-          </button>
-        </div>
-
-        <div className="flex shrink-0 items-center gap-1 lg:gap-1.5">
-          {/* Pemula vs Pro Switcher */}
-          <div
-            role="group"
-            aria-label="Mode Pengalaman Editor"
-            className="inline-flex items-center rounded-md border border-[#2A2A32] bg-[#111114] p-0.5 text-[10px] sm:text-[11px]"
-          >
-            <button
-              type="button"
-              onClick={() => setExperienceMode('beginner')}
-              className={`rounded px-1.5 py-0.5 font-semibold transition sm:px-2 ${
-                experienceMode === 'beginner'
-                  ? 'bg-[#00E5FF] text-zinc-950'
-                  : 'text-zinc-400 hover:text-zinc-200'
-              }`}
-              title="Mode Pemula: Tampilan simpel, istilah mudah, preset 1-klik"
-            >
-              Pemula
-            </button>
-            <button
-              type="button"
-              onClick={() => setExperienceMode('pro')}
-              className={`rounded px-1.5 py-0.5 font-semibold transition sm:px-2 ${
-                experienceMode === 'pro'
-                  ? 'bg-violet-500 text-zinc-950'
-                  : 'text-zinc-400 hover:text-zinc-200'
-              }`}
-              title="Mode Pro (100% Gratis): Kontrol NLE penuh, color shader presisi, ripple & shortcuts"
-            >
-              Pro
-            </button>
-          </div>
-
-          {/* Multi-Device Connect (QR Code & LAN Link) */}
-          <button
-            type="button"
-            onClick={() => setHubModalState({ open: true, tab: 'connect' })}
-            className="inline-flex items-center gap-1 rounded-md border border-[#00E5FF]/35 bg-[#00E5FF]/10 px-2 py-1 text-xs font-medium text-[#00E5FF] hover:bg-[#00E5FF]/20"
-            title="Buka Proyek Ini di HP, Tablet, atau Laptop Lain via WiFi/LAN"
-          >
-            <QrCode className="h-3.5 w-3.5" />
-            <span className="hidden xl:inline">Multi-Device / QR</span>
-          </button>
-
-          {/* Tri-Mode Adaptive Layout Switcher */}
-          <button
-            type="button"
-            onClick={cycleLayoutMode}
-            className={`inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs transition ${
-              layoutMode !== 'desktop'
-                ? 'border-[#00E5FF]/50 bg-[#00E5FF]/15 text-[#00E5FF]'
-                : 'border-[#2A2A32] bg-[#242429] text-zinc-300 hover:border-zinc-500'
-            }`}
-            title="Beralih antara Tampilan Studio Android (Mobile), Tablet, dan Desktop"
-          >
-            {layoutMode === 'mobile' ? (
-              <>
-                <Smartphone className="h-3.5 w-3.5 text-[#00E5FF]" />
-                <span className="hidden md:inline">Mode HP</span>
-              </>
-            ) : layoutMode === 'tablet' ? (
-              <>
-                <Tablet className="h-3.5 w-3.5 text-violet-400" />
-                <span className="hidden md:inline">Mode Tablet</span>
-              </>
-            ) : (
-              <>
-                <Monitor className="h-3.5 w-3.5 text-zinc-300" />
-                <span className="hidden md:inline">Mode Desktop</span>
-              </>
-            )}
-          </button>
-
-          {/* Runtime Mode Switcher */}
-          <button
-            type="button"
-            onClick={() => setModeModalState({ open: true, tab: 'mode' })}
-            className={`inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs font-medium transition ${
-              runtimeMode === 'server' && serverCaps?.status === 'online'
-                ? 'border-emerald-500/40 bg-emerald-500/15 text-emerald-300'
-                : 'border-[#00E5FF]/35 bg-[#00E5FF]/10 text-[#00E5FF]'
-            }`}
-            title="Pilih Mode Operasi: Mandiri di Perangkat vs Perantara Server PC"
-          >
-            {runtimeMode === 'server' && serverCaps?.status === 'online' ? (
-              <>
-                <Server className="h-3.5 w-3.5 text-emerald-400" />
-                <span className="hidden xl:inline">Server PC</span>
-              </>
-            ) : (
-              <>
-                <Cpu className="h-3.5 w-3.5" />
-                <span className="hidden xl:inline">Di Perangkat</span>
-              </>
-            )}
-          </button>
-
-          {/* Android / iOS / Portable App Install */}
-          <button
-            type="button"
-            onClick={() => {
-              if (pwa.canInstall) {
-                void pwa.promptInstall();
-              } else {
-                setModeModalState({ open: true, tab: 'download' });
+            <input
+              type="text"
+              aria-label="Nama Proyek"
+              value={projectName}
+              onChange={(e) =>
+                useTimelineStore.getState().setProjectName(e.target.value)
               }
-            }}
-            className="hidden items-center gap-1 rounded-md border border-emerald-500/35 bg-emerald-500/15 px-2 py-1 text-xs font-medium text-emerald-300 hover:bg-emerald-500/25 sm:inline-flex"
-            title="Unduh / Instal Aplikasi (Android APK, iOS Safari/IPA, Portabel)"
-          >
-            <Smartphone className="h-3.5 w-3.5" />
-            <span className="hidden 2xl:inline">
-              {pwa.isStandalone
-                ? 'App Aktif'
-                : pwa.canInstall
-                ? 'Instal App'
-                : 'App HP'}
-            </span>
-          </button>
+              className="w-28 truncate rounded border border-transparent bg-transparent px-1.5 py-0.5 text-xs font-medium text-zinc-200 hover:border-[#2A2A32] focus:border-[#00E5FF] focus:bg-[#242429] focus:outline-none lg:w-48"
+            />
 
-          {experienceMode === 'pro' && (
             <button
               type="button"
-              onClick={() => setShowDiagnostics((v) => !v)}
-              className={`inline-flex items-center gap-1 rounded-md border px-1.5 py-1 text-xs transition ${
-                caps.crossOriginIsolated && caps.hasWebCodecs
-                  ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300'
-                  : 'border-amber-500/30 bg-amber-500/10 text-amber-300'
-              }`}
-              title="Diagnostik Runtime Studio (COOP/COEP, WebCodecs, WebGL2, Server)"
+              onClick={() => setHubModalState({ open: true, tab: 'projects' })}
+              className="hidden items-center gap-1 rounded border border-[#2A2A32] bg-[#242429] px-2 py-1 text-[11px] text-zinc-300 hover:border-[#00E5FF]/60 hover:text-[#00E5FF] lg:inline-flex"
+              title="Buka atau ganti Proyek Bersama di Server PC"
             >
-              {caps.crossOriginIsolated ? (
-                <ShieldCheck className="h-3.5 w-3.5" />
-              ) : (
-                <ShieldAlert className="h-3.5 w-3.5" />
-              )}
+              <FolderOpen className="h-3.5 w-3.5 text-[#00E5FF]" />
+              <span>Proyek</span>
             </button>
-          )}
+          </div>
 
-          <button
-            type="button"
-            onClick={() => setShowHelpModal(true)}
-            className="inline-flex items-center rounded-md border border-[#2A2A32] bg-[#242429] p-1 text-xs text-zinc-300 hover:border-[#00E5FF]/50 hover:text-[#00E5FF]"
-            title="Panduan Cepat & Daftar Shortcut Keyboard (?)"
-          >
-            <HelpCircle className="h-3.5 w-3.5" />
-          </button>
-
-          <button
-            type="button"
-            onClick={() => void handleSaveProject()}
-            className="inline-flex items-center gap-1 rounded-md border border-[#2A2A32] bg-[#242429] px-2 py-1 text-xs font-medium text-zinc-200 hover:border-[#00E5FF]/50"
-            title={
-              runtimeMode === 'server'
-                ? 'Simpan Proyek ke Perangkat & Server PC'
-                : 'Simpan Proyek Lokal di Perangkat'
-            }
-          >
-            {saveFeedback === 'Tersimpan' ||
-            saveFeedback === 'Auto-Synced' ||
-            saveFeedback === 'Tersimpan Lokal' ? (
-              <Check className="h-3.5 w-3.5 text-emerald-400" />
-            ) : (
-              <Save className="h-3.5 w-3.5 text-[#00E5FF]" />
-            )}
-            <span className="hidden lg:inline">
-              {saveFeedback || 'Simpan'}
-            </span>
-          </button>
-
-          {/* Cyan Primary Export CTA */}
-          <button
-            type="button"
-            onClick={() => setShowExportModal(true)}
-            className="inline-flex items-center gap-1 rounded-md bg-[#00E5FF] px-2.5 py-1 text-xs font-bold text-zinc-950 shadow-sm hover:brightness-110"
-            title="Ekspor Video MP4 Tanpa Watermark"
-          >
-            <Download className="h-3.5 w-3.5" />
-            <span className="hidden sm:inline">Ekspor MP4</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => {
-              clearLocalProjectSnapshot();
-              useTimelineStore.getState().resetProject();
-            }}
-            className="hidden items-center rounded-md border border-[#2A2A32] bg-[#242429] p-1 text-xs text-zinc-400 hover:text-zinc-100 sm:inline-flex"
-            title="Reset Proyek Baru"
-          >
-            <RotateCcw className="h-3.5 w-3.5" />
-          </button>
-        </div>
-
-        {/* Diagnostics Popover */}
-        {showDiagnostics && (
-          <div className="absolute top-12 right-3 z-60 w-80 rounded-lg border border-[#2A2A32] bg-[#202026] p-3.5 text-xs shadow-2xl">
-            <div className="mb-2 flex items-center justify-between">
-              <h3 className="font-semibold text-zinc-100">
-                Diagnostik Edge & Browser Runtime
-              </h3>
+          <div className="flex shrink-0 items-center gap-1.5">
+            {/* Pemula vs Pro Switcher */}
+            <div
+              role="group"
+              aria-label="Mode Pengalaman Editor"
+              className="inline-flex items-center rounded-md border border-[#2A2A32] bg-[#111114] p-0.5 text-[11px]"
+            >
               <button
                 type="button"
-                onClick={() => setShowDiagnostics(false)}
-                className="rounded p-0.5 text-zinc-400 hover:text-zinc-100"
+                onClick={() => setExperienceMode('beginner')}
+                className={`rounded px-2 py-0.5 font-semibold transition ${
+                  experienceMode === 'beginner'
+                    ? 'bg-[#00E5FF] text-zinc-950'
+                    : 'text-zinc-400 hover:text-zinc-200'
+                }`}
+                title="Mode Pemula: Tampilan simpel, istilah mudah, preset 1-klik"
               >
-                <X className="h-3.5 w-3.5" />
+                Pemula
+              </button>
+              <button
+                type="button"
+                onClick={() => setExperienceMode('pro')}
+                className={`rounded px-2 py-0.5 font-semibold transition ${
+                  experienceMode === 'pro'
+                    ? 'bg-violet-500 text-zinc-950'
+                    : 'text-zinc-400 hover:text-zinc-200'
+                }`}
+                title="Mode Pro (100% Gratis): Kontrol NLE penuh, color shader presisi, ripple & shortcuts"
+              >
+                Pro
               </button>
             </div>
-            <ul className="space-y-1.5 font-mono text-[11px]">
-              <li className="flex justify-between">
-                <span className="text-zinc-400">Secure Context:</span>
-                <span className={caps.isSecureContext ? 'text-emerald-400' : 'text-amber-400'}>
-                  {String(caps.isSecureContext)}
-                </span>
-              </li>
-              <li className="flex justify-between">
-                <span className="text-zinc-400">COOP/COEP Isolated:</span>
-                <span className={caps.crossOriginIsolated ? 'text-emerald-400' : 'text-amber-400'}>
-                  {String(caps.crossOriginIsolated)}
-                </span>
-              </li>
-              <li className="flex justify-between">
-                <span className="text-zinc-400">WebCodecs API:</span>
-                <span className={caps.hasWebCodecs ? 'text-emerald-400' : 'text-amber-400'}>
-                  {String(caps.hasWebCodecs)}
-                </span>
-              </li>
-              <li className="flex justify-between">
-                <span className="text-zinc-400">WebGL2 GLSL:</span>
-                <span className={caps.hasWebGL2 ? 'text-emerald-400' : 'text-amber-400'}>
-                  {String(caps.hasWebGL2)}
-                </span>
-              </li>
-              <li className="flex justify-between">
-                <span className="text-zinc-400">OPFS Storage:</span>
-                <span className={caps.hasOPFS ? 'text-emerald-400' : 'text-amber-400'}>
-                  {String(caps.hasOPFS)}
-                </span>
-              </li>
-              <li className="flex justify-between">
-                <span className="text-zinc-400">Server FFmpeg:</span>
-                <span className={serverCaps?.ffmpegAvailable ? 'text-emerald-400' : 'text-zinc-400'}>
-                  {serverCaps?.ffmpegAvailable
-                    ? serverCaps.preferredEncoder || 'ready'
-                    : 'offline / none'}
-                </span>
-              </li>
-            </ul>
-            {!caps.isSecureContext && (
-              <p className="mt-2.5 rounded bg-amber-500/10 p-2 text-[11px] text-amber-300">
-                Saat diakses dari HP/Tablet lewat IP LAN HTTP, SWAVE Video mengaktifkan fallback `MediaRecorder` untuk export lokal serta sinkronisasi ke Server PC.
-              </p>
+
+            <button
+              type="button"
+              onClick={() => setHubModalState({ open: true, tab: 'connect' })}
+              className="inline-flex items-center gap-1 rounded-md border border-[#00E5FF]/35 bg-[#00E5FF]/10 px-2 py-1 text-xs font-medium text-[#00E5FF] hover:bg-[#00E5FF]/20"
+              title="Buka Proyek Ini di HP, Tablet, atau Laptop Lain via WiFi/LAN"
+            >
+              <QrCode className="h-3.5 w-3.5" />
+              <span className="hidden xl:inline">Multi-Device / QR</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={cycleLayoutMode}
+              className={`inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs transition ${
+                layoutMode !== 'desktop'
+                  ? 'border-[#00E5FF]/50 bg-[#00E5FF]/15 text-[#00E5FF]'
+                  : 'border-[#2A2A32] bg-[#242429] text-zinc-300 hover:border-zinc-500'
+              }`}
+              title="Beralih antara Tampilan Studio Android (Mobile), Tablet, dan Desktop"
+            >
+              {layoutMode === 'tablet' ? (
+                <>
+                  <Tablet className="h-3.5 w-3.5 text-violet-400" />
+                  <span className="hidden md:inline">
+                    {isTabletLandscape ? 'Tablet' : 'Tablet Potret'}
+                  </span>
+                </>
+              ) : (
+                <>
+                  <Monitor className="h-3.5 w-3.5 text-zinc-300" />
+                  <span className="hidden md:inline">Mode Desktop</span>
+                </>
+              )}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setModeModalState({ open: true, tab: 'mode' })}
+              className={`inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs font-medium transition ${
+                runtimeMode === 'server' && serverCaps?.status === 'online'
+                  ? 'border-emerald-500/40 bg-emerald-500/15 text-emerald-300'
+                  : 'border-[#00E5FF]/35 bg-[#00E5FF]/10 text-[#00E5FF]'
+              }`}
+              title="Pilih Mode Operasi: Mandiri di Perangkat vs Perantara Server PC"
+            >
+              {runtimeMode === 'server' && serverCaps?.status === 'online' ? (
+                <>
+                  <Server className="h-3.5 w-3.5 text-emerald-400" />
+                  <span className="hidden xl:inline">Server PC</span>
+                </>
+              ) : (
+                <>
+                  <Cpu className="h-3.5 w-3.5" />
+                  <span className="hidden xl:inline">Di Perangkat</span>
+                </>
+              )}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                if (pwa.canInstall) {
+                  void pwa.promptInstall();
+                } else {
+                  setModeModalState({ open: true, tab: 'download' });
+                }
+              }}
+              className="hidden items-center gap-1 rounded-md border border-emerald-500/35 bg-emerald-500/15 px-2 py-1 text-xs font-medium text-emerald-300 hover:bg-emerald-500/25 sm:inline-flex"
+              title="Unduh / Instal Aplikasi (Android APK, iOS Safari/IPA, Portabel)"
+            >
+              <Smartphone className="h-3.5 w-3.5" />
+              <span className="hidden 2xl:inline">App HP</span>
+            </button>
+
+            {experienceMode === 'pro' && (
+              <button
+                type="button"
+                onClick={() => setShowDiagnostics((v) => !v)}
+                className={`inline-flex items-center gap-1 rounded-md border px-1.5 py-1 text-xs ${
+                  caps.crossOriginIsolated && caps.hasWebCodecs
+                    ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300'
+                    : 'border-amber-500/30 bg-amber-500/10 text-amber-300'
+                }`}
+                title="Diagnostik Runtime Studio (COOP/COEP, WebCodecs, WebGL2, Server)"
+              >
+                {caps.crossOriginIsolated ? (
+                  <ShieldCheck className="h-3.5 w-3.5" />
+                ) : (
+                  <ShieldAlert className="h-3.5 w-3.5" />
+                )}
+              </button>
             )}
+
+            <button
+              type="button"
+              onClick={() => setShowHelpModal(true)}
+              className="inline-flex items-center rounded-md border border-[#2A2A32] bg-[#242429] p-1 text-xs text-zinc-300 hover:border-[#00E5FF]/50 hover:text-[#00E5FF]"
+              title="Panduan Cepat & Daftar Shortcut Keyboard (?)"
+            >
+              <HelpCircle className="h-3.5 w-3.5" />
+            </button>
+
+            <button
+              type="button"
+              onClick={() => void handleSaveProject()}
+              className="inline-flex items-center gap-1 rounded-md border border-[#2A2A32] bg-[#242429] px-2 py-1 text-xs font-medium text-zinc-200 hover:border-[#00E5FF]/50"
+              title={
+                runtimeMode === 'server'
+                  ? 'Simpan Proyek ke Perangkat & Server PC'
+                  : 'Simpan Proyek Lokal di Perangkat'
+              }
+            >
+              {saveFeedback === 'Tersimpan' ||
+              saveFeedback === 'Auto-Synced' ||
+              saveFeedback === 'Tersimpan Lokal' ? (
+                <Check className="h-3.5 w-3.5 text-emerald-400" />
+              ) : (
+                <Save className="h-3.5 w-3.5 text-[#00E5FF]" />
+              )}
+              <span className="hidden lg:inline">
+                {saveFeedback || 'Simpan'}
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setShowExportModal(true)}
+              className="inline-flex items-center gap-1 rounded-md bg-[#00E5FF] px-2.5 py-1 text-xs font-bold text-zinc-950 shadow-sm hover:brightness-110"
+              title="Ekspor Video MP4 Tanpa Watermark"
+            >
+              <Download className="h-3.5 w-3.5" />
+              <span>Ekspor MP4</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                clearLocalProjectSnapshot();
+                useTimelineStore.getState().resetProject();
+              }}
+              className="inline-flex items-center rounded-md border border-[#2A2A32] bg-[#242429] p-1 text-xs text-zinc-400 hover:text-zinc-100"
+              title="Reset Proyek Baru"
+            >
+              <RotateCcw className="h-3.5 w-3.5" />
+            </button>
           </div>
-        )}
-      </header>
+
+          {showDiagnostics && (
+            <div className="absolute top-12 right-3 z-60 w-80 rounded-lg border border-[#2A2A32] bg-[#202026] p-3.5 text-xs shadow-2xl">
+              <div className="mb-2 flex items-center justify-between">
+                <h3 className="font-semibold text-zinc-100">
+                  Diagnostik Edge & Browser Runtime
+                </h3>
+                <button
+                  type="button"
+                  onClick={() => setShowDiagnostics(false)}
+                  className="rounded p-0.5 text-zinc-400 hover:text-zinc-100"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              </div>
+              <ul className="space-y-1.5 font-mono text-[11px]">
+                <li className="flex justify-between">
+                  <span className="text-zinc-400">Secure Context:</span>
+                  <span className={caps.isSecureContext ? 'text-emerald-400' : 'text-amber-400'}>
+                    {String(caps.isSecureContext)}
+                  </span>
+                </li>
+                <li className="flex justify-between">
+                  <span className="text-zinc-400">COOP/COEP Isolated:</span>
+                  <span className={caps.crossOriginIsolated ? 'text-emerald-400' : 'text-amber-400'}>
+                    {String(caps.crossOriginIsolated)}
+                  </span>
+                </li>
+                <li className="flex justify-between">
+                  <span className="text-zinc-400">WebCodecs API:</span>
+                  <span className={caps.hasWebCodecs ? 'text-emerald-400' : 'text-amber-400'}>
+                    {String(caps.hasWebCodecs)}
+                  </span>
+                </li>
+                <li className="flex justify-between">
+                  <span className="text-zinc-400">WebGL2 GLSL:</span>
+                  <span className={caps.hasWebGL2 ? 'text-emerald-400' : 'text-amber-400'}>
+                    {String(caps.hasWebGL2)}
+                  </span>
+                </li>
+                <li className="flex justify-between">
+                  <span className="text-zinc-400">OPFS Storage:</span>
+                  <span className={caps.hasOPFS ? 'text-emerald-400' : 'text-amber-400'}>
+                    {String(caps.hasOPFS)}
+                  </span>
+                </li>
+                <li className="flex justify-between">
+                  <span className="text-zinc-400">Server FFmpeg:</span>
+                  <span className={serverCaps?.ffmpegAvailable ? 'text-emerald-400' : 'text-zinc-400'}>
+                    {serverCaps?.ffmpegAvailable
+                      ? serverCaps.preferredEncoder || 'ready'
+                      : 'offline / none'}
+                  </span>
+                </li>
+              </ul>
+            </div>
+          )}
+        </header>
+      )}
 
       {/* ===================================================================== */}
-      {/* LAYOUT 1: MOBILE (< 768px) — 5-Zone Portrait Shell + Bottom Sheet      */}
+      {/* LAYOUT 1B: MOBILE LANDSCAPE / ROTATED APK (Side Rail + Side Overlay)  */}
       {/* ===================================================================== */}
-      {layoutMode === 'mobile' ? (
-        <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
-          {/* ZONA 2: Flexible Video Canvas Area (~42-46dvh, min 12px padding) */}
-          <PreviewViewport layoutMode="mobile" />
+      {layoutMode === 'mobile' && isMobileLandscape ? (
+        <div className="relative flex min-h-0 flex-1 overflow-hidden bg-[#0A0A0C]">
+          {/* Main Horizontal Stack: Canvas Upper (46%) + Slim Transport (32px) + Timeline Lower (flex-1) */}
+          <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+            <div className="flex h-[46%] min-h-[115px] shrink-0 overflow-hidden">
+              <PreviewViewport
+                layoutMode="mobile"
+                compactLandscape
+                activeClipName={
+                  selectedClip && mobileSheet === 'none' ? selectedClip.name : null
+                }
+              />
+            </div>
+
+            <MobileTransportStrip
+              compactLandscape
+              isFullscreen={mobileFullscreen}
+              onToggleFullscreen={() => setMobileFullscreen((v) => !v)}
+              onSave={() => void handleSaveProject()}
+            />
+
+            {!mobileFullscreen && (
+              <TimelineContainer
+                layoutMode="mobile"
+                compactLandscape
+                onAddMediaClick={() => {
+                  setActiveMediaCategory('media');
+                  setMobileSheet('media');
+                }}
+                onQuickAudioClick={() => {
+                  setActiveMediaCategory('audio');
+                  setMobileSheet('media');
+                }}
+                onQuickTextClick={() => {
+                  useTimelineStore
+                    .getState()
+                    .addTextClip('Judul Overlay', usePlaybackStore.getState().currentTime);
+                  setMobileSheet('inspector');
+                }}
+                onCoverClick={() => captureCurrentCanvasSnapshot()}
+              />
+            )}
+          </div>
+
+          {/* Side Overlay Tool Sheet in Landscape (so Video Canvas remains fully visible on the left!) */}
+          {mobileSheet !== 'none' && (
+            <div
+              role="dialog"
+              aria-label="Panel Alat Mobile"
+              className="absolute top-0 right-[58px] bottom-0 z-50 flex w-[320px] max-w-[46vw] flex-col border-l border-[#2A2A32] bg-[#202026] shadow-2xl"
+            >
+              <div className="flex h-9 shrink-0 items-center justify-between border-b border-[#2A2A32] px-3">
+                <span className="text-xs font-semibold text-zinc-100">
+                  {mobileSheet === 'media'
+                    ? 'Media, Audio & Efek'
+                    : mobileSheet === 'export'
+                    ? 'Ekspor'
+                    : 'Edit & Shader'}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setMobileSheet('none')}
+                  className="inline-flex items-center gap-1 rounded bg-[#242429] px-2 py-1 text-[11px] font-semibold text-[#00E5FF]"
+                >
+                  <Check className="h-3.5 w-3.5" />
+                  <span>Tutup</span>
+                </button>
+              </div>
+              <div className="min-h-0 flex-1 overflow-hidden">
+                {mobileSheet === 'media' ? (
+                  <MediaBinPanel
+                    mode="sheet"
+                    onClipAdded={() => setMobileSheet('none')}
+                  />
+                ) : (
+                  <InspectorPanel
+                    mode="sheet"
+                    initialTab={mobileSheet === 'export' ? 'export' : 'inspector'}
+                  />
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Landscape Right Vertical Contextual Rail (58px) */}
+          <nav
+            aria-label="Navigasi Studio Android"
+            className="no-scrollbar z-40 flex w-[58px] shrink-0 flex-col items-center gap-1 overflow-y-auto border-l border-[#2A2A32] bg-[#18181C] py-1.5"
+          >
+            {selectedClip && mobileSheet === 'none' ? (
+              <>
+                <button
+                  type="button"
+                  onClick={() => useTimelineStore.getState().clearSelection()}
+                  className="flex h-9 w-11 shrink-0 items-center justify-center rounded-lg bg-[#242429] text-zinc-200"
+                  aria-label="Kembali"
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </button>
+                {mobileClipActions.map((act) => {
+                  const ActIcon = act.icon;
+                  return (
+                    <button
+                      key={act.label}
+                      type="button"
+                      onClick={act.onClick}
+                      className="flex h-11 w-12 shrink-0 flex-col items-center justify-center gap-0.5 rounded-lg text-zinc-200 hover:bg-[#242429]"
+                    >
+                      <ActIcon className="h-3.5 w-3.5 text-zinc-100" />
+                      <span className="text-[9px]">{act.label}</span>
+                    </button>
+                  );
+                })}
+                <button
+                  type="button"
+                  onClick={() => setModeModalState({ open: true, tab: 'download' })}
+                  className="mt-auto flex h-10 w-12 shrink-0 flex-col items-center justify-center rounded-lg bg-[#242429] text-[#00E5FF]"
+                >
+                  <Smartphone className="h-3.5 w-3.5" />
+                  <span className="text-[9px]">App APK</span>
+                </button>
+              </>
+            ) : (
+              mobileMainDockItems.map((item) => {
+                const ItemIcon = item.icon;
+                return (
+                  <button
+                    key={item.label}
+                    type="button"
+                    onClick={item.onClick}
+                    className="flex h-11 w-12 shrink-0 flex-col items-center justify-center gap-0.5 rounded-lg text-zinc-200 hover:bg-[#242429]"
+                  >
+                    <ItemIcon className="h-4 w-4 text-zinc-100" />
+                    <span className="text-[9px]">{item.label}</span>
+                  </button>
+                );
+              })
+            )}
+          </nav>
+        </div>
+      ) : layoutMode === 'mobile' ? (
+        /* =================================================================== */
+        /* LAYOUT 1A: MOBILE PORTRAIT — Classic CapCut Android 5-Zone Studio    */
+        /* =================================================================== */
+        <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden bg-[#0A0A0C]">
+          {/* ZONA 2: Video Canvas (flex-1 ~44dvh, 12px padding) */}
+          <PreviewViewport
+            layoutMode="mobile"
+            activeClipName={
+              selectedClip && mobileSheet === 'none' ? selectedClip.name : null
+            }
+          />
 
           {/* ZONA 3: Transport & History Strip (40px) */}
           <MobileTransportStrip
-            onSave={() => void handleSaveProject()}
+            compactLandscape={false}
             isFullscreen={mobileFullscreen}
             onToggleFullscreen={() => setMobileFullscreen((v) => !v)}
+            onSave={() => void handleSaveProject()}
           />
 
-          {/* Compact Selected Clip Pill between Strip & Timeline when sheet closed */}
-          {selectedClip && mobileSheet === 'none' && !mobileFullscreen && (
-            <div className="flex shrink-0 items-center justify-between border-b border-[#2A2A32] bg-[#18181C] px-3 py-1 text-[11px]">
-              <span className="truncate font-medium text-[#00E5FF]">
-                Klip aktif: {selectedClip.name}
-              </span>
-              <button
-                type="button"
-                onClick={() => setMobileSheet('inspector')}
-                className="inline-flex shrink-0 items-center gap-1 rounded bg-[#00E5FF] px-2 py-0.5 text-[10px] font-bold text-zinc-950"
-              >
-                <Sparkles className="h-3 w-3" />
-                <span>Inspektor</span>
-              </button>
-            </div>
-          )}
-
-          {/* ZONA 4: Scrolling Timeline (~34dvh, hidden if preview fullscreened) */}
+          {/* ZONA 4: Timeline Area (34dvh, 50vw padding, static white center beam) */}
           {!mobileFullscreen && (
             <TimelineContainer
               layoutMode="mobile"
@@ -836,11 +1275,21 @@ export function VideoEditorPage() {
                 setActiveMediaCategory('media');
                 setMobileSheet('media');
               }}
+              onQuickAudioClick={() => {
+                setActiveMediaCategory('audio');
+                setMobileSheet('media');
+              }}
+              onQuickTextClick={() => {
+                useTimelineStore
+                  .getState()
+                  .addTextClip('Judul Overlay', usePlaybackStore.getState().currentTime);
+                setMobileSheet('inspector');
+              }}
               onCoverClick={() => captureCurrentCanvasSnapshot()}
             />
           )}
 
-          {/* Slide-Over Bottom Sheet (44dvh, covers ONLY Zona 4 + Zona 5; Canvas & Play strip remain visible!) */}
+          {/* Slide-Over Bottom Sheet (44dvh covering ONLY Zona 4 + Zona 5) */}
           {mobileSheet !== 'none' && (
             <div
               role="dialog"
@@ -855,7 +1304,7 @@ export function VideoEditorPage() {
                       ? 'Media, Audio & Efek'
                       : mobileSheet === 'export'
                       ? 'Ekspor Hybrid'
-                      : 'Inspektor Klip & Shader GLSL'}
+                      : 'Pengaturan Klip'}
                   </span>
                 </div>
                 <button
@@ -893,7 +1342,7 @@ export function VideoEditorPage() {
                 <button
                   type="button"
                   onClick={() => useTimelineStore.getState().clearSelection()}
-                  className="flex h-12 w-10 shrink-0 flex-col items-center justify-center rounded-lg border border-[#2A2A32] bg-[#242429] text-zinc-200"
+                  className="flex h-12 w-10 shrink-0 items-center justify-center rounded-lg bg-[#242429] text-zinc-100"
                   title="Kembali ke menu utama"
                   aria-label="Kembali"
                 >
@@ -901,68 +1350,16 @@ export function VideoEditorPage() {
                 </button>
 
                 <div className="no-scrollbar flex flex-1 items-center gap-1 overflow-x-auto px-1">
-                  {[
-                    {
-                      label: 'Bagi',
-                      icon: Scissors,
-                      onClick: () =>
-                        useTimelineStore
-                          .getState()
-                          .splitClipAtTime(
-                            selectedClip.id,
-                            usePlaybackStore.getState().currentTime
-                          ),
-                    },
-                    {
-                      label: 'Kecepatan',
-                      icon: Gauge,
-                      onClick: () => setMobileSheet('inspector'),
-                    },
-                    {
-                      label: 'Volume',
-                      icon: Volume2,
-                      onClick: () => setMobileSheet('inspector'),
-                    },
-                    {
-                      label: 'Animasi',
-                      icon: Sparkles,
-                      onClick: () => setMobileSheet('inspector'),
-                    },
-                    {
-                      label: 'Filter',
-                      icon: Wand2,
-                      onClick: () => {
-                        setActiveMediaCategory('effects');
-                        setMobileSheet('media');
-                      },
-                    },
-                    {
-                      label: 'Edit',
-                      icon: SlidersHorizontal,
-                      onClick: () => setMobileSheet('inspector'),
-                    },
-                    {
-                      label: 'Salin',
-                      icon: Copy,
-                      onClick: () =>
-                        useTimelineStore.getState().duplicateClip(selectedClip.id),
-                    },
-                    {
-                      label: 'Hapus',
-                      icon: Trash2,
-                      onClick: () =>
-                        useTimelineStore.getState().deleteClips([selectedClip.id]),
-                    },
-                  ].map((act) => {
+                  {mobileClipActions.map((act) => {
                     const ActIcon = act.icon;
                     return (
                       <button
                         key={act.label}
                         type="button"
                         onClick={act.onClick}
-                        className="flex h-12 min-w-[54px] shrink-0 flex-col items-center justify-center gap-1 rounded-lg bg-[#242429]/70 px-2 text-zinc-200 active:scale-95"
+                        className="flex h-12 min-w-[54px] shrink-0 flex-col items-center justify-center gap-1 rounded-lg px-2 text-zinc-200 hover:bg-[#242429] active:scale-95"
                       >
-                        <ActIcon className="h-4 w-4 text-[#00E5FF]" />
+                        <ActIcon className="h-4 w-4 text-zinc-100" />
                         <span className="text-[10px] font-medium">{act.label}</span>
                       </button>
                     );
@@ -972,114 +1369,48 @@ export function VideoEditorPage() {
                 <button
                   type="button"
                   onClick={() => setModeModalState({ open: true, tab: 'download' })}
-                  className="flex h-12 shrink-0 flex-col items-center justify-center gap-1 rounded-lg border border-[#2A2A32] bg-[#242429] px-2 text-cyan-300"
+                  className="flex h-12 shrink-0 flex-col items-center justify-center gap-1 rounded-lg bg-[#242429] px-2 text-[#00E5FF]"
                 >
                   <Smartphone className="h-4 w-4" />
                   <span className="text-[10px] font-medium">App APK</span>
                 </button>
               </div>
             ) : (
-              <div className="grid w-full grid-cols-7">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setActiveMediaCategory('media');
-                    toggleMobileSheet('media');
-                  }}
-                  className={`flex flex-col items-center justify-center gap-1 rounded-lg py-1 ${
-                    mobileSheet === 'media' && activeMediaCategory === 'media'
-                      ? 'text-[#00E5FF]'
-                      : 'text-zinc-400 hover:text-zinc-100'
-                  }`}
-                >
-                  <FolderPlus className="h-4 w-4" />
-                  <span className="text-[11px] font-medium">Edit</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    setActiveMediaCategory('audio');
-                    setMobileSheet('media');
-                  }}
-                  className="flex flex-col items-center justify-center gap-1 rounded-lg py-1 text-zinc-400 hover:text-emerald-300"
-                >
-                  <Music className="h-4 w-4 text-emerald-400" />
-                  <span className="text-[11px] font-medium">Audio</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    useTimelineStore
-                      .getState()
-                      .addTextClip(
-                        'Judul Overlay',
-                        usePlaybackStore.getState().currentTime
-                      );
-                    setMobileSheet('inspector');
-                  }}
-                  className="flex flex-col items-center justify-center gap-1 rounded-lg py-1 text-zinc-400 hover:text-violet-300"
-                >
-                  <Type className="h-4 w-4 text-violet-400" />
-                  <span className="text-[11px] font-medium">+ Teks</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    setActiveMediaCategory('subtitle');
-                    setMobileSheet('media');
-                  }}
-                  className="flex flex-col items-center justify-center gap-1 rounded-lg py-1 text-zinc-400 hover:text-[#00E5FF]"
-                >
-                  <Captions className="h-4 w-4 text-[#00E5FF]" />
-                  <span className="text-[11px] font-medium">Subtitle</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    setActiveMediaCategory('effects');
-                    setMobileSheet('media');
-                  }}
-                  className="flex flex-col items-center justify-center gap-1 rounded-lg py-1 text-zinc-400 hover:text-amber-300"
-                >
-                  <Wand2 className="h-4 w-4 text-amber-400" />
-                  <span className="text-[11px] font-medium">Efek</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => toggleMobileSheet('inspector')}
-                  className="flex flex-col items-center justify-center gap-1 rounded-lg py-1 text-zinc-400 hover:text-zinc-100"
-                >
-                  <SlidersHorizontal className="h-4 w-4" />
-                  <span className="text-[11px] font-medium">PIP</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setModeModalState({ open: true, tab: 'download' })}
-                  className="flex flex-col items-center justify-center gap-1 rounded-lg py-1 text-zinc-400 hover:text-[#00E5FF]"
-                >
-                  <Smartphone className="h-4 w-4 text-[#00E5FF]" />
-                  <span className="text-[11px] font-medium">App APK</span>
-                </button>
+              <div className="no-scrollbar flex w-full items-center justify-between gap-0.5 overflow-x-auto px-1">
+                {mobileMainDockItems.map((item) => {
+                  const ItemIcon = item.icon;
+                  return (
+                    <button
+                      key={item.label}
+                      type="button"
+                      onClick={item.onClick}
+                      className="flex h-12 min-w-[50px] flex-1 shrink-0 flex-col items-center justify-center gap-1 rounded-lg px-1 text-zinc-200 hover:bg-[#242429] active:scale-95"
+                    >
+                      <ItemIcon className="h-4 w-4 text-zinc-100" />
+                      <span className="text-[10.5px] font-medium">{item.label}</span>
+                    </button>
+                  );
+                })}
               </div>
             )}
           </nav>
         </div>
       ) : layoutMode === 'tablet' ? (
         /* =================================================================== */
-        /* LAYOUT 2: TABLET (768px - 1024px) — Hybrid Touch Studio 3-Row Grid   */
+        /* LAYOUT 2: TABLET — Portrait (Overlay Drawers) vs Landscape (Docked)  */
         /* =================================================================== */
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-          <div className="flex h-[calc(60dvh-48px)] min-h-[220px] shrink-0 overflow-hidden bg-[#0A0A0C]">
+          <div
+            className={`relative flex shrink-0 overflow-hidden bg-[#0A0A0C] ${
+              isTabletLandscape
+                ? 'h-[calc(60dvh-48px)] min-h-[220px]'
+                : 'h-[calc(52dvh-48px)] min-h-[240px]'
+            }`}
+          >
             {/* Vertical Icon Rail (56px) */}
             <nav
               aria-label="Rail Alat Tablet"
-              className="flex w-14 shrink-0 flex-col items-center gap-1.5 border-r border-[#2A2A32] bg-[#18181C] py-2"
+              className="z-30 flex w-14 shrink-0 flex-col items-center gap-1.5 border-r border-[#2A2A32] bg-[#18181C] py-2"
             >
               {STUDIO_CATEGORIES.map((tab) => {
                 const Icon = tab.icon;
@@ -1095,7 +1426,7 @@ export function VideoEditorPage() {
                       } else {
                         setActiveMediaCategory(tab.id);
                         setTabletAssetOpen(true);
-                        if (window.innerWidth <= 900) {
+                        if (!isTabletLandscape || window.innerWidth <= 900) {
                           setTabletInspectorOpen(false);
                         }
                       }
@@ -1113,9 +1444,15 @@ export function VideoEditorPage() {
               })}
             </nav>
 
-            {/* Collapsible Slide-Over Asset Drawer (240px) */}
+            {/* Left Asset Drawer (Docked in Landscape / Slide-Over Overlay in Portrait) */}
             {tabletAssetOpen && (
-              <div className="w-[240px] shrink-0 border-r border-[#2A2A32] bg-[#18181C]">
+              <div
+                className={
+                  isTabletLandscape
+                    ? 'w-[240px] shrink-0 border-r border-[#2A2A32] bg-[#18181C]'
+                    : 'absolute top-0 bottom-0 left-14 z-40 w-[260px] border-r border-[#2A2A32] bg-[#202026] shadow-2xl'
+                }
+              >
                 <MediaBinPanel
                   mode="drawer"
                   hideRail
@@ -1124,14 +1461,20 @@ export function VideoEditorPage() {
               </div>
             )}
 
-            {/* Center Viewport (min 320px flexible) */}
-            <div className="flex min-w-[320px] flex-1 overflow-hidden">
+            {/* Center Viewport */}
+            <div className="flex min-w-[300px] flex-1 overflow-hidden">
               <PreviewViewport layoutMode="tablet" />
             </div>
 
-            {/* Collapsible Slide-Over Inspector Drawer (260px) */}
-            {(tabletInspectorOpen || !tabletAssetOpen) && (
-              <div className="w-[260px] shrink-0 border-l border-[#2A2A32] bg-[#18181C]">
+            {/* Right Inspector Drawer (Docked in Landscape / Slide-Over Overlay in Portrait) */}
+            {tabletInspectorOpen && (
+              <div
+                className={
+                  isTabletLandscape
+                    ? 'w-[260px] shrink-0 border-l border-[#2A2A32] bg-[#18181C]'
+                    : 'absolute top-0 right-0 bottom-0 z-40 w-[270px] border-l border-[#2A2A32] bg-[#202026] shadow-2xl'
+                }
+              >
                 <InspectorPanel
                   mode="drawer"
                   onClosePanel={() => setTabletInspectorOpen(false)}
@@ -1147,12 +1490,10 @@ export function VideoEditorPage() {
         /* LAYOUT 3: DESKTOP (> 1024px) — Modular 4-Pane Resizable Studio       */
         /* =================================================================== */
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-          {/* Upper 3-Column Workspace (Default 54% of remaining height) */}
           <div
             className="flex shrink-0 overflow-hidden"
             style={{ height: `${upperPanePct}%` }}
           >
-            {/* Kuadran 1: Asset Browser */}
             <div
               className="shrink-0 overflow-hidden border-r border-[#2A2A32]"
               style={{ width: leftPaneWidth }}
@@ -1160,7 +1501,6 @@ export function VideoEditorPage() {
               <MediaBinPanel mode="sidebar" />
             </div>
 
-            {/* Vertical Splitter Left (4px ew-resize) */}
             <div
               role="separator"
               aria-orientation="vertical"
@@ -1169,12 +1509,10 @@ export function VideoEditorPage() {
               title="Geser lebar panel aset"
             />
 
-            {/* Kuadran 2: Player Viewport (min-w-[420px]) */}
             <div className="flex min-w-[420px] flex-1 overflow-hidden">
               <PreviewViewport layoutMode="desktop" />
             </div>
 
-            {/* Vertical Splitter Right (4px ew-resize) */}
             <div
               role="separator"
               aria-orientation="vertical"
@@ -1183,7 +1521,6 @@ export function VideoEditorPage() {
               title="Geser lebar panel inspektor"
             />
 
-            {/* Kuadran 3: Property Inspector */}
             <div
               className="shrink-0 overflow-hidden border-l border-[#2A2A32]"
               style={{ width: rightPaneWidth }}
@@ -1192,7 +1529,6 @@ export function VideoEditorPage() {
             </div>
           </div>
 
-          {/* Horizontal Splitter (4px ns-resize) */}
           <div
             role="separator"
             aria-orientation="horizontal"
@@ -1201,12 +1537,11 @@ export function VideoEditorPage() {
             title="Geser tinggi area pratinjau dan timeline"
           />
 
-          {/* Kuadran 4: Multi-Track Matrix Timeline */}
           <TimelineContainer layoutMode="desktop" />
         </div>
       )}
 
-      {/* Multi-Device Hub Modal */}
+      {/* Modals */}
       {hubModalState.open && (
         <MultiDeviceHubModal
           isOpen={hubModalState.open}

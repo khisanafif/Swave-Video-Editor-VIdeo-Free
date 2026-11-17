@@ -46,6 +46,8 @@ function TimecodeReadout({ fps }: { fps: number }) {
 
 interface PreviewViewportProps {
   layoutMode?: 'desktop' | 'tablet' | 'mobile';
+  compactLandscape?: boolean;
+  activeClipName?: string | null;
 }
 
 export function captureCurrentCanvasSnapshot(): void {
@@ -71,6 +73,8 @@ export function captureCurrentCanvasSnapshot(): void {
 
 export function PreviewViewport({
   layoutMode = 'desktop',
+  compactLandscape = false,
+  activeClipName,
 }: PreviewViewportProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const stageBoxRef = useRef<HTMLDivElement>(null);
@@ -163,15 +167,23 @@ export function PreviewViewport({
 
   return (
     <main className="flex min-h-0 flex-1 flex-col bg-[#0A0A0C]">
-      {/* Canvas Container (min 12px p-3 margin around canvas stage on all screens) */}
+      {/* Canvas Container (min 12px p-3 margin around canvas stage on mobile portrait/desktop; tight on phone landscape) */}
       <div
-        className="relative flex min-h-0 flex-1 items-center justify-center p-3 lg:p-4"
+        className={`relative flex min-h-0 flex-1 items-center justify-center ${
+          compactLandscape ? 'p-1.5' : 'p-3 lg:p-4'
+        }`}
         onPointerDown={(e) => {
           if (e.target === e.currentTarget) {
             useTimelineStore.getState().clearSelection();
           }
         }}
       >
+        {/* Subtle floating active-clip pill inside Mobile stage */}
+        {layoutMode === 'mobile' && activeClipName && (
+          <div className="pointer-events-none absolute bottom-1.5 left-1/2 z-30 -translate-x-1/2 rounded-full bg-black/75 px-2.5 py-0.5 text-[10px] font-medium text-zinc-200 ring-1 ring-white/10">
+            Klip aktif: {activeClipName}
+          </div>
+        )}
         {/* Subtle pro engine pill in top-left corner of stage */}
         {layoutMode !== 'mobile' && (
           <div className="pointer-events-none absolute top-2.5 left-3 z-20 flex items-center gap-1.5">

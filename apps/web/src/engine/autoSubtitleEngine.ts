@@ -46,12 +46,23 @@ function blobToBase64(blob: Blob): Promise<string> {
   });
 }
 
+function resolveOrtBaseUrl(): string | undefined {
+  if (typeof window === 'undefined') return undefined;
+  try {
+    const dir = new URL('.', window.location.href);
+    return new URL('./ort/', dir).href;
+  } catch {
+    return undefined;
+  }
+}
+
 function runBrowserWhisperWorker(options: {
   audio: Float32Array;
   modelId: string;
   language: string;
   startOffsetSec: number;
   audioDurationSec: number;
+  preferCdnWasm?: boolean;
   onProgress?: (info: AutoSubtitleProgress) => void;
 }): Promise<SubtitleCue[]> {
   return new Promise((resolve, reject) => {
@@ -93,6 +104,8 @@ function runBrowserWhisperWorker(options: {
         language: options.language,
         startOffsetSec: options.startOffsetSec,
         audioDurationSec: options.audioDurationSec,
+        ortBaseUrl: resolveOrtBaseUrl(),
+        preferCdnWasm: options.preferCdnWasm,
       },
       [copy.buffer]
     );
@@ -158,14 +171,31 @@ export async function generateAutoSubtitles(
   if (engine === 'browser-whisper') {
     const modelId =
       modelSize === 'base' ? 'Xenova/whisper-base' : 'Xenova/whisper-tiny';
-    const rawCues = await runBrowserWhisperWorker({
-      audio: extracted.pcm,
-      modelId,
-      language,
-      startOffsetSec: extracted.startOffsetSec,
-      audioDurationSec: extracted.duration,
-      onProgress,
-    });
+    let rawCues: SubtitleCue[];
+    try {
+      rawCues = await runBrowserWhisperWorker({
+        audio: extracted.pcm,
+        modelId,
+        language,
+        startOffsetSec: extracted.startOffsetSec,
+        audioDurationSec: extracted.duration,
+        onProgress,
+      });
+    } catch {
+      onProgress?.({
+        progress: 12,
+        message: 'Mencoba ulang dengan CDN ONNX fallback...',
+      });
+      rawCues = await runBrowserWhisperWorker({
+        audio: extracted.pcm,
+        modelId,
+        language,
+        startOffsetSec: extracted.startOffsetSec,
+        audioDurationSec: extracted.duration,
+        preferCdnWasm: true,
+        onProgress,
+      });
+    }
     const chunked = chunkSubtitleCues(rawCues, maxWordsPerCue);
     return { cues: chunked, engineUsed: modelId };
   }
