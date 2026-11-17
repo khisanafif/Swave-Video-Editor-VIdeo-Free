@@ -77,6 +77,10 @@ class StudioMediaRuntime {
     if (asset.kind === 'image') {
       const img = new Image();
       if (isRemote) img.crossOrigin = 'anonymous';
+      img.onload = () => {
+        const pb = usePlaybackStore.getState();
+        this.renderFrameAt(pb.currentTime, pb.isPlaying);
+      };
       img.src = url;
       const node: CachedMediaNode = {
         assetId: asset.id,
@@ -97,6 +101,10 @@ class StudioMediaRuntime {
       el.playsInline = true;
       el.setAttribute('playsinline', '');
       el.setAttribute('webkit-playsinline', '');
+      el.onloadeddata = () => {
+        const pb = usePlaybackStore.getState();
+        this.renderFrameAt(pb.currentTime, pb.isPlaying);
+      };
     }
     el.src = url;
 

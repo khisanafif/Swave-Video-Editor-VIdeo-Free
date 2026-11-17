@@ -3,6 +3,8 @@ import {
   AlignCenter,
   AlignLeft,
   AlignRight,
+  ArrowDown,
+  ArrowUp,
   Bold,
   Check,
   ClipboardPaste,
@@ -74,7 +76,7 @@ import {
   uploadBlobInChunks,
 } from '../engine/serverOffloadClient';
 import { usePlaybackStore } from '../stores/playbackStore';
-import { useTimelineStore } from '../stores/timelineStore';
+import { getMainVideoTrackId, useTimelineStore } from '../stores/timelineStore';
 import { useUiStore } from '../stores/uiStore';
 
 const TEXT_SWATCHES = [
@@ -187,10 +189,19 @@ export function InspectorPanel({
 
   const selectedClipIds = useTimelineStore((s) => s.selectedClipIds);
   const clips = useTimelineStore((s) => s.clips);
+  const tracks = useTimelineStore((s) => s.tracks);
+  const trackOrder = useTimelineStore((s) => s.trackOrder);
   const resolution = useTimelineStore((s) => s.resolution);
   const canvasBackground = useTimelineStore((s) => s.canvasBackground);
   const selectedClip =
     selectedClipIds.length === 1 ? clips[selectedClipIds[0]] : undefined;
+  const mainTrackId = getMainVideoTrackId(trackOrder, tracks);
+  const upperVisualTrackIds = trackOrder.filter(
+    (tid) => tid !== mainTrackId && tracks[tid]?.type !== 'audio'
+  );
+  const selectedLayerIdx = selectedClip
+    ? upperVisualTrackIds.indexOf(selectedClip.trackId)
+    : -1;
 
   useEffect(() => {
     setActiveTab(initialTab);
@@ -868,6 +879,109 @@ export function InspectorPanel({
                       <span>Terapkan Gaya ke Semua Subtitle</span>
                     </button>
                   </div>
+                </div>
+              )}
+
+              {/* Overlay PIP & Layer Stack Ordering (>1 Overlay CapCut Control) */}
+              {selectedClip.type !== 'audio' && selectedLayerIdx >= 0 && (
+                <div className="space-y-2.5 rounded-xl border border-amber-500/30 bg-amber-950/15 p-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-1.5">
+                      <Layers className="h-3.5 w-3.5 text-amber-400" />
+                      <h3 className="text-[11px] font-bold tracking-wider text-amber-200 uppercase">
+                        Lapisan Overlay (Layer {selectedLayerIdx + 1}/
+                        {upperVisualTrackIds.length})
+                      </h3>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        disabled={selectedLayerIdx >= upperVisualTrackIds.length - 1}
+                        onClick={() => {
+                          useTimelineStore
+                            .getState()
+                            .moveClipLayer(selectedClip.id, 'up');
+                          refreshCanvasPreview();
+                        }}
+                        className="inline-flex items-center gap-0.5 rounded border border-zinc-700 bg-zinc-900 px-1.5 py-0.5 text-[10px] font-semibold text-zinc-200 hover:border-cyan-400 disabled:opacity-35"
+                        title="Majukan overlay ini ke depan overlay lain"
+                      >
+                        <ArrowUp className="h-3 w-3 text-[#00E5FF]" />
+                        <span>Depan</span>
+                      </button>
+                      <button
+                        type="button"
+                        disabled={selectedLayerIdx <= 0}
+                        onClick={() => {
+                          useTimelineStore
+                            .getState()
+                            .moveClipLayer(selectedClip.id, 'down');
+                          refreshCanvasPreview();
+                        }}
+                        className="inline-flex items-center gap-0.5 rounded border border-zinc-700 bg-zinc-900 px-1.5 py-0.5 text-[10px] font-semibold text-zinc-200 hover:border-cyan-400 disabled:opacity-35"
+                        title="Mundurkan overlay ini ke belakang overlay lain"
+                      >
+                        <ArrowDown className="h-3 w-3 text-amber-300" />
+                        <span>Belakang</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {selectedClip.type === 'overlay' && (
+                    <div className="space-y-2">
+                      <SliderRow
+                        label="Skala Gambar / PIP"
+                        value={Number((selectedClip.transforms.scale || 1).toFixed(2))}
+                        min={0.15}
+                        max={2.5}
+                        step={0.05}
+                        suffix="x"
+                        onChange={(scale) => {
+                          useTimelineStore
+                            .getState()
+                            .updateClipTransform(selectedClip.id, { scale });
+                          refreshCanvasPreview();
+                        }}
+                      />
+                      <SliderRow
+                        label="Opasitas (Transparansi)"
+                        value={Math.round((selectedClip.transforms.opacity ?? 1) * 100)}
+                        min={0}
+                        max={100}
+                        step={1}
+                        suffix="%"
+                        onChange={(pct) => {
+                          useTimelineStore
+                            .getState()
+                            .updateClipTransform(selectedClip.id, { opacity: pct / 100 });
+                          refreshCanvasPreview();
+                        }}
+                      />
+                      <div className="grid grid-cols-3 gap-1">
+                        {[
+                          { label: 'Kecil (0.45x)', scale: 0.45 },
+                          { label: 'Sedang (0.65x)', scale: 0.65 },
+                          { label: 'Penuh (1.0x)', scale: 1 },
+                        ].map((preset) => (
+                          <button
+                            key={preset.label}
+                            type="button"
+                            onClick={() => {
+                              useTimelineStore
+                                .getState()
+                                .updateClipTransform(selectedClip.id, {
+                                  scale: preset.scale,
+                                });
+                              refreshCanvasPreview();
+                            }}
+                            className="rounded border border-zinc-800 bg-zinc-900 py-1 text-[10px] text-zinc-300 hover:border-amber-400"
+                          >
+                            {preset.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
 

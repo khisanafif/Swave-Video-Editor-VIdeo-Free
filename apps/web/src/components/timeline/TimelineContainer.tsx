@@ -1,6 +1,8 @@
 import { useEffect, useRef } from 'react';
 import {
   AlignHorizontalSpaceAround,
+  ArrowDown,
+  ArrowUp,
   ChevronLeft,
   ChevronRight,
   Copy,
@@ -46,6 +48,7 @@ interface TimelineContainerProps {
   onAddMediaClick?: () => void;
   onQuickAudioClick?: () => void;
   onQuickTextClick?: () => void;
+  onQuickOverlayClick?: () => void;
   onCoverClick?: () => void;
 }
 
@@ -85,6 +88,7 @@ export function TimelineContainer({
   onAddMediaClick,
   onQuickAudioClick,
   onQuickTextClick,
+  onQuickOverlayClick,
   onCoverClick,
 }: TimelineContainerProps) {
   const rulerScrollRef = useRef<HTMLDivElement>(null);
@@ -327,14 +331,37 @@ export function TimelineContainer({
                     </button>
                   )}
 
-                  {isEmpty && track.type === 'text' && onQuickTextClick && (
+                  {isEmpty && track.type === 'overlay' && onQuickOverlayClick && (
                     <button
                       type="button"
-                      onClick={onQuickTextClick}
-                      className="inline-flex h-full items-center gap-1 rounded-full border border-[#2A2A32] bg-[#18181C]/70 px-2.5 text-[10px] font-medium text-zinc-400"
+                      onClick={onQuickOverlayClick}
+                      className="inline-flex h-full items-center gap-1 rounded-full border border-amber-500/40 bg-[#18181C]/80 px-2.5 text-[10px] font-medium text-amber-200"
                     >
-                      <span>T Tambah Teks</span>
+                      <span>+ Tambah Overlay</span>
                     </button>
+                  )}
+
+                  {isEmpty && track.type === 'text' && (onQuickTextClick || onQuickOverlayClick) && (
+                    <div className="inline-flex h-full items-center gap-1.5">
+                      {onQuickTextClick && (
+                        <button
+                          type="button"
+                          onClick={onQuickTextClick}
+                          className="inline-flex h-full items-center gap-1 rounded-full border border-[#2A2A32] bg-[#18181C]/70 px-2.5 text-[10px] font-medium text-zinc-400"
+                        >
+                          <span>T Tambah Teks</span>
+                        </button>
+                      )}
+                      {onQuickOverlayClick && (
+                        <button
+                          type="button"
+                          onClick={onQuickOverlayClick}
+                          className="inline-flex h-full items-center gap-1 rounded-full border border-amber-500/35 bg-[#18181C]/70 px-2.5 text-[10px] font-medium text-amber-300"
+                        >
+                          <span>+ Overlay</span>
+                        </button>
+                      )}
+                    </div>
                   )}
 
                   {track.clipIds.map((cid) => {
@@ -632,6 +659,15 @@ export function TimelineContainer({
           <div className="flex items-center gap-1">
             <button
               type="button"
+              onClick={() => useTimelineStore.getState().addTrack('overlay')}
+              className="inline-flex items-center gap-0.5 rounded border border-amber-500/40 bg-[#242429] px-1.5 py-1 text-[11px] text-amber-200 hover:border-amber-400"
+              title="Tambah Track Overlay / PIP Baru (Layer)"
+            >
+              <Plus className="h-3 w-3 text-amber-400" />
+              <span>Ovl</span>
+            </button>
+            <button
+              type="button"
               onClick={() => useTimelineStore.getState().addTrack('video')}
               className="inline-flex items-center gap-0.5 rounded border border-[#2A2A32] bg-[#242429] px-1.5 py-1 text-[11px] text-zinc-200 hover:border-[#00E5FF]"
               title="Tambah Track Video / PIP"
@@ -802,6 +838,34 @@ export function TimelineContainer({
                 </div>
 
                 <div className="flex shrink-0 items-center gap-0.5">
+                  {!isMain && track.type !== 'audio' && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          useTimelineStore
+                            .getState()
+                            .moveTrackLayer(track.id, 'up')
+                        }
+                        className="rounded p-0.5 text-zinc-400 hover:bg-[#242429] hover:text-[#00E5FF]"
+                        title="Naikkan Lapisan Track (Ke Depan)"
+                      >
+                        <ArrowUp className="h-3 w-3" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          useTimelineStore
+                            .getState()
+                            .moveTrackLayer(track.id, 'down')
+                        }
+                        className="rounded p-0.5 text-zinc-400 hover:bg-[#242429] hover:text-amber-300"
+                        title="Turunkan Lapisan Track (Ke Belakang)"
+                      >
+                        <ArrowDown className="h-3 w-3" />
+                      </button>
+                    </>
+                  )}
                   <button
                     type="button"
                     onClick={() =>

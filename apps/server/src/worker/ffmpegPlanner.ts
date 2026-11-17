@@ -136,8 +136,14 @@ export function buildAssSubtitleDocument(
   project: ProjectDocument,
   textClips: Clip[]
 ): string {
-  const width = Math.max(16, Math.round(project.resolution?.width || 1920));
-  const height = Math.max(16, Math.round(project.resolution?.height || 1080));
+  const width = Math.max(
+    16,
+    Math.min(4096, Math.round((project.resolution?.width || 1920) / 2) * 2)
+  );
+  const height = Math.max(
+    16,
+    Math.min(4096, Math.round((project.resolution?.height || 1080) / 2) * 2)
+  );
 
   const lines: string[] = [
     '[Script Info]',
@@ -300,8 +306,14 @@ export function buildFfmpegRenderPlan(options: {
     assFilePath,
   } = options;
 
-  const width = Math.max(16, Math.round(project.resolution?.width || 1920));
-  const height = Math.max(16, Math.round(project.resolution?.height || 1080));
+  const width = Math.max(
+    16,
+    Math.min(4096, Math.round((project.resolution?.width || 1920) / 2) * 2)
+  );
+  const height = Math.max(
+    16,
+    Math.min(4096, Math.round((project.resolution?.height || 1080) / 2) * 2)
+  );
   const fps = Math.max(1, Math.round(project.resolution?.fps || 30));
 
   const activeClips: Clip[] = [];

@@ -336,4 +336,99 @@ export const PRESET_RESOLUTIONS: CanvasResolution[] = [
   { width: 1080, height: 1920, fps: 30, label: '1080p TikTok/Reels (9:16)' },
   { width: 1080, height: 1080, fps: 30, label: '1080p Feed Square (1:1)' },
   { width: 1280, height: 720, fps: 60, label: '720p 60FPS Smooth (16:9)' },
+  { width: 1080, height: 1350, fps: 30, label: '1080p Instagram (4:5)' },
+  { width: 2560, height: 1440, fps: 30, label: '2K QHD Tajam (16:9)' },
+  { width: 3840, height: 2160, fps: 30, label: '4K Ultra HD (16:9)' },
+  { width: 854, height: 480, fps: 30, label: '480p Hemat Kuota (16:9)' },
 ];
+
+export interface AspectRatioPreset {
+  id: string;
+  label: string;
+  w: number;
+  h: number;
+  desc: string;
+}
+
+export const ASPECT_RATIO_PRESETS: AspectRatioPreset[] = [
+  { id: '16:9', label: '16:9', w: 16, h: 9, desc: 'Lanskap HD' },
+  { id: '9:16', label: '9:16', w: 9, h: 16, desc: 'Vertikal HP' },
+  { id: '1:1', label: '1:1', w: 1, h: 1, desc: 'Persegi' },
+  { id: '4:5', label: '4:5', w: 4, h: 5, desc: 'Potret IG' },
+  { id: '4:3', label: '4:3', w: 4, h: 3, desc: 'Klasik' },
+  { id: '21:9', label: '21:9', w: 21, h: 9, desc: 'Sinema' },
+];
+
+export interface ResolutionTierPreset {
+  id: '480p' | '720p' | '1080p' | '2k' | '4k';
+  label: string;
+  badge: string;
+  shortEdge: number;
+}
+
+export const CAPCUT_RESOLUTION_TIERS: ResolutionTierPreset[] = [
+  { id: '480p', label: '480P', badge: 'Ringan', shortEdge: 480 },
+  { id: '720p', label: '720P', badge: 'HD', shortEdge: 720 },
+  { id: '1080p', label: '1080P', badge: 'Full HD', shortEdge: 1080 },
+  { id: '2k', label: '2K', badge: 'QHD', shortEdge: 1440 },
+  { id: '4k', label: '4K', badge: 'Ultra HD', shortEdge: 2160 },
+];
+
+export const CAPCUT_FPS_OPTIONS = [24, 25, 30, 50, 60] as const;
+
+export function normalizeCustomDimensions(
+  rawWidth: number,
+  rawHeight: number
+): { width: number; height: number } {
+  const clampEven = (val: number, fallback: number) => {
+    const safe = Number.isFinite(val) ? val : fallback;
+    const clamped = Math.max(16, Math.min(4096, Math.round(safe / 2) * 2));
+    return Math.max(16, clamped);
+  };
+  return {
+    width: clampEven(rawWidth, 1920),
+    height: clampEven(rawHeight, 1080),
+  };
+}
+
+export function computeResolutionForAspectAndTier(
+  aspectW: number,
+  aspectH: number,
+  shortEdgePx: number,
+  fps = 30,
+  aspectLabel?: string
+): CanvasResolution {
+  const aw = Math.max(1, aspectW || 16);
+  const ah = Math.max(1, aspectH || 9);
+  const edge = Math.max(240, Math.min(4096, shortEdgePx || 1080));
+
+  let rawW: number;
+  let rawH: number;
+  if (aw >= ah) {
+    rawH = edge;
+    rawW = (edge * aw) / ah;
+  } else {
+    rawW = edge;
+    rawH = (edge * ah) / aw;
+  }
+
+  const { width, height } = normalizeCustomDimensions(rawW, rawH);
+  const tier = CAPCUT_RESOLUTION_TIERS.find((t) => t.shortEdge === edge);
+  const ratioTag = aspectLabel || `${aw}:${ah}`;
+  return {
+    width,
+    height,
+    fps: Math.max(1, Math.min(120, Math.round(fps || 30))),
+    label: `${tier ? tier.label : `${width}×${height}`} (${ratioTag})`,
+  };
+}
+
+export function inferResolutionBadge(res: CanvasResolution): string {
+  const shortSide = Math.min(res.width || 0, res.height || 0);
+  if (shortSide === 2160) return '4K';
+  if (shortSide === 1440) return '2K';
+  if (shortSide === 1080) return '1080P';
+  if (shortSide === 720) return '720P';
+  if (shortSide === 480) return '480P';
+  return `${res.width}×${res.height}`;
+}

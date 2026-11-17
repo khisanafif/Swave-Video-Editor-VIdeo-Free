@@ -15,6 +15,7 @@ export type TimelineToolMode = 'select' | 'blade';
 export type LayoutPreference = 'auto' | 'desktop' | 'tablet' | 'mobile';
 export type MediaBinCategory =
   | 'media'
+  | 'overlay'
   | 'subtitle'
   | 'audio'
   | 'text'

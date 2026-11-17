@@ -29,6 +29,7 @@ import {
 import { type SafeGuideMode, useUiStore } from '../stores/uiStore';
 import { formatTimecode } from '../utils/format';
 import { CanvasOverlayGizmo } from './CanvasOverlayGizmo';
+import { ResolutionTriggerPopover } from './CapCutResolutionControl';
 
 function TimecodeReadout({ fps }: { fps: number }) {
   const currentTime = usePlaybackStore((s) => s.currentTime);
@@ -432,26 +433,7 @@ export function PreviewViewport({
           </div>
 
           <div className="flex items-center gap-1.5">
-            <select
-              aria-label="Resolusi Kanvas"
-              value={`${resolution.width}x${resolution.height}x${resolution.fps}`}
-              onChange={(e) => {
-                const found = PRESET_RESOLUTIONS.find(
-                  (r) => `${r.width}x${r.height}x${r.fps}` === e.target.value
-                );
-                if (found) useTimelineStore.getState().setResolution(found);
-              }}
-              className="max-w-[115px] rounded border border-[#2A2A32] bg-[#242429] px-1.5 py-1 text-[10px] text-zinc-200 outline-none focus:border-[#00E5FF] xl:max-w-[155px]"
-            >
-              {PRESET_RESOLUTIONS.map((r) => (
-                <option
-                  key={`${r.width}x${r.height}x${r.fps}`}
-                  value={`${r.width}x${r.height}x${r.fps}`}
-                >
-                  {r.label}
-                </option>
-              ))}
-            </select>
+            <ResolutionTriggerPopover placement="top" align="right" />
 
             <button
               type="button"

@@ -8,6 +8,7 @@ import {
   DEFAULT_CLIP_TRANSFORM,
   DEFAULT_TEXT_STYLE,
   PRESET_RESOLUTIONS,
+  normalizeCustomDimensions,
   type BlendMode,
   type CanvasResolution,
   type ChromaKeyConfig,
@@ -49,6 +50,14 @@ export interface TimelineState {
   toggleTrackMute: (trackId: string) => void;
   toggleTrackLock: (trackId: string) => void;
   deleteTrack: (trackId: string) => void;
+  moveTrackLayer: (
+    trackId: string,
+    direction: 'up' | 'down' | 'front' | 'back'
+  ) => void;
+  moveClipLayer: (
+    clipId: string,
+    direction: 'up' | 'down' | 'front' | 'back'
+  ) => void;
 
   registerAsset: (asset: MediaAsset) => void;
   updateAsset: (assetId: string, patch: Partial<MediaAsset>) => void;
@@ -58,6 +67,17 @@ export interface TimelineState {
     assetId: string,
     targetTrackId?: string,
     startTime?: number
+  ) => string | null;
+  addOverlayClipFromAsset: (
+    assetId: string,
+    startTime?: number,
+    options?: {
+      targetTrackId?: string;
+      scale?: number;
+      x?: number;
+      y?: number;
+      duration?: number;
+    }
   ) => string | null;
   addTextClip: (
     content?: string,
@@ -220,6 +240,64 @@ function isTrackCompatible(trackType: TrackType, clipType: TrackType): boolean {
   return false;
 }
 
+function hasTrackTimeOverlap(
+  track: Track,
+  clips: Record<string, Clip>,
+  start: number,
+  duration: number
+): boolean {
+  const newEnd = start + duration;
+  for (const cid of track.clipIds) {
+    const c = clips[cid];
+    if (!c) continue;
+    const cEnd = c.start + c.duration;
+    if (c.start < newEnd - 0.01 && cEnd > start + 0.01) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function insertOverlayOrVisualTrack(
+  state: {
+    tracks: Record<string, Track>;
+    trackOrder: string[];
+  },
+  type: TrackType,
+  name?: string
+): string {
+  const id = createUid('track');
+  const count =
+    Object.values(state.tracks).filter((t) => t.type === type).length + 1;
+  const labelMap: Record<TrackType, string> = {
+    video: `Video ${count}`,
+    audio: `Audio ${count}`,
+    text: `Teks ${count}`,
+    overlay: `Overlay ${count}`,
+  };
+  state.tracks[id] = {
+    id,
+    type,
+    name: name || labelMap[type],
+    isMuted: false,
+    isLocked: false,
+    clipIds: [],
+  };
+  if (type === 'audio') {
+    state.trackOrder.push(id);
+  } else {
+    const firstAudioIdx = state.trackOrder.findIndex(
+      (tid) => state.tracks[tid]?.type === 'audio'
+    );
+    if (firstAudioIdx >= 0) {
+      state.trackOrder.splice(firstAudioIdx, 0, id);
+    } else {
+      state.trackOrder.push(id);
+    }
+  }
+  return id;
+}
+
 function findNextEndTime(track: Track, clips: Record<string, Clip>): number {
   let maxEnd = 0;
   for (const cid of track.clipIds) {
@@ -311,7 +389,20 @@ export const useTimelineStore = create<TimelineState>()(
 
       setResolution: (resolution) =>
         set((state) => {
-          state.resolution = resolution;
+          const norm = normalizeCustomDimensions(
+            resolution.width,
+            resolution.height
+          );
+          const fps = Math.max(
+            1,
+            Math.min(120, Math.round(resolution.fps || 30))
+          );
+          state.resolution = {
+            width: norm.width,
+            height: norm.height,
+            fps,
+            label: resolution.label || `${norm.width}×${norm.height}`,
+          };
         }),
 
       setCanvasBackground: (bg) =>
@@ -320,38 +411,11 @@ export const useTimelineStore = create<TimelineState>()(
         }),
 
       addTrack: (type, name) => {
-        const id = createUid('track');
+        let createdId = '';
         set((state) => {
-          const count =
-            Object.values(state.tracks).filter((t) => t.type === type).length + 1;
-          const labelMap: Record<TrackType, string> = {
-            video: `Video ${count}`,
-            audio: `Audio ${count}`,
-            text: `Teks ${count}`,
-            overlay: `Overlay ${count}`,
-          };
-          state.tracks[id] = {
-            id,
-            type,
-            name: name || labelMap[type],
-            isMuted: false,
-            isLocked: false,
-            clipIds: [],
-          };
-          if (type === 'audio') {
-            state.trackOrder.push(id);
-          } else {
-            const firstAudioIdx = state.trackOrder.findIndex(
-              (tid) => state.tracks[tid]?.type === 'audio'
-            );
-            if (firstAudioIdx >= 0) {
-              state.trackOrder.splice(firstAudioIdx, 0, id);
-            } else {
-              state.trackOrder.push(id);
-            }
-          }
+          createdId = insertOverlayOrVisualTrack(state, type, name);
         });
-        return id;
+        return createdId;
       },
 
       renameTrack: (trackId, name) =>
@@ -388,6 +452,53 @@ export const useTimelineStore = create<TimelineState>()(
           delete state.tracks[trackId];
           state.trackOrder = state.trackOrder.filter((id) => id !== trackId);
         }),
+
+      moveTrackLayer: (trackId, direction) =>
+        set((state) => {
+          const track = state.tracks[trackId];
+          if (!track || track.type === 'audio') return;
+          const mainId = getMainVideoTrackId(state.trackOrder, state.tracks);
+          if (trackId === mainId) return;
+
+          const upperIds = state.trackOrder.filter(
+            (tid) => tid !== mainId && state.tracks[tid]?.type !== 'audio'
+          );
+          const audioIds = state.trackOrder.filter(
+            (tid) => state.tracks[tid]?.type === 'audio'
+          );
+          const idx = upperIds.indexOf(trackId);
+          if (idx < 0) return;
+
+          if (direction === 'up' && idx < upperIds.length - 1) {
+            [upperIds[idx], upperIds[idx + 1]] = [
+              upperIds[idx + 1],
+              upperIds[idx],
+            ];
+          } else if (direction === 'down' && idx > 0) {
+            [upperIds[idx], upperIds[idx - 1]] = [
+              upperIds[idx - 1],
+              upperIds[idx],
+            ];
+          } else if (direction === 'front' && idx < upperIds.length - 1) {
+            upperIds.splice(idx, 1);
+            upperIds.push(trackId);
+          } else if (direction === 'back' && idx > 0) {
+            upperIds.splice(idx, 1);
+            upperIds.unshift(trackId);
+          }
+
+          state.trackOrder = [
+            ...(mainId && state.tracks[mainId] ? [mainId] : []),
+            ...upperIds,
+            ...audioIds,
+          ];
+        }),
+
+      moveClipLayer: (clipId, direction) => {
+        const clip = get().clips[clipId];
+        if (!clip || clip.type === 'audio') return;
+        get().moveTrackLayer(clip.trackId, direction);
+      },
 
       registerAsset: (asset) =>
         set((state) => {
@@ -429,6 +540,17 @@ export const useTimelineStore = create<TimelineState>()(
         const current = get();
         const asset = current.assets[assetId];
         if (!asset) return null;
+
+        // When adding an image without an explicit track on top of an existing main video,
+        // automatically place it as a CapCut Picture-in-Picture / Overlay above Main Track.
+        if (!targetTrackId && asset.kind === 'image') {
+          const mainId = getMainVideoTrackId(current.trackOrder, current.tracks);
+          const mainHasClips =
+            Boolean(mainId && current.tracks[mainId]?.clipIds.length);
+          if (mainHasClips) {
+            return current.addOverlayClipFromAsset(assetId, startTime ?? 0);
+          }
+        }
 
         const clipType: TrackType =
           asset.kind === 'audio'
@@ -493,6 +615,112 @@ export const useTimelineStore = create<TimelineState>()(
             filterPreset: 'normal',
             animation: { ...DEFAULT_CLIP_ANIMATION },
             transforms: { ...DEFAULT_CLIP_TRANSFORM },
+            effects: [],
+          };
+          track.clipIds.push(clipId);
+          state.selectedClipIds = [clipId];
+        });
+
+        return clipId;
+      },
+
+      addOverlayClipFromAsset: (assetId, startTime, options) => {
+        const current = get();
+        const asset = current.assets[assetId];
+        if (!asset || asset.kind === 'audio') return null;
+
+        const computedStart = Math.max(0, startTime ?? 0);
+        const defaultDuration =
+          options?.duration && options.duration >= MIN_CLIP_DURATION
+            ? Number(options.duration.toFixed(3))
+            : asset.kind === 'image'
+              ? 4
+              : Math.max(MIN_CLIP_DURATION, asset.duration || 5);
+
+        const clipId = createUid('ovl');
+
+        set((state) => {
+          let resolvedTrackId = options?.targetTrackId;
+          if (resolvedTrackId) {
+            const cand = state.tracks[resolvedTrackId];
+            if (
+              !cand ||
+              cand.isLocked ||
+              !isTrackCompatible(cand.type, 'overlay')
+            ) {
+              resolvedTrackId = undefined;
+            }
+          }
+
+          // Pick lowest unlocked overlay track without time collision, or auto-stack a new Overlay track
+          if (!resolvedTrackId) {
+            for (const tid of state.trackOrder) {
+              const tr = state.tracks[tid];
+              if (!tr || tr.isLocked || tr.type !== 'overlay') continue;
+              if (!hasTrackTimeOverlap(tr, state.clips, computedStart, defaultDuration)) {
+                resolvedTrackId = tid;
+                break;
+              }
+            }
+          }
+
+          if (!resolvedTrackId) {
+            resolvedTrackId = insertOverlayOrVisualTrack(state, 'overlay');
+          }
+
+          const track = state.tracks[resolvedTrackId];
+          if (!track) return;
+
+          // Count existing concurrent overlay clips to avoid pixel-on-pixel hiding when >1 overlay
+          const newEnd = computedStart + defaultDuration;
+          let concurrentOverlays = 0;
+          for (const existing of Object.values(state.clips)) {
+            if (existing.type !== 'overlay') continue;
+            const exEnd = existing.start + existing.duration;
+            if (existing.start < newEnd - 0.01 && exEnd > computedStart + 0.01) {
+              concurrentOverlays++;
+            }
+          }
+
+          const cw = state.resolution.width || 1920;
+          const ch = state.resolution.height || 1080;
+          const defaultScale =
+            options?.scale !== undefined
+              ? options.scale
+              : concurrentOverlays === 0
+                ? 0.58
+                : 0.48;
+          const offsetPatterns: Array<[number, number]> = [
+            [0, 0],
+            [Math.round(cw * 0.14), Math.round(ch * 0.1)],
+            [-Math.round(cw * 0.14), Math.round(ch * 0.1)],
+            [Math.round(cw * 0.14), -Math.round(ch * 0.1)],
+            [-Math.round(cw * 0.14), -Math.round(ch * 0.1)],
+          ];
+          const [autoX, autoY] =
+            offsetPatterns[concurrentOverlays % offsetPatterns.length];
+
+          state.clips[clipId] = {
+            id: clipId,
+            trackId: resolvedTrackId,
+            assetId: asset.id,
+            type: 'overlay',
+            name: asset.name,
+            start: Number(computedStart.toFixed(3)),
+            duration: defaultDuration,
+            offset: 0,
+            speed: 1,
+            volume: 1,
+            fadeIn: 0,
+            fadeOut: 0,
+            filterPreset: 'normal',
+            animation: { ...DEFAULT_CLIP_ANIMATION },
+            transforms: {
+              ...DEFAULT_CLIP_TRANSFORM,
+              scale: defaultScale,
+              x: options?.x !== undefined ? options.x : autoX,
+              y: options?.y !== undefined ? options.y : autoY,
+            },
             effects: [],
           };
           track.clipIds.push(clipId);

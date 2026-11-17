@@ -12,6 +12,7 @@ import {
   FolderPlus,
   Gauge,
   HelpCircle,
+  Layers,
   Maximize2,
   Menu,
   Minimize2,
@@ -40,7 +41,7 @@ import {
   Wand2,
   X,
 } from 'lucide-react';
-import { PRESET_RESOLUTIONS, type ServerCapabilities } from '@swave/shared';
+import { type ServerCapabilities } from '@swave/shared';
 import { useStore } from 'zustand';
 import {
   clearLocalProjectSnapshot,
@@ -74,6 +75,7 @@ import {
   useUiStore,
 } from '../stores/uiStore';
 import { formatTimecode } from '../utils/format';
+import { ResolutionTriggerPopover } from './CapCutResolutionControl';
 import { ExportModal } from './ExportModal';
 import { HelpShortcutsModal } from './HelpShortcutsModal';
 import { InspectorPanel } from './InspectorPanel';
@@ -520,6 +522,18 @@ export function VideoEditorPage() {
             setMobileSheet('media');
           },
         },
+        ...(selectedClip.type !== 'audio'
+          ? [
+              {
+                label: 'Lapisan',
+                icon: Layers,
+                onClick: () => {
+                  setActiveMediaCategory('overlay');
+                  setMobileSheet('media');
+                },
+              },
+            ]
+          : []),
         {
           label: 'Edit',
           icon: SlidersHorizontal,
@@ -565,6 +579,14 @@ export function VideoEditorPage() {
           .getState()
           .addTextClip('Judul Overlay', usePlaybackStore.getState().currentTime);
         setMobileSheet('inspector');
+      },
+    },
+    {
+      label: 'Overlay',
+      icon: Layers,
+      onClick: () => {
+        setActiveMediaCategory('overlay');
+        setMobileSheet('media');
       },
     },
     {
@@ -656,27 +678,8 @@ export function VideoEditorPage() {
             </button>
           </div>
 
-          {/* Center: Clean CapCut Android Resolution Pill [1080P ▾] */}
-          <select
-            aria-label="Resolusi Kanvas"
-            value={`${resolution.width}x${resolution.height}x${resolution.fps}`}
-            onChange={(e) => {
-              const found = PRESET_RESOLUTIONS.find(
-                (r) => `${r.width}x${r.height}x${r.fps}` === e.target.value
-              );
-              if (found) useTimelineStore.getState().setResolution(found);
-            }}
-            className="rounded-md bg-[#18181C] px-2.5 py-1 text-[11px] font-semibold text-zinc-100 ring-1 ring-[#2A2A32] outline-none"
-          >
-            {PRESET_RESOLUTIONS.map((r) => (
-              <option
-                key={`${r.width}x${r.height}x${r.fps}`}
-                value={`${r.width}x${r.height}x${r.fps}`}
-              >
-                {r.height >= 1080 ? '1080P' : '720P'} · {r.fps}fps ({r.width}×{r.height})
-              </option>
-            ))}
-          </select>
+          {/* Center: Clean CapCut Android Resolution Pill [1080P · 30fps ▾] */}
+          <ResolutionTriggerPopover compact />
 
           {/* Right: [?] + Bright Cyan CapCut Export Pill */}
           <div className="flex items-center gap-1.5">
@@ -1145,6 +1148,10 @@ export function VideoEditorPage() {
                     .addTextClip('Judul Overlay', usePlaybackStore.getState().currentTime);
                   setMobileSheet('inspector');
                 }}
+                onQuickOverlayClick={() => {
+                  setActiveMediaCategory('overlay');
+                  setMobileSheet('media');
+                }}
                 onCoverClick={() => captureCurrentCanvasSnapshot()}
               />
             )}
@@ -1284,6 +1291,10 @@ export function VideoEditorPage() {
                   .getState()
                   .addTextClip('Judul Overlay', usePlaybackStore.getState().currentTime);
                 setMobileSheet('inspector');
+              }}
+              onQuickOverlayClick={() => {
+                setActiveMediaCategory('overlay');
+                setMobileSheet('media');
               }}
               onCoverClick={() => captureCurrentCanvasSnapshot()}
             />

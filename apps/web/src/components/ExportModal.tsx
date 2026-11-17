@@ -13,11 +13,12 @@ import {
   X,
 } from 'lucide-react';
 import {
-  PRESET_RESOLUTIONS,
   type RenderJobRecord,
   type RenderMode,
   type ServerCapabilities,
 } from '@swave/shared';
+import { getTimelineDuration, useTimelineStore } from '../stores/timelineStore';
+import { ResolutionConfigPanel } from './CapCutResolutionControl';
 import {
   type ClientExportProgress,
   exportProjectAudioWav,
@@ -41,7 +42,6 @@ import {
   exportSubtitlesToVtt,
   selectExportableSubtitleClips,
 } from '../engine/subtitleUtils';
-import { useTimelineStore } from '../stores/timelineStore';
 import { useUiStore } from '../stores/uiStore';
 
 interface ExportModalProps {
@@ -56,7 +56,6 @@ export function ExportModal({
   onClose,
 }: ExportModalProps) {
   const abortRef = useRef<AbortController | null>(null);
-  const experienceMode = useUiStore((s) => s.experienceMode);
   const runtimeMode = useUiStore((s) => s.runtimeMode);
   const projectName = useTimelineStore((s) => s.projectName);
   const resolution = useTimelineStore((s) => s.resolution);
@@ -96,13 +95,13 @@ export function ExportModal({
   if (!isOpen) return null;
 
   const applyQuickExportPreset = (
-    resIndex: number,
+    width: number,
+    height: number,
+    fps: number,
+    label: string,
     targetQuality: 'draft' | 'standard' | 'high'
   ) => {
-    const preset = PRESET_RESOLUTIONS[resIndex];
-    if (preset) {
-      useTimelineStore.getState().setResolution(preset);
-    }
+    useTimelineStore.getState().setResolution({ width, height, fps, label });
     setQuality(targetQuality);
   };
 
@@ -265,7 +264,9 @@ export function ExportModal({
             <div className="grid grid-cols-3 gap-2">
               <button
                 type="button"
-                onClick={() => applyQuickExportPreset(1, 'standard')}
+                onClick={() =>
+                  applyQuickExportPreset(1080, 1920, 30, '1080p TikTok/Reels (9:16)', 'standard')
+                }
                 className={`rounded-xl border p-2.5 text-left transition ${
                   resolution.width === 1080 && resolution.height === 1920
                     ? 'border-cyan-400 bg-cyan-950/30'
@@ -279,7 +280,9 @@ export function ExportModal({
 
               <button
                 type="button"
-                onClick={() => applyQuickExportPreset(0, 'high')}
+                onClick={() =>
+                  applyQuickExportPreset(1920, 1080, 30, '1080p YouTube (16:9)', 'high')
+                }
                 className={`rounded-xl border p-2.5 text-left transition ${
                   resolution.width === 1920 &&
                   resolution.height === 1080 &&
@@ -295,7 +298,9 @@ export function ExportModal({
 
               <button
                 type="button"
-                onClick={() => applyQuickExportPreset(3, 'draft')}
+                onClick={() =>
+                  applyQuickExportPreset(1280, 720, 60, '720p 60FPS Smooth (16:9)', 'draft')
+                }
                 className={`rounded-xl border p-2.5 text-left transition ${
                   resolution.width === 1280 && quality === 'draft'
                     ? 'border-violet-400 bg-violet-950/30'
@@ -309,51 +314,18 @@ export function ExportModal({
             </div>
           </div>
 
-          {/* Pro Quality & Resolution Fine-tuning */}
-          {experienceMode === 'pro' && (
-            <div className="grid grid-cols-2 gap-2.5 rounded-xl border border-zinc-800 bg-zinc-950/60 p-3">
-              <div>
-                <label className="mb-1 block text-[10px] text-zinc-400">
-                  Resolusi Kanvas
-                </label>
-                <select
-                  value={`${resolution.width}x${resolution.height}x${resolution.fps}`}
-                  onChange={(e) => {
-                    const found = PRESET_RESOLUTIONS.find(
-                      (r) => `${r.width}x${r.height}x${r.fps}` === e.target.value
-                    );
-                    if (found) useTimelineStore.getState().setResolution(found);
-                  }}
-                  className="w-full rounded border border-zinc-700 bg-zinc-900 px-2 py-1.5 text-[11px] text-zinc-100"
-                >
-                  {PRESET_RESOLUTIONS.map((r) => (
-                    <option
-                      key={`${r.width}x${r.height}x${r.fps}`}
-                      value={`${r.width}x${r.height}x${r.fps}`}
-                    >
-                      {r.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="mb-1 block text-[10px] text-zinc-400">
-                  Kualitas Encode (CRF)
-                </label>
-                <select
-                  value={quality}
-                  onChange={(e) =>
-                    setQuality(e.target.value as 'draft' | 'standard' | 'high')
-                  }
-                  className="w-full rounded border border-zinc-700 bg-zinc-900 px-2 py-1.5 text-[11px] text-zinc-100"
-                >
-                  <option value="draft">Draft Cepat (CRF 28)</option>
-                  <option value="standard">Standar Seimbang (CRF 21)</option>
-                  <option value="high">Tinggi Studio (CRF 17)</option>
-                </select>
-              </div>
-            </div>
-          )}
+          {/* CapCut Resolution (480p-4K + Custom), Aspect Ratio, FPS & Bitrate */}
+          <div className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-3">
+            <ResolutionConfigPanel
+              resolution={resolution}
+              onChangeResolution={(next) =>
+                useTimelineStore.getState().setResolution(next)
+              }
+              quality={quality}
+              onChangeQuality={setQuality}
+              durationSec={getTimelineDuration(clips, 10)}
+            />
+          </div>
 
           {/* Render Engine Choice */}
           <div className="grid grid-cols-2 gap-2">

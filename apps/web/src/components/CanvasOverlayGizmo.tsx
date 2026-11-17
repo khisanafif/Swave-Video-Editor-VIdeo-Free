@@ -3,21 +3,24 @@ import {
   AlignCenter,
   AlignLeft,
   AlignRight,
+  ArrowDown,
   ArrowDownToLine,
+  ArrowUp,
   ArrowUpToLine,
   Check,
   Copy,
+  Layers,
   Maximize2,
   Move,
   Pencil,
   RotateCw,
   Trash2,
 } from 'lucide-react';
-import type { CanvasResolution, Clip } from '@swave/shared';
+import type { CanvasResolution, Clip, MediaAsset } from '@swave/shared';
 import { TEXT_PRESETS } from '../engine/editorPresets';
 import { mediaRuntime } from '../engine/mediaRuntime';
 import { usePlaybackStore } from '../stores/playbackStore';
-import { useTimelineStore } from '../stores/timelineStore';
+import { getMainVideoTrackId, useTimelineStore } from '../stores/timelineStore';
 
 interface CanvasOverlayGizmoProps {
   containerRef: React.RefObject<HTMLDivElement | null>;
@@ -43,6 +46,7 @@ const QUICK_BG_COLORS = [
 
 function computeClipCanvasBox(
   clip: Clip,
+  asset: MediaAsset | undefined,
   cw: number,
   ch: number
 ): { cx: number; cy: number; boxW: number; boxH: number } {
@@ -64,6 +68,16 @@ function computeClipCanvasBox(
       cy,
       boxW: rawW * scale,
       boxH: rawH * scale,
+    };
+  }
+
+  if (asset && asset.width > 0 && asset.height > 0) {
+    const fitScale = Math.min(cw / asset.width, ch / asset.height);
+    return {
+      cx,
+      cy,
+      boxW: Math.max(48, asset.width * fitScale * scale),
+      boxH: Math.max(48, asset.height * fitScale * scale),
     };
   }
 
@@ -329,43 +343,69 @@ export function CanvasOverlayGizmo({
         <div className="pointer-events-none absolute right-0 left-0 top-1/2 z-30 h-px -translate-y-1/2 border-t border-dashed border-cyan-400 shadow-[0_0_8px_#22d3ee]" />
       )}
 
-      {/* Clickable hit-targets for unselected visible text/sticker overlays */}
-      {visibleClips
-        .filter((c) => c.id !== activeVisualClip?.id && c.type === 'text')
-        .map((clip) => {
-          const { cx, cy, boxW, boxH } = computeClipCanvasBox(clip, cw, ch);
-          return (
-            <div
-              key={`hit-${clip.id}`}
-              onPointerDown={(e) => {
-                e.stopPropagation();
-                useTimelineStore.getState().selectClip(clip.id, false);
-              }}
-              style={{
-                left: `${(cx / cw) * 100}%`,
-                top: `${(cy / ch) * 100}%`,
-                width: `${Math.max(12, (boxW / cw) * 100)}%`,
-                height: `${Math.max(8, (boxH / ch) * 100)}%`,
-                transform: `translate(-50%, -50%) rotate(${clip.transforms.rotation || 0}deg)`,
-              }}
-              className="pointer-events-auto absolute cursor-pointer rounded border border-transparent transition hover:border-white/40"
-              title={`Klik untuk pilih & geser: ${clip.name}`}
-            />
-          );
-        })}
+      {/* Clickable hit-targets for ALL unselected visible overlay/text clips in exact layer order */}
+      {(() => {
+        const mainTrackId = getMainVideoTrackId(trackOrder, tracks);
+        return visibleClips
+          .filter(
+            (c) =>
+              c.id !== activeVisualClip?.id &&
+              (c.type === 'text' || c.type === 'overlay' || c.trackId !== mainTrackId)
+          )
+          .map((clip, idx) => {
+            const { cx, cy, boxW, boxH } = computeClipCanvasBox(
+              clip,
+              assets[clip.assetId],
+              cw,
+              ch
+            );
+            return (
+              <div
+                key={`hit-${clip.id}`}
+                onPointerDown={(e) => {
+                  e.stopPropagation();
+                  useTimelineStore.getState().selectClip(clip.id, false);
+                }}
+                style={{
+                  left: `${(cx / cw) * 100}%`,
+                  top: `${(cy / ch) * 100}%`,
+                  width: `${Math.max(8, (boxW / cw) * 100)}%`,
+                  height: `${Math.max(8, (boxH / ch) * 100)}%`,
+                  zIndex: 10 + idx,
+                  transform: `translate(-50%, -50%) rotate(${clip.transforms.rotation || 0}deg)`,
+                }}
+                className="pointer-events-auto absolute cursor-pointer rounded border border-transparent transition hover:border-cyan-400/70"
+                title={`Klik untuk pilih & geser overlay: ${clip.name}`}
+              />
+            );
+          });
+      })()}
 
       {/* Active Selected Clip CapCut Transform Bounding Box */}
       {activeVisualClip &&
         (() => {
+          const mainTrackId = getMainVideoTrackId(trackOrder, tracks);
+          const upperTracks = trackOrder.filter(
+            (tid) => tid !== mainTrackId && tracks[tid]?.type !== 'audio'
+          );
+          const activeLayerIdx = upperTracks.indexOf(activeVisualClip.trackId);
+          const activeConcurrentOverlays = visibleClips.filter(
+            (c) =>
+              c.type === 'overlay' ||
+              c.type === 'text' ||
+              c.trackId !== mainTrackId
+          ).length;
+
           const { cx, cy, boxW, boxH } = computeClipCanvasBox(
             activeVisualClip,
+            assets[activeVisualClip.assetId],
             cw,
             ch
           );
           const leftPct = (cx / cw) * 100;
           const topPct = (cy / ch) * 100;
-          const widthPct = Math.max(14, (boxW / cw) * 100);
-          const heightPct = Math.max(10, (boxH / ch) * 100);
+          const widthPct = Math.max(8, (boxW / cw) * 100);
+          const heightPct = Math.max(8, (boxH / ch) * 100);
 
           return (
             <>
@@ -387,7 +427,7 @@ export function CanvasOverlayGizmo({
                     activeVisualClip.transforms.rotation || 0
                   }deg)`,
                 }}
-                className="pointer-events-auto absolute cursor-move touch-none rounded-md border-2 border-white/90 shadow-[0_0_0_1px_rgba(34,211,238,0.8),0_8px_24px_rgba(0,0,0,0.5)]"
+                className="pointer-events-auto absolute z-20 cursor-move touch-none rounded-md border-2 border-white/90 shadow-[0_0_0_1px_rgba(34,211,238,0.8),0_8px_24px_rgba(0,0,0,0.5)]"
               >
                 {/* Center crosshair subtle indicator */}
                 <div className="pointer-events-none absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-cyan-400/20 p-1 text-white/70">
@@ -518,6 +558,60 @@ export function CanvasOverlayGizmo({
                   <ArrowDownToLine className="h-3 w-3 text-yellow-400" />
                   <span>Subtitle Bawah</span>
                 </button>
+
+                {activeLayerIdx >= 0 && upperTracks.length > 1 && (
+                  <div className="ml-0.5 flex items-center gap-0.5 border-l border-zinc-700 pl-1.5">
+                    <span
+                      className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-amber-300"
+                      title={
+                        activeConcurrentOverlays > 1
+                          ? `${activeConcurrentOverlays} overlay bertumpuk di waktu ini`
+                          : 'Urutan Lapisan (Layer)'
+                      }
+                    >
+                      <Layers className="h-3 w-3" />
+                      <span>
+                        L{activeLayerIdx + 1}/{upperTracks.length}
+                      </span>
+                    </span>
+                    <button
+                      type="button"
+                      disabled={activeLayerIdx >= upperTracks.length - 1}
+                      onClick={() => {
+                        useTimelineStore
+                          .getState()
+                          .moveClipLayer(activeVisualClip.id, 'up');
+                        mediaRuntime.renderFrameAt(
+                          usePlaybackStore.getState().currentTime,
+                          false
+                        );
+                      }}
+                      title="Majukan Layer ke Depan"
+                      aria-label="Majukan Layer ke Depan"
+                      className="rounded-full bg-zinc-800 p-1 text-zinc-200 hover:bg-cyan-500 hover:text-zinc-950 disabled:opacity-35"
+                    >
+                      <ArrowUp className="h-3 w-3" />
+                    </button>
+                    <button
+                      type="button"
+                      disabled={activeLayerIdx <= 0}
+                      onClick={() => {
+                        useTimelineStore
+                          .getState()
+                          .moveClipLayer(activeVisualClip.id, 'down');
+                        mediaRuntime.renderFrameAt(
+                          usePlaybackStore.getState().currentTime,
+                          false
+                        );
+                      }}
+                      title="Mundurkan Layer ke Belakang"
+                      aria-label="Mundurkan Layer ke Belakang"
+                      className="rounded-full bg-zinc-800 p-1 text-zinc-200 hover:bg-cyan-500 hover:text-zinc-950 disabled:opacity-35"
+                    >
+                      <ArrowDown className="h-3 w-3" />
+                    </button>
+                  </div>
+                )}
               </div>
 
               {/* Direct On-Canvas CapCut Text Editor Popover */}

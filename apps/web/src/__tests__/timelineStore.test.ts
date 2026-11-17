@@ -1,5 +1,8 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import type { MediaAsset } from '@swave/shared';
+import {
+  computeResolutionForAspectAndTier,
+  type MediaAsset,
+} from '@swave/shared';
 import { encodeWavFromChannels } from '../engine/audioExtractor';
 import { usePlaybackStore } from '../stores/playbackStore';
 import {
@@ -345,6 +348,86 @@ describe('SWAVE Video Dual-Store & Zundo History', () => {
     expect(displayOrder.indexOf(aud2Id)).toBeGreaterThan(
       displayOrder.indexOf('track-3')
     );
+  });
+
+  it('auto-stacks multiple concurrent image overlays cleanly, reorders layer Z-order, and normalizes custom resolutions', () => {
+    const store = useTimelineStore.getState();
+    const imgAsset1: MediaAsset = {
+      id: 'img-logo',
+      name: 'logo.png',
+      kind: 'image',
+      mimeType: 'image/png',
+      size: 20480,
+      duration: 4,
+      width: 512,
+      height: 512,
+      hasAudio: false,
+      source: 'local',
+    };
+    const imgAsset2: MediaAsset = {
+      id: 'img-badge',
+      name: 'promo.png',
+      kind: 'image',
+      mimeType: 'image/png',
+      size: 40960,
+      duration: 4,
+      width: 1080,
+      height: 1080,
+      hasAudio: false,
+      source: 'local',
+    };
+
+    store.registerAsset(sampleVideoAsset);
+    store.registerAsset(imgAsset1);
+    store.registerAsset(imgAsset2);
+
+    // Base main video on track-1
+    store.addClipFromAsset(sampleVideoAsset.id, 'track-1', 0);
+
+    // Adding image when track-1 already has clips automatically routes to Overlay track
+    const ovl1Id = store.addClipFromAsset(imgAsset1.id, undefined, 1)!;
+    // Adding a second concurrent image overlay at t=1 auto-creates Overlay 2 above Overlay 1
+    const ovl2Id = store.addOverlayClipFromAsset(imgAsset2.id, 1)!;
+
+    const st = useTimelineStore.getState();
+    const ovl1 = st.clips[ovl1Id];
+    const ovl2 = st.clips[ovl2Id];
+    expect(ovl1.type).toBe('overlay');
+    expect(ovl2.type).toBe('overlay');
+    expect(ovl1.trackId).not.toBe('track-1');
+    expect(ovl2.trackId).not.toBe(ovl1.trackId);
+    expect(ovl2.transforms.x).not.toBe(ovl1.transforms.x);
+
+    // Initially ovl2 is rendered in front of ovl1 (higher trackOrder index)
+    expect(st.trackOrder.indexOf(ovl2.trackId)).toBeGreaterThan(
+      st.trackOrder.indexOf(ovl1.trackId)
+    );
+
+    // Move ovl1 UP in layer order -> ovl1 now renders above ovl2
+    st.moveClipLayer(ovl1Id, 'up');
+    const reordered = useTimelineStore.getState();
+    expect(reordered.trackOrder.indexOf(ovl1.trackId)).toBeGreaterThan(
+      reordered.trackOrder.indexOf(ovl2.trackId)
+    );
+
+    // Custom odd resolution rounds safely to even pixels + 4K 9:16 helper check
+    reordered.setResolution({
+      width: 1081,
+      height: 1919,
+      fps: 60,
+      label: 'Kustom Uji',
+    });
+    expect(useTimelineStore.getState().resolution).toEqual({
+      width: 1082,
+      height: 1920,
+      fps: 60,
+      label: 'Kustom Uji',
+    });
+
+    const fourKVertical = computeResolutionForAspectAndTier(9, 16, 2160, 60);
+    expect(fourKVertical.width).toBe(2160);
+    expect(fourKVertical.height).toBe(3840);
+    expect(fourKVertical.fps).toBe(60);
   });
 });
 

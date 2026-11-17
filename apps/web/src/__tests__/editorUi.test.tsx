@@ -389,4 +389,86 @@ describe('VideoEditorPage UI Integration (Desktop, Tablet, Android & Multi-Devic
       Object.defineProperty(window, 'innerHeight', { value: prevH, configurable: true });
     }
   });
+
+  it('supports CapCut Image/Multi-Overlay stacking UI and Custom Resolution + Aspect Ratio selector', async () => {
+    useTimelineStore.getState().registerAsset({
+      id: 'vid-base',
+      name: 'utama.mp4',
+      kind: 'video',
+      mimeType: 'video/mp4',
+      size: 4096,
+      duration: 8,
+      width: 1920,
+      height: 1080,
+      hasAudio: true,
+      source: 'local',
+    });
+    useTimelineStore.getState().registerAsset({
+      id: 'img-ovl-1',
+      name: 'stiker_logo.png',
+      kind: 'image',
+      mimeType: 'image/png',
+      size: 1024,
+      duration: 4,
+      width: 512,
+      height: 512,
+      hasAudio: false,
+      source: 'local',
+    });
+    useTimelineStore.getState().registerAsset({
+      id: 'img-ovl-2',
+      name: 'bingkai_promo.png',
+      kind: 'image',
+      mimeType: 'image/png',
+      size: 1024,
+      duration: 4,
+      width: 800,
+      height: 600,
+      hasAudio: false,
+      source: 'local',
+    });
+
+    useTimelineStore.getState().addClipFromAsset('vid-base', 'track-1', 0);
+    const ovl1 = useTimelineStore.getState().addOverlayClipFromAsset('img-ovl-1', 1)!;
+    useTimelineStore.getState().addOverlayClipFromAsset('img-ovl-2', 1);
+
+    render(<VideoEditorPage />);
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    // Open CapCut Overlay Studio category -> lists both overlays & lets user reorder layer
+    fireEvent.click(screen.getByTitle(/Kategori Overlay/i));
+    expect(screen.getByText(/Urutan Lapisan Overlay/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/stiker_logo\.png/i).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText(/bingkai_promo\.png/i).length).toBeGreaterThanOrEqual(1);
+
+    fireEvent.click(screen.getByRole('button', { name: /Naikkan Layer stiker_logo\.png/i }));
+    const afterReorder = useTimelineStore.getState();
+    const ovl1Track = afterReorder.clips[ovl1].trackId;
+    const upperTracks = afterReorder.trackOrder.filter(
+      (tid) => tid !== 'track-1' && afterReorder.tracks[tid]?.type !== 'audio'
+    );
+    expect(upperTracks.indexOf(ovl1Track)).toBe(upperTracks.length - 1);
+
+    // Open CapCut Resolution Popover -> apply Custom 1440x1800 @ 60fps
+    fireEvent.click(screen.getByRole('button', { name: /Resolusi Kanvas/i }));
+    expect(
+      screen.getByRole('dialog', { name: /Pengaturan Resolusi dan Rasio CapCut/i })
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /^Kustom/i }));
+    fireEvent.change(screen.getByLabelText(/Lebar Resolusi Kustom/i), {
+      target: { value: '1440' },
+    });
+    fireEvent.change(screen.getByLabelText(/Tinggi Resolusi Kustom/i), {
+      target: { value: '1800' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /^Terapkan$/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^60$/i }));
+
+    expect(useTimelineStore.getState().resolution.width).toBe(1440);
+    expect(useTimelineStore.getState().resolution.height).toBe(1800);
+    expect(useTimelineStore.getState().resolution.fps).toBe(60);
+  });
 });

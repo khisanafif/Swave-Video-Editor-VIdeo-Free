@@ -41,6 +41,7 @@ import { useTimelineStore } from '../stores/timelineStore';
 import { useUiStore, type MediaBinCategory } from '../stores/uiStore';
 import { formatBytes } from '../utils/format';
 import { AudioStudioTab } from './AudioStudioTab';
+import { OverlayStudioTab } from './OverlayStudioTab';
 import { SubtitleStudioTab } from './SubtitleStudioTab';
 
 interface MediaBinPanelProps {
@@ -56,6 +57,7 @@ export const STUDIO_CATEGORIES: ReadonlyArray<{
   icon: typeof Film;
 }> = [
   { id: 'media', label: 'Media', icon: Film },
+  { id: 'overlay', label: 'Overlay', icon: Layers },
   { id: 'subtitle', label: 'Subtitle', icon: Captions },
   { id: 'audio', label: 'Audio', icon: Volume2 },
   { id: 'text', label: 'Teks', icon: Type },
@@ -318,7 +320,7 @@ export function MediaBinPanel({
 
         {/* Sheet Mode Horizontal Category Bar */}
         {mode === 'sheet' && (
-          <div className="grid grid-cols-6 border-b border-[#2A2A32] bg-[#18181C] p-1">
+          <div className="grid grid-cols-7 border-b border-[#2A2A32] bg-[#18181C] p-1">
             {STUDIO_CATEGORIES.map((tab) => {
               const Icon = tab.icon;
               const active = activeCategory === tab.id;
@@ -328,7 +330,7 @@ export function MediaBinPanel({
                   type="button"
                   title={`Kategori ${tab.label}`}
                   onClick={() => setActiveCategory(tab.id)}
-                  className={`flex flex-col items-center justify-center gap-0.5 rounded py-1.5 text-[10px] font-medium transition ${
+                  className={`flex flex-col items-center justify-center gap-0.5 rounded py-1.5 text-[9.5px] font-medium transition ${
                     active
                       ? 'bg-[#00E5FF]/20 text-[#00E5FF]'
                       : 'text-zinc-400 hover:bg-[#242429] hover:text-zinc-200'
@@ -514,6 +516,25 @@ export function MediaBinPanel({
                               <span>Ekstrak</span>
                             </button>
                           )}
+                          {(asset.kind === 'image' || asset.kind === 'video') && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                useTimelineStore
+                                  .getState()
+                                  .addOverlayClipFromAsset(
+                                    asset.id,
+                                    usePlaybackStore.getState().currentTime
+                                  );
+                                onClipAdded?.();
+                              }}
+                              className="inline-flex items-center gap-1 rounded border border-amber-500/40 bg-amber-500/15 px-2 py-1 text-[10px] font-semibold text-amber-200 hover:bg-amber-400 hover:text-zinc-950 active:scale-95"
+                              title="Tambahkan sebagai Overlay / Gambar PIP di atas Video Utama"
+                            >
+                              <Layers className="h-3 w-3" />
+                              <span>+ Overlay</span>
+                            </button>
+                          )}
                           <button
                             type="button"
                             onClick={() => {
@@ -592,7 +613,19 @@ export function MediaBinPanel({
         </>
       )}
 
-      {/* Tab 2: DEDICATED AI AUTO-SUBTITLE STUDIO */}
+      {/* Tab 2: OVERLAY GAMBAR & MULTI-LAYER PIP */}
+      {activeCategory === 'overlay' && (
+        <OverlayStudioTab
+          onSyncAsset={(assetId, file) => {
+            if (autoSyncServer && isServerOnline) {
+              void handleChunkedUpload(assetId, file);
+            }
+          }}
+          onClipAdded={onClipAdded}
+        />
+      )}
+
+      {/* Tab 3: DEDICATED AI AUTO-SUBTITLE STUDIO */}
       {activeCategory === 'subtitle' && (
         <SubtitleStudioTab onClipAdded={onClipAdded} />
       )}
