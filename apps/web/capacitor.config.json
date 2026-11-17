@@ -1,6 +1,6 @@
 {
-  "appId": "com.velocut.studio",
-  "appName": "VeloCut Studio",
+  "appId": "com.swavevideo.app",
+  "appName": "SWAVE VIDEO",
   "webDir": "dist",
   "bundledWebRuntime": false,
   "server": {

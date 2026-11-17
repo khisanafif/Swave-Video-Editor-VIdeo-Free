@@ -23,8 +23,8 @@ import {
   STICKER_PRESETS,
   TEXT_PRESETS,
   type SfxPresetId,
-  synthesizeCapCutAudioAsset,
-} from '../engine/capcutPresets';
+  synthesizeAudioAsset,
+} from '../engine/editorPresets';
 import {
   generateSyntheticDemoMedia,
   probeAndRegisterMediaFile,
@@ -60,9 +60,9 @@ export function MediaBinPanel({
   const [busySfxId, setBusySfxId] = useState<string | null>(null);
   const [duckFeedback, setDuckFeedback] = useState<string | null>(null);
   const [captionScript, setCaptionScript] = useState(
-    'Halo semuanya! Selamat datang di VeloCut Studio.\nEdit video gaya CapCut 100% gratis tanpa watermark!'
+    'Halo semuanya! Selamat datang di SWAVE VIDEO.\nEdit video & subtitle otomatis 100% gratis tanpa watermark!'
   );
-  const [captionPresetId, setCaptionPresetId] = useState('capcut-yellow');
+  const [captionPresetId, setCaptionPresetId] = useState('bold-yellow');
   const [uploadStatus, setUploadStatus] = useState<string | null>(null);
   const [autoSyncServer, setAutoSyncServer] = useState(false);
   const [serverAssets, setServerAssets] = useState<ServerMediaAssetItem[]>([]);
@@ -166,7 +166,7 @@ export function MediaBinPanel({
       store.registerAsset(audioAsset);
       store.addClipFromAsset(visualAsset.id, 'track-1', 0);
       store.addTextClip(
-        'VeloCut Hybrid-Edge Studio\n60 FPS WebGL2 + Multi-Device',
+        'SWAVE VIDEO Studio\n60 FPS WebGL2 + Multi-Device',
         0.4,
         'track-2'
       );
@@ -186,7 +186,7 @@ export function MediaBinPanel({
   const handleAddBuiltInSfx = async (presetId: SfxPresetId) => {
     setBusySfxId(presetId);
     try {
-      const audioAsset = await synthesizeCapCutAudioAsset(presetId);
+      const audioAsset = await synthesizeAudioAsset(presetId);
       const store = useTimelineStore.getState();
       store.registerAsset(audioAsset);
       store.addClipFromAsset(
@@ -681,10 +681,10 @@ export function MediaBinPanel({
             </div>
           </div>
 
-          {/* CapCut Text Templates */}
+          {/* Quick Text Templates */}
           <div className="space-y-2">
             <p className="text-[11px] font-semibold text-zinc-300 uppercase">
-              Template Teks CapCut (1-Klik)
+              Template Teks Cepat (1-Klik)
             </p>
             <div className="grid grid-cols-1 gap-2">
               {TEXT_PRESETS.map((preset) => (
@@ -760,7 +760,7 @@ export function MediaBinPanel({
         <div className="flex-1 space-y-3 overflow-y-auto p-3">
           {!targetVisualClip ? (
             <div className="rounded-lg border border-amber-500/30 bg-amber-950/20 p-3 text-xs text-amber-200">
-              Tambahkan atau pilih klip Video/Gambar di Timeline terlebih dahulu untuk menerapkan Filter & Efek CapCut.
+              Tambahkan atau pilih klip Video/Gambar di Timeline terlebih dahulu untuk menerapkan Filter & Efek GLSL.
             </div>
           ) : (
             <>

@@ -3,14 +3,14 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { FastifyInstance } from 'fastify';
-import type { ProjectDocument } from '@velocut/shared';
+import type { ProjectDocument } from '@swave/shared';
 import { createServerApp } from '../app.js';
 
 const tempDirs: string[] = [];
 const openApps: FastifyInstance[] = [];
 
 async function createTestServer() {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'velocut-srv-test-'));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'swave-srv-test-'));
   tempDirs.push(dir);
   const created = await createServerApp({ storageDir: dir });
   openApps.push(created.app);
@@ -28,7 +28,7 @@ afterEach(async () => {
   }
 });
 
-describe('VeloCut Local Server API', () => {
+describe('SWAVE VIDEO Local Server API', () => {
   it('sets COOP/COEP headers on health and API responses', async () => {
     const { app } = await createTestServer();
 
@@ -42,7 +42,7 @@ describe('VeloCut Local Server API', () => {
   it('assembles multi-chunk binary uploads in order and streams byte ranges safely', async () => {
     const { app } = await createTestServer();
 
-    const chunk0 = Buffer.from('VELOCUT-CHUNK-ZERO-');
+    const chunk0 = Buffer.from('SWAVE-VIDEO-CHUNK0-');
     const chunk1 = Buffer.from('AND-CHUNK-ONE-DATA');
     const fullBuffer = Buffer.concat([chunk0, chunk1]);
 
@@ -111,13 +111,13 @@ describe('VeloCut Local Server API', () => {
     const rangeRes = await app.inject({
       method: 'GET',
       url: completed.mediaUrl,
-      headers: { range: 'bytes=0-6' },
+      headers: { range: 'bytes=0-4' },
     });
     expect(rangeRes.statusCode).toBe(206);
     expect(rangeRes.headers['content-range']).toBe(
-      `bytes 0-6/${fullBuffer.length}`
+      `bytes 0-4/${fullBuffer.length}`
     );
-    expect(rangeRes.rawPayload.toString('utf8')).toBe('VELOCUT');
+    expect(rangeRes.rawPayload.toString('utf8')).toBe('SWAVE');
 
     // Traversal protection (both router-normalized and encoded .. segments)
     const normalizedTraversal = await app.inject({
@@ -138,7 +138,7 @@ describe('VeloCut Local Server API', () => {
 
     const sampleProject: ProjectDocument = {
       id: 'proj-alpha',
-      name: 'VeloCut Demo Edit',
+      name: 'SWAVE Demo Edit',
       resolution: { width: 1920, height: 1080, fps: 30, label: '1080p' },
       trackOrder: ['track-1'],
       tracks: {
@@ -168,7 +168,7 @@ describe('VeloCut Local Server API', () => {
       url: '/api/projects/proj-alpha',
     });
     expect(getRes.statusCode).toBe(200);
-    expect(getRes.json().name).toBe('VeloCut Demo Edit');
+    expect(getRes.json().name).toBe('SWAVE Demo Edit');
 
     const listRes = await app.inject({ method: 'GET', url: '/api/projects' });
     expect(listRes.statusCode).toBe(200);
@@ -183,14 +183,14 @@ describe('VeloCut Local Server API', () => {
   });
 
   it('exposes LAN network endpoints and serves the static web SPA bundle with COOP/COEP headers', async () => {
-    const webDist = fs.mkdtempSync(path.join(os.tmpdir(), 'velocut-webdist-'));
+    const webDist = fs.mkdtempSync(path.join(os.tmpdir(), 'swave-webdist-'));
     tempDirs.push(webDist);
     fs.writeFileSync(
       path.join(webDist, 'index.html'),
-      '<!doctype html><html><body>VeloCut SPA</body></html>'
+      '<!doctype html><html><body>SWAVE SPA</body></html>'
     );
 
-    const storageDir = fs.mkdtempSync(path.join(os.tmpdir(), 'velocut-srv-test-'));
+    const storageDir = fs.mkdtempSync(path.join(os.tmpdir(), 'swave-srv-test-'));
     tempDirs.push(storageDir);
     const created = await createServerApp({ storageDir, webDistDir: webDist });
     openApps.push(created.app);
@@ -210,7 +210,7 @@ describe('VeloCut Local Server API', () => {
     expect(spaRes.statusCode).toBe(200);
     expect(spaRes.headers['cross-origin-opener-policy']).toBe('same-origin');
     expect(spaRes.headers['cross-origin-embedder-policy']).toBe('require-corp');
-    expect(spaRes.body).toContain('VeloCut SPA');
+    expect(spaRes.body).toContain('SWAVE SPA');
   });
 
   it('detects bundled FFmpeg and completes a server-side MP4 render job end-to-end', async () => {
@@ -243,14 +243,14 @@ describe('VeloCut Local Server API', () => {
           trackId: 'track-2',
           assetId: 'text',
           type: 'text',
-          name: 'Halo CapCut',
+          name: 'Halo Studio',
           start: 0,
           duration: 1.0,
           offset: 0,
           transforms: { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1 },
           effects: [],
           textStyle: {
-            content: 'VELOCUT FREE',
+            content: 'SWAVE VIDEO FREE',
             fontFamily: 'Inter, sans-serif',
             fontSize: 32,
             color: '#facc15',

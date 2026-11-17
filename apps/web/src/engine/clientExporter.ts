@@ -1,5 +1,5 @@
 import { ArrayBufferTarget, Muxer } from 'mp4-muxer';
-import type { MediaAsset, ProjectDocument } from '@velocut/shared';
+import type { MediaAsset, ProjectDocument } from '@swave/shared';
 import { mediaRegistry } from './opfsStorage';
 import { resolveServerUrl } from './serverOffloadClient';
 import { type CompositeLayer, WebGLCompositor } from './webglCompositor';

@@ -18,8 +18,8 @@ import {
   type TextStyle,
   type Track,
   type TrackType,
-} from '@velocut/shared';
-import { TEXT_PRESETS } from '../engine/capcutPresets';
+} from '@swave/shared';
+import { findTextPresetById } from '../engine/editorPresets';
 
 export const MIN_CLIP_DURATION = 0.1;
 
@@ -218,7 +218,7 @@ const initialLayout = createDefaultTracks();
 export const useTimelineStore = create<TimelineState>()(
   temporal(
     immer((set, get) => ({
-      projectId: 'velocut-studio-project',
+      projectId: 'swave-studio-project',
       projectName: 'Proyek Studio Tanpa Judul',
       resolution: PRESET_RESOLUTIONS[0],
       canvasBackground: '#09090b',
@@ -480,8 +480,7 @@ export const useTimelineStore = create<TimelineState>()(
 
       addPresetTextClip: (presetId, customText, startTime) => {
         const current = get();
-        const preset =
-          TEXT_PRESETS.find((p) => p.id === presetId) || TEXT_PRESETS[0];
+        const preset = findTextPresetById(presetId);
 
         let resolvedTrackId = current.trackOrder.find((tid) => {
           const tr = current.tracks[tid];
@@ -594,7 +593,7 @@ export const useTimelineStore = create<TimelineState>()(
         return clipId;
       },
 
-      generateAutoCaptions: (scriptText, presetId = 'capcut-yellow') => {
+      generateAutoCaptions: (scriptText, presetId = 'bold-yellow') => {
         const rawLines = scriptText
           .split(/\r?\n|[.!?]+/)
           .map((s) => s.trim())
@@ -615,8 +614,7 @@ export const useTimelineStore = create<TimelineState>()(
         if (phrases.length === 0) return [];
 
         const current = get();
-        const preset =
-          TEXT_PRESETS.find((p) => p.id === presetId) || TEXT_PRESETS[0];
+        const preset = findTextPresetById(presetId);
 
         let resolvedTrackId = current.trackOrder.find((tid) => {
           const tr = current.tracks[tid];
@@ -677,11 +675,10 @@ export const useTimelineStore = create<TimelineState>()(
         return createdIds;
       },
 
-      addSubtitleCues: (cues, presetId = 'capcut-yellow', options) => {
+      addSubtitleCues: (cues, presetId = 'bold-yellow', options) => {
         if (!cues || cues.length === 0) return [];
         const current = get();
-        const preset =
-          TEXT_PRESETS.find((p) => p.id === presetId) || TEXT_PRESETS[0];
+        const preset = findTextPresetById(presetId);
 
         let resolvedTrackId = options?.trackId;
         if (resolvedTrackId) {

@@ -1,4 +1,4 @@
-const OPFS_FOLDER = 'velocut-media';
+const OPFS_FOLDER = 'swave-media';
 
 class MediaBlobRegistry {
   private readonly blobMap = new Map<string, Blob>();

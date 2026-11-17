@@ -13,8 +13,8 @@ import {
   RotateCw,
   Trash2,
 } from 'lucide-react';
-import type { CanvasResolution, Clip } from '@velocut/shared';
-import { TEXT_PRESETS } from '../engine/capcutPresets';
+import type { CanvasResolution, Clip } from '@swave/shared';
+import { TEXT_PRESETS } from '../engine/editorPresets';
 import { mediaRuntime } from '../engine/mediaRuntime';
 import { usePlaybackStore } from '../stores/playbackStore';
 import { useTimelineStore } from '../stores/timelineStore';
@@ -26,7 +26,7 @@ interface CanvasOverlayGizmoProps {
 
 const QUICK_TEXT_COLORS = [
   { label: 'Putih', color: '#ffffff' },
-  { label: 'Kuning CapCut', color: '#facc15' },
+  { label: 'Kuning Terang', color: '#facc15' },
   { label: 'Cyan Neon', color: '#22d3ee' },
   { label: 'Merah', color: '#f43f5e' },
   { label: 'Hijau', color: '#4ade80' },
@@ -319,7 +319,7 @@ export function CanvasOverlayGizmo({
   return (
     <div
       className="pointer-events-none absolute inset-0 z-20 overflow-hidden select-none"
-      aria-label="Kanvas Interaktif CapCut"
+      aria-label="Kanvas Interaktif SWAVE VIDEO"
     >
       {/* CapCut Magnetic Center Snap Lines */}
       {snapGuideX && (
@@ -370,7 +370,7 @@ export function CanvasOverlayGizmo({
           return (
             <>
               <div
-                data-testid="capcut-canvas-gizmo"
+                data-testid="canvas-overlay-gizmo"
                 onPointerDown={(e) => handleStartDragMove(activeVisualClip, e)}
                 onDoubleClick={(e) => {
                   e.stopPropagation();
@@ -513,7 +513,7 @@ export function CanvasOverlayGizmo({
                   type="button"
                   onClick={() => applyQuickPosition(activeVisualClip, 'bottom')}
                   className="inline-flex items-center gap-0.5 rounded-full bg-zinc-800 px-2 py-0.5 text-zinc-200 hover:bg-zinc-700"
-                  title="Posisi Subtitle Bawah CapCut"
+                  title="Posisi Subtitle Bawah"
                 >
                   <ArrowDownToLine className="h-3 w-3 text-yellow-400" />
                   <span>Subtitle Bawah</span>
@@ -530,7 +530,7 @@ export function CanvasOverlayGizmo({
                   >
                     <div className="mb-2 flex items-center justify-between">
                       <span className="text-xs font-bold text-violet-300">
-                        Edit Teks Langsung (Gaya CapCut)
+                        Edit Teks Langsung
                       </span>
                       <button
                         type="button"

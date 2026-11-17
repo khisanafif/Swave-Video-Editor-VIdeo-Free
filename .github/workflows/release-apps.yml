@@ -1,4 +1,4 @@
-name: Build & Release Standalone Apps (Android APK, iOS IPA, Portable Web & Pages)
+name: SWAVE VIDEO — Build & Release Apps (Android APK · iOS IPA · Portable · Pages)
 
 on:
   push:
@@ -13,7 +13,7 @@ permissions:
   id-token: write
 
 concurrency:
-  group: velocut-release-apps
+  group: swave-video-release-apps
   cancel-in-progress: false
 
 jobs:
@@ -40,12 +40,12 @@ jobs:
         run: |
           mkdir -p artifacts
           cd dist-standalone
-          zip -qr ../artifacts/VeloCut-Studio-OnDevice-Portable.zip VeloCut-Studio-OnDevice
+          zip -qr ../artifacts/SWAVE-VIDEO-OnDevice-Portable.zip SWAVE-VIDEO-OnDevice
 
       - uses: actions/upload-artifact@v4
         with:
           name: portable-web-zip
-          path: artifacts/VeloCut-Studio-OnDevice-Portable.zip
+          path: artifacts/SWAVE-VIDEO-OnDevice-Portable.zip
 
       - name: Configure GitHub Pages
         continue-on-error: true
@@ -57,7 +57,7 @@ jobs:
         continue-on-error: true
         uses: actions/upload-pages-artifact@v3
         with:
-          path: dist-standalone/VeloCut-Studio-OnDevice/web
+          path: dist-standalone/SWAVE-VIDEO-OnDevice/web
 
   deploy-pages:
     needs: build-standalone-web
@@ -102,12 +102,12 @@ jobs:
       - name: Collect APK
         run: |
           mkdir -p artifacts
-          cp apps/web/android/app/build/outputs/apk/debug/app-debug.apk artifacts/VeloCut-Studio-Android.apk
+          cp apps/web/android/app/build/outputs/apk/debug/app-debug.apk artifacts/SWAVE-VIDEO-Android.apk
 
       - uses: actions/upload-artifact@v4
         with:
           name: android-apk
-          path: artifacts/VeloCut-Studio-Android.apk
+          path: artifacts/SWAVE-VIDEO-Android.apk
 
   build-ios-ipa:
     runs-on: macos-latest
@@ -148,12 +148,12 @@ jobs:
           mkdir -p artifacts ios_pkg/Payload
           cp -R apps/web/ios/build/Build/Products/Release-iphoneos/App.app ios_pkg/Payload/
           cd ios_pkg
-          zip -qr ../artifacts/VeloCut-Studio-iOS-Unsigned.ipa Payload
+          zip -qr ../artifacts/SWAVE-VIDEO-iOS-Unsigned.ipa Payload
 
       - uses: actions/upload-artifact@v4
         with:
           name: ios-ipa
-          path: artifacts/VeloCut-Studio-iOS-Unsigned.ipa
+          path: artifacts/SWAVE-VIDEO-iOS-Unsigned.ipa
 
   publish-release:
     needs: [build-standalone-web, build-android-apk, build-ios-ipa]
@@ -182,17 +182,17 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || 'latest-standalone' }}
-          name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || 'VeloCut Studio — Aplikasi Mandiri Terbaru (Android · iOS · Portabel)' }}
+          name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || 'SWAVE VIDEO — Standalone Apps (Android · iOS · Portable)' }}
           make_latest: true
           generate_release_notes: true
           body: |
-            ## VeloCut Studio — 100% Gratis Tanpa Watermark
+            ## SWAVE VIDEO — Self-Hosted & Web-Native Video Editor (100% Free, No Watermark)
 
-            Semua proses editing, preview 60 FPS WebGL2, AI Whisper Subtitle, dan ekspor video **berlangsung 100% langsung di HP / perangkat Anda sendiri** tanpa membutuhkan server PC. Anda tetap bisa menghubungkan Server PC kapan saja dari tombol **Di Perangkat / Server PC** di bar atas aplikasi.
+            Edit videos, generate AI auto-subtitles, apply real-time WebGL shaders, and export MP4 **100% locally on your own phone or computer** without requiring a server. Switch anytime between **On-Device** and **Self-Hosted PC Server** mode directly inside the top bar.
 
-            ### File Unduhan:
-            - **Android (`.apk`)**: `VeloCut-Studio-Android.apk` — instal langsung di HP Android.
-            - **iPhone / iPad (`iOS .ipa`)**: `VeloCut-Studio-iOS-Unsigned.ipa` — instal via **AltStore / Sideloadly / TrollStore** *(atau cara paling mudah tanpa sideload: buka link GitHub Pages di Safari iPhone/iPad lalu pilih Bagikan -> Tambahkan ke Layar Utama)*.
-            - **Laptop / PC Portabel (`.zip`)**: `VeloCut-Studio-OnDevice-Portable.zip` — ekstrak dan klik ganda `Jalankan-Di-Perangkat.bat` (Windows) atau `./jalankan-di-perangkat.sh` (Linux/macOS).
+            ### Downloads / Unduhan:
+            - **Android (`.apk`)**: `SWAVE-VIDEO-Android.apk` — install directly on Android devices.
+            - **iPhone / iPad (`iOS .ipa`)**: `SWAVE-VIDEO-iOS-Unsigned.ipa` — install via **AltStore / Sideloadly / TrollStore** *(or open GitHub Pages in iOS Safari → Share → Add to Home Screen)*.
+            - **Portable Desktop (`.zip`)**: `SWAVE-VIDEO-OnDevice-Portable.zip` — extract and run `Jalankan-Di-Perangkat.bat` (Windows) or `./jalankan-di-perangkat.sh` (Linux/macOS).
           files: |
             release-files/*

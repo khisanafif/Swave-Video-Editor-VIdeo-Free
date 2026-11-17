@@ -5,7 +5,7 @@ import {
   type AutomaticSpeechRecognitionPipeline,
   type ProgressInfo,
 } from '@huggingface/transformers';
-import type { SubtitleCue } from '@velocut/shared';
+import type { SubtitleCue } from '@swave/shared';
 
 env.allowLocalModels = false;
 env.useBrowserCache = true;

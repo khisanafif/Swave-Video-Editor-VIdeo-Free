@@ -4,7 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import cors from '@fastify/cors';
 import Fastify, { type FastifyInstance } from 'fastify';
-import { VeloCutDatabase } from './db/database.js';
+import { StudioDatabase } from './db/database.js';
 import { registerMediaRoutes } from './routes/media.js';
 import { registerNetworkRoutes } from './routes/network.js';
 import { registerProjectRoutes } from './routes/projects.js';
@@ -48,7 +48,7 @@ function resolveDefaultWebDistDir(): string {
 
 export async function createServerApp(options: ServerAppOptions = {}): Promise<{
   app: FastifyInstance;
-  db: VeloCutDatabase;
+  db: StudioDatabase;
   storageDir: string;
   webDistDir: string;
 }> {
@@ -57,17 +57,22 @@ export async function createServerApp(options: ServerAppOptions = {}): Promise<{
       process.env.MEDIA_STORAGE_DIR ||
       path.join(process.cwd(), 'storage')
   );
+  const legacyDbPath = path.join(storageDir, 'velocut.sqlite');
+  const defaultDbPath = path.join(storageDir, 'swave.sqlite');
   const dbPath =
     options.dbPath ||
+    process.env.SWAVE_DB_PATH ||
     process.env.VELOCUT_DB_PATH ||
-    path.join(storageDir, 'velocut.sqlite');
+    (fs.existsSync(legacyDbPath) && !fs.existsSync(defaultDbPath)
+      ? legacyDbPath
+      : defaultDbPath);
   const webDistDir = options.webDistDir
     ? path.resolve(options.webDistDir)
     : resolveDefaultWebDistDir();
   const port = options.port || Number(process.env.PORT || 3000);
 
   fs.mkdirSync(storageDir, { recursive: true });
-  const db = new VeloCutDatabase(dbPath);
+  const db = new StudioDatabase(dbPath);
 
   const app = Fastify({
     logger: options.logger ?? false,
@@ -97,7 +102,7 @@ export async function createServerApp(options: ServerAppOptions = {}): Promise<{
 
   app.get('/api/health', async () => ({
     status: 'ok',
-    service: 'velocut-local-server',
+    service: 'swave-video-server',
     timestamp: new Date().toISOString(),
   }));
 

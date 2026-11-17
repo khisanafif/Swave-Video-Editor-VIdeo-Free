@@ -1,4 +1,4 @@
-import type { Clip, SubtitleCue, SubtitleWord } from '@velocut/shared';
+import type { Clip, SubtitleCue, SubtitleWord } from '@swave/shared';
 
 function parseTimestampToSec(raw: string): number | null {
   const clean = raw.trim().replace(',', '.');

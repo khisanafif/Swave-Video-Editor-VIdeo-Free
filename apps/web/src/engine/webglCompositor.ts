@@ -1,4 +1,4 @@
-import type { Clip, ClipAnimationType, TextStyle } from '@velocut/shared';
+import type { Clip, ClipAnimationType, TextStyle } from '@swave/shared';
 
 export interface CompositeLayer {
   clip: Clip;

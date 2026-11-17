@@ -13,9 +13,9 @@ import {
   type ServerNetworkInfo,
   type ServerTranscribeRequest,
   type ServerTranscribeResponse,
-} from '@velocut/shared';
+} from '@swave/shared';
 
-const SERVER_URL_STORAGE_KEY = 'velocut_server_base_url';
+const SERVER_URL_STORAGE_KEY = 'swave_server_base_url';
 
 export interface ServerMediaAssetItem {
   id: string;

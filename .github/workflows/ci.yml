@@ -1,4 +1,4 @@
-name: VeloCut CI
+name: SWAVE VIDEO CI
 
 on:
   push:

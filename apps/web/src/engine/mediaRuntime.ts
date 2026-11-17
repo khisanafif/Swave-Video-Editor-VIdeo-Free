@@ -1,4 +1,4 @@
-import type { MediaAsset } from '@velocut/shared';
+import type { MediaAsset } from '@swave/shared';
 import { mediaRegistry } from './opfsStorage';
 import { resolveServerUrl } from './serverOffloadClient';
 import { type CompositeLayer, WebGLCompositor } from './webglCompositor';

@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import fsp from 'node:fs/promises';
 import path from 'node:path';
 import type { FastifyInstance } from 'fastify';
-import type { VeloCutDatabase } from '../db/database.js';
+import type { StudioDatabase } from '../db/database.js';
 import { resolveSafeStoragePath } from '../utils/pathSecurity.js';
 
 const MIME_MAP: Record<string, string> = {
@@ -23,7 +23,7 @@ const MIME_MAP: Record<string, string> = {
 
 export function registerMediaRoutes(
   app: FastifyInstance,
-  db: VeloCutDatabase,
+  db: StudioDatabase,
   storageDir: string
 ): void {
   app.get('/api/assets', async () => {

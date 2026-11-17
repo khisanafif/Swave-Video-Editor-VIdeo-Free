@@ -1,8 +1,8 @@
 @echo off
-title VeloCut Hybrid-Edge Studio Server (V-HESA)
+title SWAVE VIDEO - Self-Hosted Server
 echo ====================================================================
-echo   Menyiapkan VeloCut Multi-Device Studio Server...
-echo   (PC / Laptop Host untuk HP, Tablet, dan Laptop Lain via WiFi/LAN)
+echo   Menyiapkan SWAVE VIDEO (Self-Hosted ^& Web-Native Server)...
+echo   (PC / Laptop Host untuk HP Android, iOS, Tablet via WiFi/LAN)
 echo ====================================================================
 
 where node >nul 2>nul
@@ -28,15 +28,15 @@ if not exist "apps\server\dist\index.js" goto do_build
 goto start_srv
 
 :do_build
-echo [2/3] Membangun aplikasi web ^& server VeloCut...
+echo [2/3] Membangun aplikasi web ^& server SWAVE VIDEO...
 call npm run build
 if errorlevel 1 (
-  echo [ERROR] Gagal mem-build aplikasi VeloCut.
+  echo [ERROR] Gagal mem-build aplikasi SWAVE VIDEO.
   pause
   exit /b 1
 )
 
 :start_srv
-echo [3/3] Menjalankan Server VeloCut pada Port 3000...
-call npm --workspace=@velocut/server run start
+echo [3/3] Menjalankan Server SWAVE VIDEO pada Port 3000...
+call npm --workspace=@swave/server run start
 pause

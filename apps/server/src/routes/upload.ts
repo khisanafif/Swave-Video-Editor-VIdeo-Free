@@ -10,13 +10,13 @@ import {
   type ChunkUploadInitRequest,
   type ChunkUploadInitResponse,
   type ChunkUploadStatusResponse,
-} from '@velocut/shared';
-import type { VeloCutDatabase } from '../db/database.js';
+} from '@swave/shared';
+import type { StudioDatabase } from '../db/database.js';
 import { resolveSafeStoragePath, sanitizeFilename } from '../utils/pathSecurity.js';
 
 export function registerUploadRoutes(
   app: FastifyInstance,
-  db: VeloCutDatabase,
+  db: StudioDatabase,
   storageDir: string
 ): void {
   app.addContentTypeParser(

@@ -15,7 +15,7 @@ import {
   Wifi,
   X,
 } from 'lucide-react';
-import type { ServerCapabilities } from '@velocut/shared';
+import type { ServerCapabilities } from '@swave/shared';
 import type { PwaInstallState } from '../hooks/usePwaInstall';
 import {
   exportProjectJsonToDevice,
@@ -112,7 +112,7 @@ export function RuntimeModeModal({
     const doc = useTimelineStore.getState().exportProjectDocument();
     saveProjectLocally(doc);
     exportProjectJsonToDevice(doc);
-    setFeedback('File proyek (.velocut.json) diekspor ke penyimpanan perangkat.');
+    setFeedback('File proyek (.swave.json) diekspor ke penyimpanan perangkat.');
   };
 
   const handleImportProjectFile = async (files: FileList | null) => {
@@ -294,14 +294,14 @@ export function RuntimeModeModal({
                 )}
               </div>
 
-              {/* Local Project Backup (.velocut.json) — 100% Standalone */}
+              {/* Local Project Backup (.swave.json) — 100% Standalone */}
               <div className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-3.5">
                 <p className="font-semibold text-zinc-100">
                   Cadangkan / Buka File Proyek Lokal (Tanpa Server)
                 </p>
                 <p className="mt-0.5 text-[11px] text-zinc-400">
                   Proyek tersimpan otomatis di memori perangkat. Ekspor file{' '}
-                  <code>.velocut.json</code> jika ingin memindahkan atau mencadangkan
+                  <code>.swave.json</code> jika ingin memindahkan atau mencadangkan
                   timeline.
                 </p>
                 <div className="mt-2.5 flex flex-wrap gap-2">
@@ -316,7 +316,7 @@ export function RuntimeModeModal({
                   <input
                     ref={projectInputRef}
                     type="file"
-                    accept=".json,.velocut.json,application/json"
+                    accept=".json,.swave.json,.velocut.json,application/json"
                     className="hidden"
                     onChange={(e) => {
                       void handleImportProjectFile(e.target.files);
@@ -347,7 +347,7 @@ export function RuntimeModeModal({
                     className="mt-2 flex w-full items-center justify-center gap-2 rounded-lg bg-emerald-500 py-2 font-bold text-zinc-950 hover:bg-emerald-400"
                   >
                     <Download className="h-4 w-4" />
-                    <span>Instal VeloCut di Perangkat Ini Sekarang</span>
+                    <span>Instal SWAVE VIDEO di Perangkat Ini Sekarang</span>
                   </button>
                 </div>
               )}
@@ -377,17 +377,17 @@ export function RuntimeModeModal({
                 <ul className="mt-2.5 space-y-1 text-[11px] text-zinc-300">
                   <li>
                     • <strong>Android:</strong>{' '}
-                    <code>VeloCut-Studio-Android.apk</code> (instal langsung sebagai
+                    <code>SWAVE-VIDEO-Android.apk</code> (instal langsung sebagai
                     aplikasi HP Android)
                   </li>
                   <li>
                     • <strong>iPhone / iPad (iOS):</strong>{' '}
-                    <code>VeloCut-Studio-iOS-Unsigned.ipa</code> (AltStore / Sideloadly
+                    <code>SWAVE-VIDEO-iOS-Unsigned.ipa</code> (AltStore / Sideloadly
                     / TrollStore / Xcode)
                   </li>
                   <li>
                     • <strong>Laptop Portabel:</strong>{' '}
-                    <code>VeloCut-Studio-OnDevice-Portable.zip</code> (ekstrak &amp;
+                    <code>SWAVE-VIDEO-OnDevice-Portable.zip</code> (ekstrak &amp;
                     klik jalan)
                   </li>
                 </ul>
@@ -431,7 +431,7 @@ export function RuntimeModeModal({
                   </li>
                   <li>
                     <strong>Via File `.ipa`:</strong> Unduh{' '}
-                    <code>VeloCut-Studio-iOS-Unsigned.ipa</code> dari GitHub Releases,
+                    <code>SWAVE-VIDEO-iOS-Unsigned.ipa</code> dari GitHub Releases,
                     lalu pasang via <strong>AltStore / Sideloadly / TrollStore</strong>{' '}
                     (atau sign di Xcode via <code>npm run mobile:ios</code>).
                   </li>
@@ -460,7 +460,7 @@ export function RuntimeModeModal({
                 <ol className="mt-2 list-decimal space-y-1 pl-4 text-[11px] text-zinc-300">
                   <li>
                     <strong>Download APK Langsung:</strong> Ambil{' '}
-                    <code>VeloCut-Studio-Android.apk</code> dari{' '}
+                    <code>SWAVE-VIDEO-Android.apk</code> dari{' '}
                     <a
                       href={GITHUB_RELEASES_URL}
                       target="_blank"

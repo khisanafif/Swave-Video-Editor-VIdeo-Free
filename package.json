@@ -1,28 +1,28 @@
 {
-  "name": "velocut-monorepo",
+  "name": "swave-video",
   "version": "0.1.0",
   "private": true,
-  "description": "VeloCut Hybrid-Edge Studio Architecture (V-HESA) — Zero-Cloud-Cost Web Video Editor",
+  "description": "SWAVE VIDEO — Self-Hosted & Web-Native Video Editor (Free On-Device & LAN Server Studio for Android, iOS, and Desktop)",
   "workspaces": [
     "packages/*",
     "apps/*"
   ],
   "scripts": {
-    "postinstall": "npm --workspace=@velocut/shared run build",
-    "predev": "npm --workspace=@velocut/shared run build",
+    "postinstall": "npm --workspace=@swave/shared run build",
+    "predev": "npm --workspace=@swave/shared run build",
     "dev": "concurrently -n WEB,API -c cyan,green \"npm run dev:web\" \"npm run dev:server\"",
-    "dev:web": "npm --workspace=@velocut/web run dev",
-    "dev:server": "npm --workspace=@velocut/server run dev",
-    "start": "npm run build && npm --workspace=@velocut/server run start",
-    "studio": "npm --workspace=@velocut/server run start",
-    "build": "npm --workspace=@velocut/shared run build && npm --workspace=@velocut/web run build && npm --workspace=@velocut/server run build",
+    "dev:web": "npm --workspace=@swave/web run dev",
+    "dev:server": "npm --workspace=@swave/server run dev",
+    "start": "npm run build && npm --workspace=@swave/server run start",
+    "studio": "npm --workspace=@swave/server run start",
+    "build": "npm --workspace=@swave/shared run build && npm --workspace=@swave/web run build && npm --workspace=@swave/server run build",
     "build:standalone": "node scripts/build-standalone.mjs",
     "mobile:android": "node apps/web/scripts/prepare-mobile.mjs android",
     "mobile:ios": "node apps/web/scripts/prepare-mobile.mjs ios",
-    "pretypecheck": "npm --workspace=@velocut/shared run build",
-    "typecheck": "npm --workspace=@velocut/shared run typecheck && npm --workspace=@velocut/web run typecheck && npm --workspace=@velocut/server run typecheck",
-    "pretest": "npm --workspace=@velocut/shared run build",
-    "test": "npm --workspace=@velocut/web run test && npm --workspace=@velocut/server run test"
+    "pretypecheck": "npm --workspace=@swave/shared run build",
+    "typecheck": "npm --workspace=@swave/shared run typecheck && npm --workspace=@swave/web run typecheck && npm --workspace=@swave/server run typecheck",
+    "pretest": "npm --workspace=@swave/shared run build",
+    "test": "npm --workspace=@swave/web run test && npm --workspace=@swave/server run test"
   },
   "engines": {
     "node": ">=22.5.0"
@@ -32,4 +32,3 @@
     "typescript": "^5.8.2"
   }
 }
-

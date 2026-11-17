@@ -31,7 +31,7 @@ import {
   type RenderJobRecord,
   type RenderMode,
   type ServerCapabilities,
-} from '@velocut/shared';
+} from '@swave/shared';
 import {
   detectSpeechSegmentsVad,
   extractProjectAudioPcm16k,
@@ -41,7 +41,7 @@ import {
   CANVAS_BG_PRESETS,
   FILTER_PRESETS,
   TEXT_PRESETS,
-} from '../engine/capcutPresets';
+} from '../engine/editorPresets';
 import {
   type ClientExportProgress,
   exportProjectClientSide,
@@ -66,9 +66,9 @@ import { usePlaybackStore } from '../stores/playbackStore';
 import { useTimelineStore } from '../stores/timelineStore';
 import { useUiStore } from '../stores/uiStore';
 
-const CAPCUT_TEXT_SWATCHES = [
+const TEXT_SWATCHES = [
   { label: 'Putih', color: '#ffffff' },
-  { label: 'Kuning CapCut', color: '#facc15' },
+  { label: 'Kuning Terang', color: '#facc15' },
   { label: 'Cyan Neon', color: '#22d3ee' },
   { label: 'Merah', color: '#f43f5e' },
   { label: 'Hijau', color: '#4ade80' },
@@ -77,7 +77,7 @@ const CAPCUT_TEXT_SWATCHES = [
   { label: 'Hitam', color: '#09090b' },
 ];
 
-const CAPCUT_BG_SWATCHES = [
+const BG_SWATCHES = [
   { label: 'Tanpa Latar', color: 'transparent' },
   { label: 'Hitam Semi', color: 'rgba(9, 9, 11, 0.75)' },
   { label: 'Merah News', color: 'rgba(220, 38, 38, 0.92)' },
@@ -85,7 +85,7 @@ const CAPCUT_BG_SWATCHES = [
   { label: 'Putih Solid', color: 'rgba(255, 255, 255, 0.92)' },
 ];
 
-const CAPCUT_FONTS = [
+const STUDIO_FONTS = [
   { label: 'Modern Sans (Inter)', value: 'Inter, system-ui, sans-serif' },
   { label: 'Impact Tebal', value: 'Impact, Arial Black, sans-serif' },
   { label: 'Sinematik Serif', value: 'Georgia, serif' },
@@ -266,7 +266,7 @@ export function InspectorPanel({
         onProgress: setClientProgress,
       });
       const ext = blob.type.includes('webm') ? 'webm' : 'mp4';
-      const safeName = (project.name || 'velocut-export').replace(
+      const safeName = (project.name || 'swave-export').replace(
         /[^\w.-]/g,
         '_'
       );
@@ -383,7 +383,7 @@ export function InspectorPanel({
                 <SlidersHorizontal className="mb-2 h-6 w-6 text-cyan-400" />
                 <p>
                   Ketuk langsung teks/video di kanvas atau di timeline untuk
-                  menggeser, memperbesar, memutar, atau mengedit gaya CapCut.
+                  menggeser, memperbesar, memutar, atau mengedit gaya &amp; efek.
                 </p>
               </div>
 
@@ -426,7 +426,7 @@ export function InspectorPanel({
                 <div className="space-y-3.5 rounded-xl border border-violet-500/30 bg-violet-950/15 p-3">
                   <div className="flex items-center justify-between">
                     <h3 className="text-[11px] font-bold tracking-wider text-violet-300 uppercase">
-                      Konten & Gaya Teks CapCut
+                      Konten &amp; Gaya Teks
                     </h3>
                     <span className="rounded bg-violet-500/20 px-1.5 py-0.5 text-[9px] font-semibold text-violet-200">
                       Geser Langsung di Video
@@ -539,7 +539,7 @@ export function InspectorPanel({
                         }}
                         className="min-w-0 flex-1 rounded border border-zinc-800 bg-zinc-900 px-2 py-1.5 text-[11px] text-zinc-200 outline-none focus:border-violet-400"
                       >
-                        {CAPCUT_FONTS.map((f) => (
+                        {STUDIO_FONTS.map((f) => (
                           <option key={f.value} value={f.value}>
                             {f.label}
                           </option>
@@ -633,7 +633,7 @@ export function InspectorPanel({
                       />
                     </div>
                     <div className="flex flex-wrap gap-1.5">
-                      {CAPCUT_TEXT_SWATCHES.map((sw) => (
+                      {TEXT_SWATCHES.map((sw) => (
                         <button
                           key={sw.color}
                           type="button"
@@ -711,7 +711,7 @@ export function InspectorPanel({
                       Kotak Latar (Background Bubble):
                     </span>
                     <div className="flex flex-wrap gap-1.5">
-                      {CAPCUT_BG_SWATCHES.map((bg) => (
+                      {BG_SWATCHES.map((bg) => (
                         <button
                           key={bg.label}
                           type="button"
@@ -738,7 +738,7 @@ export function InspectorPanel({
                   {/* Quick CapCut Style Templates */}
                   <div className="space-y-1.5">
                     <span className="text-[10px] text-zinc-400">
-                      Ganti Template Gaya CapCut (1-Klik):
+                      Ganti Template Gaya Teks (1-Klik):
                     </span>
                     <div className="grid grid-cols-2 gap-1.5">
                       {TEXT_PRESETS.map((tp) => (
@@ -983,7 +983,7 @@ export function InspectorPanel({
                   <div className="flex items-center gap-1.5">
                     <Wand2 className="h-3.5 w-3.5 text-violet-400" />
                     <h3 className="text-[11px] font-semibold tracking-wider text-zinc-300 uppercase">
-                      Animasi Masuk & Keluar (CapCut)
+                      Animasi Masuk &amp; Keluar
                     </h3>
                   </div>
 
@@ -1413,7 +1413,7 @@ export function InspectorPanel({
 
             <div className="space-y-2">
               <p className="text-[11px] font-semibold tracking-wider text-zinc-400 uppercase">
-                Mode Dual-Rendering V-HESA
+                Mode Dual-Rendering (Perangkat vs Server PC)
               </p>
 
               <button
@@ -1526,7 +1526,7 @@ export function InspectorPanel({
                 <div className="space-y-1.5 border-b border-zinc-800 pb-2.5">
                   <label className="flex items-center gap-1 text-[10px] font-medium text-zinc-400">
                     <Globe className="h-3 w-3 text-cyan-400" />
-                    <span>URL Server V-HESA (Kosong = Origin Sama)</span>
+                    <span>URL Server PC SWAVE (Kosong = Origin Sama)</span>
                   </label>
                   <div className="flex gap-1.5">
                     <input

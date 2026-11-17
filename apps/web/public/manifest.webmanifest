@@ -1,8 +1,8 @@
 {
   "id": "./",
-  "name": "VeloCut Studio — Video Editor Gratis (On-Device & Server PC)",
-  "short_name": "VeloCut",
-  "description": "Video editor 60 FPS gratis tanpa watermark: jalan 100% langsung di HP Android, iOS, Desktop, atau sambungkan ke Server PC.",
+  "name": "SWAVE VIDEO — Self-Hosted & Web-Native Video Editor",
+  "short_name": "SWAVE VIDEO",
+  "description": "Free 60 FPS video editor with AI auto-subtitles and no watermark: runs 100% locally on Android, iOS, and Desktop or connects to your self-hosted PC server.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
@@ -39,4 +39,3 @@
     }
   ]
 }
-

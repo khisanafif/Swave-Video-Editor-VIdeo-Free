@@ -14,7 +14,7 @@ import {
   Wifi,
   X,
 } from 'lucide-react';
-import type { ProjectSummary, ServerNetworkInfo } from '@velocut/shared';
+import type { ProjectSummary, ServerNetworkInfo } from '@swave/shared';
 import { mediaRegistry } from '../engine/opfsStorage';
 import {
   deleteProjectOnServer,

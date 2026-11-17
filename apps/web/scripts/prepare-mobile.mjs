@@ -97,7 +97,6 @@ function patchAndroidProject() {
     console.log('Patched AndroidManifest.xml with media, audio & LAN permissions.');
   }
 
-  // Copy VeloCut PNG icons into Android mipmap launcher folders
   const resDir = path.join(androidDir, 'app/src/main/res');
   const icon192 = path.join(webDir, 'public/icons/icon-192.png');
   const icon512 = path.join(webDir, 'public/icons/icon-512.png');
@@ -117,13 +116,12 @@ function patchAndroidProject() {
     console.log('Updated Android mipmap launcher icons.');
   }
 
-  // Enhance MainActivity.java with native Downloads/VeloCut base64 saver
   const mainActivityPath = path.join(
     androidDir,
-    'app/src/main/java/com/velocut/studio/MainActivity.java'
+    'app/src/main/java/com/swavevideo/app/MainActivity.java'
   );
   if (fs.existsSync(mainActivityPath)) {
-    const javaSource = `package com.velocut.studio;
+    const javaSource = `package com.swavevideo.app;
 
 import android.content.ContentResolver;
 import android.content.ContentValues;
@@ -149,17 +147,17 @@ public class MainActivity extends BridgeActivity {
         super.onCreate(savedInstanceState);
         if (getBridge() != null && getBridge().getWebView() != null) {
             WebView webView = getBridge().getWebView();
-            webView.addJavascriptInterface(new VeloCutNativeBridge(), "VeloCutNative");
+            webView.addJavascriptInterface(new SwaveNativeBridge(), "SwaveNative");
         }
     }
 
-    public class VeloCutNativeBridge {
+    public class SwaveNativeBridge {
         @JavascriptInterface
         public boolean saveBase64File(String base64Data, String filename, String mimeType) {
             try {
                 byte[] bytes = Base64.decode(base64Data, Base64.DEFAULT);
                 String safeName = (filename == null || filename.isEmpty())
-                    ? "velocut-export.mp4"
+                    ? "swave-export.mp4"
                     : filename.replaceAll("[^a-zA-Z0-9._-]", "_");
                 String safeMime = (mimeType == null || mimeType.isEmpty())
                     ? "video/mp4"
@@ -172,7 +170,7 @@ public class MainActivity extends BridgeActivity {
                     values.put(MediaStore.Downloads.MIME_TYPE, safeMime);
                     values.put(
                         MediaStore.Downloads.RELATIVE_PATH,
-                        Environment.DIRECTORY_DOWNLOADS + "/VeloCut"
+                        Environment.DIRECTORY_DOWNLOADS + "/SWAVE-VIDEO"
                     );
                     Uri uri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values);
                     if (uri == null) return false;
@@ -183,7 +181,7 @@ public class MainActivity extends BridgeActivity {
                 } else {
                     File dir = new File(
                         Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
-                        "VeloCut"
+                        "SWAVE-VIDEO"
                     );
                     if (!dir.exists()) dir.mkdirs();
                     File outFile = new File(dir, safeName);
@@ -195,7 +193,7 @@ public class MainActivity extends BridgeActivity {
                 runOnUiThread(() ->
                     Toast.makeText(
                         MainActivity.this,
-                        "Disimpan ke Downloads/VeloCut/" + safeName,
+                        "Saved to Downloads/SWAVE-VIDEO/" + safeName,
                         Toast.LENGTH_LONG
                     ).show()
                 );
@@ -204,7 +202,7 @@ public class MainActivity extends BridgeActivity {
                 runOnUiThread(() ->
                     Toast.makeText(
                         MainActivity.this,
-                        "Gagal simpan native: " + err.getMessage(),
+                        "Failed to save file: " + err.getMessage(),
                         Toast.LENGTH_SHORT
                     ).show()
                 );
@@ -215,7 +213,7 @@ public class MainActivity extends BridgeActivity {
 }
 `;
     fs.writeFileSync(mainActivityPath, javaSource, 'utf8');
-    console.log('Patched MainActivity.java with VeloCutNative Downloads saver.');
+    console.log('Patched MainActivity.java with SwaveNative Downloads saver.');
   }
 }
 
@@ -227,19 +225,19 @@ function patchIosProject() {
     const entries = [
       [
         'NSPhotoLibraryUsageDescription',
-        '<string>VeloCut membutuhkan akses galeri untuk mengimpor video dan foto ke timeline Anda.</string>',
+        '<string>SWAVE VIDEO needs photo library access to import videos and images into your timeline.</string>',
       ],
       [
         'NSPhotoLibraryAddUsageDescription',
-        '<string>VeloCut membutuhkan izin untuk menyimpan hasil ekspor video MP4 ke galeri Photos Anda.</string>',
+        '<string>SWAVE VIDEO needs permission to save exported MP4 videos to your Photos library.</string>',
       ],
       [
         'NSMicrophoneUsageDescription',
-        '<string>VeloCut membutuhkan akses mikrofon untuk fitur Live Dikte Subtitle.</string>',
+        '<string>SWAVE VIDEO needs microphone access for Live Subtitle Dictation.</string>',
       ],
       [
         'NSCameraUsageDescription',
-        '<string>VeloCut membutuhkan akses kamera bila Anda ingin merekam media.</string>',
+        '<string>SWAVE VIDEO needs camera access if you record media directly.</string>',
       ],
       ['UIFileSharingEnabled', '<true/>'],
       ['LSSupportsOpeningDocumentsInPlace', '<true/>'],
@@ -268,12 +266,11 @@ function patchIosProject() {
     console.log('Patched iOS Info.plist with Photo Library, Mic, Files & LAN permissions.');
   }
 
-  // Ensure Pods allow unsigned CI builds & modern deployment target
   const podfilePath = path.join(iosDir, 'App/Podfile');
   if (fs.existsSync(podfilePath)) {
     let podfile = fs.readFileSync(podfilePath, 'utf8');
-    if (!podfile.includes('VELOCUT_UNSIGNED_PATCH')) {
-      const podSettingsRuby = `  # VELOCUT_UNSIGNED_PATCH
+    if (!podfile.includes('SWAVE_UNSIGNED_PATCH')) {
+      const podSettingsRuby = `  # SWAVE_UNSIGNED_PATCH
   installer.pods_project.targets.each do |target|
     target.build_configurations.each do |config|
       config.build_settings['EXPANDED_CODE_SIGN_IDENTITY'] = ""
@@ -301,7 +298,6 @@ function patchIosProject() {
     }
   }
 
-  // Generate true 1024x1024 PNG on macOS via sips so actool never rejects dimensions
   const iconSetDir = path.join(
     iosDir,
     'App/App/Assets.xcassets/AppIcon.appiconset'
@@ -338,7 +334,7 @@ function patchIosProject() {
 }
 
 ensureCapacitorPackages();
-run('npm --workspace=@velocut/shared run build', rootDir);
+run('npm --workspace=@swave/shared run build', rootDir);
 run('npm run build', webDir, { VITE_STANDALONE_BUILD: 'true' });
 
 if (buildAndroid) {

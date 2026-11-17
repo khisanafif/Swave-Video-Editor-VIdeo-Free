@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
-import type { ProjectDocument, RenderJobRecord } from '@velocut/shared';
+import type { ProjectDocument, RenderJobRecord } from '@swave/shared';
 
 export interface MediaAssetRow {
   id: string;
@@ -34,7 +34,7 @@ export interface UploadSessionRow {
   updatedAt: string;
 }
 
-export class VeloCutDatabase {
+export class StudioDatabase {
   public readonly db: DatabaseSync;
 
   constructor(dbPath: string) {

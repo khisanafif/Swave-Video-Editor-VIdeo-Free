@@ -3,7 +3,7 @@ import type {
   ClipAnimation,
   ClipEffect,
   TextStyle,
-} from '@velocut/shared';
+} from '@swave/shared';
 
 export type ExperienceMode = 'beginner' | 'pro';
 export type StudioRuntimeMode = 'standalone' | 'server';
@@ -23,9 +23,9 @@ export interface CopiedClipStyle {
   textStyle?: Omit<TextStyle, 'content'>;
 }
 
-const EXPERIENCE_MODE_KEY = 'velocut_experience_mode';
-const RUNTIME_MODE_KEY = 'velocut_runtime_mode';
-const RUNTIME_MODE_EXPLICIT_KEY = 'velocut_runtime_mode_explicit';
+const EXPERIENCE_MODE_KEY = 'swave_experience_mode';
+const RUNTIME_MODE_KEY = 'swave_runtime_mode';
+const RUNTIME_MODE_EXPLICIT_KEY = 'swave_runtime_mode_explicit';
 
 function readInitialMode(): ExperienceMode {
   if (typeof window === 'undefined') return 'beginner';

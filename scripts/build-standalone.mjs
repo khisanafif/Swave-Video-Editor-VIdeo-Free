@@ -9,7 +9,7 @@ const __dirname = path.dirname(__filename);
 const rootDir = path.resolve(__dirname, '..');
 const webDistDir = path.join(rootDir, 'apps/web/dist');
 const outRoot = path.join(rootDir, 'dist-standalone');
-const bundleDir = path.join(outRoot, 'VeloCut-Studio-OnDevice');
+const bundleDir = path.join(outRoot, 'SWAVE-VIDEO-OnDevice');
 
 function run(cmd, cwd = rootDir, extraEnv = {}) {
   console.log(`\n> ${cmd}`);
@@ -20,8 +20,8 @@ function run(cmd, cwd = rootDir, extraEnv = {}) {
   });
 }
 
-run('npm --workspace=@velocut/shared run build', rootDir);
-run('npm --workspace=@velocut/web run build', rootDir, {
+run('npm --workspace=@swave/shared run build', rootDir);
+run('npm --workspace=@swave/web run build', rootDir, {
   VITE_STANDALONE_BUILD: 'true',
 });
 
@@ -70,9 +70,9 @@ const server = http.createServer((req, res) => {
 
 server.listen(port, '127.0.0.1', () => {
   const url = \`http://localhost:\${port}\`;
-  console.log(\`VeloCut Studio (On-Device Mandiri) berjalan di \${url}\`);
-  console.log('Semua proses editing, AI subtitle, dan ekspor berlangsung di perangkat Anda sendiri.');
-  console.log('Tekan Ctrl+C untuk menutup.');
+  console.log(\`SWAVE VIDEO (On-Device Mode) running at \${url}\`);
+  console.log('All editing, AI subtitles, and export run locally on your device.');
+  console.log('Press Ctrl+C to stop.');
   const openCmd =
     process.platform === 'win32'
       ? \`start "" "\${url}"\`
@@ -86,7 +86,7 @@ server.listen(port, '127.0.0.1', () => {
 fs.writeFileSync(path.join(bundleDir, 'serve-ondevice.mjs'), serveScript, 'utf8');
 
 const batLauncher = `@echo off
-title VeloCut Studio - Mode Mandiri (100%% Di Perangkat)
+title SWAVE VIDEO - On-Device Mode (100%% Local)
 cd /d "%~dp0"
 where node >nul 2>nul
 if %errorlevel%==0 (
@@ -99,7 +99,7 @@ if %errorlevel%==0 (
   python -m http.server 4173 --directory web
   goto :eof
 )
-echo [INFO] Membutuhkan Node.js atau Python 3 untuk membuka server statis lokal.
+echo [INFO] Node.js or Python 3 is required to start the local static viewer.
 pause
 `;
 fs.writeFileSync(
@@ -114,11 +114,11 @@ cd "$(dirname "$0")"
 if command -v node >/dev/null 2>&1; then
   node serve-ondevice.mjs
 elif command -v python3 >/dev/null 2>&1; then
-  echo "Membuka VeloCut Mandiri di http://localhost:4173 ..."
+  echo "Opening SWAVE VIDEO (On-Device) at http://localhost:4173 ..."
   (sleep 1 && (xdg-open "http://localhost:4173" || open "http://localhost:4173") >/dev/null 2>&1) &
   python3 -m http.server 4173 --directory web
 else
-  echo "[ERROR] Pasang Node.js atau Python 3 terlebih dahulu."
+  echo "[ERROR] Please install Node.js or Python 3 first."
   exit 1
 fi
 `;
@@ -126,18 +126,18 @@ const shPath = path.join(bundleDir, 'jalankan-di-perangkat.sh');
 fs.writeFileSync(shPath, shLauncher, 'utf8');
 fs.chmodSync(shPath, 0o755);
 
-const readmeTxt = `VeloCut Studio - Paket Portabel Mandiri (100% On-Device)
-=======================================================
-Semua proses (preview WebGL2, AI Whisper subtitle, potong video, & ekspor MP4)
-berjalan 100% langsung di perangkat ini tanpa perlu PC server lain maupun npm install.
+const readmeTxt = `SWAVE VIDEO (Self-Hosted & Web-Native Video Editor) - Portable On-Device Bundle
+===============================================================================
+Semua proses (preview WebGL2, AI Whisper subtitle, edit video, & ekspor MP4)
+berjalan 100% langsung di perangkat ini tanpa perlu server PC maupun npm install.
+(All processing runs 100% locally on your device — no server or npm install needed.)
 
-Cara Menjalankan:
-- Windows      : Klik ganda "Jalankan-Di-Perangkat.bat"
-- Linux / macOS: Jalankan "./jalankan-di-perangkat.sh"
+Cara Menjalankan / How to Run:
+- Windows      : Double-click "Jalankan-Di-Perangkat.bat"
+- Linux / macOS: Run "./jalankan-di-perangkat.sh"
 
-Lalu buka browser Chrome / Edge / Safari ke http://localhost:4173
-(Klik menu browser -> "Instal aplikasi" agar menjadi aplikasi desktop mandiri).
+Open http://localhost:4173 in Chrome / Edge / Safari.
 `;
-fs.writeFileSync(path.join(bundleDir, 'CARA-PAKAI.txt'), readmeTxt, 'utf8');
+fs.writeFileSync(path.join(bundleDir, 'README-HOW-TO-RUN.txt'), readmeTxt, 'utf8');
 
 console.log(`\nStandalone On-Device bundle created cleanly at:\n  ${bundleDir}`);

@@ -8,12 +8,12 @@ import type {
   ProjectDocument,
   ServerCapabilities,
   ServerEncoderCapability,
-} from '@velocut/shared';
+} from '@swave/shared';
 import {
   DEFAULT_CHUNK_SIZE_BYTES,
   MAX_CLOUDFLARE_CHUNK_BYTES,
-} from '@velocut/shared';
-import type { VeloCutDatabase } from '../db/database.js';
+} from '@swave/shared';
+import type { StudioDatabase } from '../db/database.js';
 import { resolveSafeStoragePath } from '../utils/pathSecurity.js';
 import {
   buildAssSubtitleDocument,
@@ -250,7 +250,7 @@ export async function getServerCapabilities(
 }
 
 export async function enqueueServerRenderJob(options: {
-  db: VeloCutDatabase;
+  db: StudioDatabase;
   storageDir: string;
   jobId: string;
   project: ProjectDocument;

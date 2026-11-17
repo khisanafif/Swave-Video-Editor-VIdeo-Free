@@ -278,7 +278,7 @@ export const DEFAULT_CLIP_ANIMATION: ClipAnimation = {
 };
 
 export const DEFAULT_TEXT_STYLE: TextStyle = {
-  content: 'VeloCut Studio',
+  content: 'SWAVE VIDEO',
   fontFamily: 'Inter, system-ui, sans-serif',
   fontSize: 56,
   color: '#ffffff',

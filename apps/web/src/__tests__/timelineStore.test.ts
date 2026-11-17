@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import type { MediaAsset } from '@velocut/shared';
+import type { MediaAsset } from '@swave/shared';
 import { usePlaybackStore } from '../stores/playbackStore';
 import { useTimelineStore } from '../stores/timelineStore';
 
@@ -29,7 +29,7 @@ const sampleAudioAsset: MediaAsset = {
   source: 'local',
 };
 
-describe('VeloCut Dual-Store & Zundo History', () => {
+describe('SWAVE VIDEO Dual-Store & Zundo History', () => {
   beforeEach(() => {
     useTimelineStore.getState().resetProject();
     useTimelineStore.temporal.getState().clear();
@@ -120,7 +120,7 @@ describe('VeloCut Dual-Store & Zundo History', () => {
     expect(useTimelineStore.getState().clips[vidId].start).toBe(10);
   });
 
-  it('supports CapCut features: Speed scaling, Auto-Caption generator, Mirror Flip, Freeze Frame, Stickers & Animations', () => {
+  it('supports Speed scaling, Auto-Caption generator, Mirror Flip, Freeze Frame, Stickers & Animations', () => {
     const store = useTimelineStore.getState();
     store.registerAsset(sampleVideoAsset);
     const vidId = store.addClipFromAsset(sampleVideoAsset.id, 'track-1', 0)!;
@@ -154,8 +154,8 @@ describe('VeloCut Dual-Store & Zundo History', () => {
     const captionIds = useTimelineStore
       .getState()
       .generateAutoCaptions(
-        'Halo semuanya selamat datang.\nIni editor gaya CapCut gratis!',
-        'capcut-yellow'
+        'Halo semuanya selamat datang.\nIni editor video web gratis!',
+        'bold-yellow'
       );
     expect(captionIds.length).toBeGreaterThanOrEqual(2);
     const firstCaption = useTimelineStore.getState().clips[captionIds[0]];
@@ -210,7 +210,7 @@ describe('VeloCut Dual-Store & Zundo History', () => {
         { start: 0, end: 2, text: 'Halo semua teman' },
         { start: 2, end: 4, text: 'Ayo belajar edit' },
       ],
-      'hormozi-karaoke',
+      'karaoke-highlight',
       { replaceExisting: true }
     );
     expect(subIds).toHaveLength(2);

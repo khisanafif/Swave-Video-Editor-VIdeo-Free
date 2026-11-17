@@ -1,4 +1,4 @@
-import type { Clip, ProjectDocument } from '@velocut/shared';
+import type { Clip, ProjectDocument } from '@swave/shared';
 import { mediaRegistry } from './opfsStorage';
 import { resolveServerUrl } from './serverOffloadClient';
 

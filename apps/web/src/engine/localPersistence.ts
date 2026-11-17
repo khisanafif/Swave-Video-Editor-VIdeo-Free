@@ -1,10 +1,11 @@
-import type { ProjectDocument } from '@velocut/shared';
+import type { ProjectDocument } from '@swave/shared';
 import { mediaRegistry } from './opfsStorage';
 import { resolveServerUrl } from './serverOffloadClient';
 
-const LOCAL_PROJECT_STORAGE_KEY = 'velocut_local_project_v1';
+const LOCAL_PROJECT_STORAGE_KEY = 'swave_local_project_v1';
+const LEGACY_PROJECT_STORAGE_KEY = 'velocut_local_project_v1';
 
-interface VeloCutNativeBridge {
+interface SwaveNativeBridge {
   saveBase64File?: (
     base64Data: string,
     filename: string,
@@ -38,7 +39,9 @@ export function saveProjectLocally(project: ProjectDocument): void {
 export function loadLocalProjectSnapshot(): ProjectDocument | null {
   if (typeof window === 'undefined') return null;
   try {
-    const raw = localStorage.getItem(LOCAL_PROJECT_STORAGE_KEY);
+    const raw =
+      localStorage.getItem(LOCAL_PROJECT_STORAGE_KEY) ||
+      localStorage.getItem(LEGACY_PROJECT_STORAGE_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw) as ProjectDocument;
     if (!parsed || !parsed.tracks || !parsed.trackOrder || !parsed.clips) {
@@ -54,6 +57,7 @@ export function clearLocalProjectSnapshot(): void {
   if (typeof window === 'undefined') return;
   try {
     localStorage.removeItem(LOCAL_PROJECT_STORAGE_KEY);
+    localStorage.removeItem(LEGACY_PROJECT_STORAGE_KEY);
   } catch {
     // Ignore
   }
@@ -98,8 +102,8 @@ export async function saveBlobToDevice(
 ): Promise<'native-saved' | 'downloaded'> {
   if (typeof window !== 'undefined') {
     const nativeBridge = (
-      window as unknown as { VeloCutNative?: VeloCutNativeBridge }
-    ).VeloCutNative;
+      window as unknown as { SwaveNative?: SwaveNativeBridge }
+    ).SwaveNative;
     if (nativeBridge && typeof nativeBridge.saveBase64File === 'function') {
       try {
         const b64 = await blobToBase64(blob);
@@ -137,7 +141,7 @@ export function canShareFilesOnDevice(): boolean {
 export async function shareBlobWithSystemSheet(
   blob: Blob,
   filename: string,
-  title = 'Hasil Edit VeloCut Studio'
+  title = 'Hasil Edit SWAVE VIDEO'
 ): Promise<boolean> {
   if (!canShareFilesOnDevice()) return false;
   const file = new File([blob], filename, {
@@ -154,8 +158,8 @@ export async function shareBlobWithSystemSheet(
 export function exportProjectJsonToDevice(project: ProjectDocument): void {
   const json = JSON.stringify(project, null, 2);
   const blob = new Blob([json], { type: 'application/json;charset=utf-8' });
-  const safeName = (project.name || 'velocut-project').replace(/[^\w.-]/g, '_');
-  void saveBlobToDevice(blob, `${safeName}.velocut.json`);
+  const safeName = (project.name || 'swave-project').replace(/[^\w.-]/g, '_');
+  void saveBlobToDevice(blob, `${safeName}.swave.json`);
 }
 
 export async function parseProjectJsonFile(
@@ -170,7 +174,7 @@ export async function parseProjectJsonFile(
     !parsed.trackOrder ||
     !parsed.clips
   ) {
-    throw new Error('File bukan proyek VeloCut (.velocut.json) yang valid.');
+    throw new Error('File bukan proyek SWAVE VIDEO (.swave.json) yang valid.');
   }
   return parsed;
 }

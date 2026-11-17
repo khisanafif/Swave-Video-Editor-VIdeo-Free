@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
-import type { RenderJobRequest } from '@velocut/shared';
-import type { VeloCutDatabase } from '../db/database.js';
+import type { RenderJobRequest } from '@swave/shared';
+import type { StudioDatabase } from '../db/database.js';
 import {
   enqueueServerRenderJob,
   getServerCapabilities,
@@ -9,7 +9,7 @@ import {
 
 export function registerRenderRoutes(
   app: FastifyInstance,
-  db: VeloCutDatabase,
+  db: StudioDatabase,
   storageDir: string
 ): void {
   app.get('/api/capabilities', async () => {

@@ -3,7 +3,7 @@ import {
   DEFAULT_CLIP_TRANSFORM,
   DEFAULT_TEXT_STYLE,
   type ProjectDocument,
-} from '@velocut/shared';
+} from '@swave/shared';
 import {
   buildAssSubtitleDocument,
   buildFfmpegRenderPlan,
@@ -88,7 +88,7 @@ function createSampleProject(): ProjectDocument {
         offset: 0,
         transforms: { ...DEFAULT_CLIP_TRANSFORM, y: -120 },
         effects: [],
-        textStyle: { ...DEFAULT_TEXT_STYLE, content: 'Hello: VeloCut' },
+        textStyle: { ...DEFAULT_TEXT_STYLE, content: 'Hello: SWAVE' },
       },
       'c-aud': {
         id: 'c-aud',
@@ -153,7 +153,7 @@ describe('buildFfmpegRenderPlan', () => {
     expect(plan.commandPreview).toContain('h264_nvenc');
     expect(plan.commandPreview).toContain('eq=brightness=0.10:contrast=1.00:saturation=1.00');
     expect(plan.commandPreview).toContain('hue=s=0.50');
-    expect(plan.commandPreview).toContain("drawtext=text='Hello\\: VeloCut'");
+    expect(plan.commandPreview).toContain("drawtext=text='Hello\\: SWAVE'");
     expect(plan.commandPreview).toContain('amix=inputs=2');
   });
 
@@ -182,7 +182,7 @@ describe('buildFfmpegRenderPlan', () => {
     expect(assDoc).toContain('Style: Boxed');
     expect(assDoc).toContain('Dialogue:');
     expect(assDoc).toContain('\\1c&HFFFFFF&');
-    expect(assDoc).toContain('Hello: VeloCut');
+    expect(assDoc).toContain('Hello: SWAVE');
 
     const plan = buildFfmpegRenderPlan({
       project,

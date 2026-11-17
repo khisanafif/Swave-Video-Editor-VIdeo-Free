@@ -50,16 +50,16 @@ describe('VideoEditorPage UI Integration (Desktop, Tablet, Android & Multi-Devic
     fireEvent.click(addTextBtn);
 
     expect(screen.getByText(/Konten & Gaya Teks/i)).toBeInTheDocument();
-    expect(screen.getByTestId('capcut-canvas-gizmo')).toBeInTheDocument();
+    expect(screen.getByTestId('canvas-overlay-gizmo')).toBeInTheDocument();
 
-    // Test CapCut 1-click Subtitle Bawah placement button
+    // Test 1-click Subtitle Bawah placement button
     fireEvent.click(screen.getByRole('button', { name: /↓ Subtitle Bawah/i }));
     const activeId = useTimelineStore.getState().selectedClipIds[0];
     expect(useTimelineStore.getState().clips[activeId].transforms.y).toBeGreaterThan(0);
 
     // Test Direct On-Canvas Inline Text Editor toggle
     fireEvent.click(screen.getByRole('button', { name: /Ketik \/ Edit Teks/i }));
-    expect(screen.getByText(/Edit Teks Langsung \(Gaya CapCut\)/i)).toBeInTheDocument();
+    expect(screen.getByText(/Edit Teks Langsung/i)).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: /^Selesai$/i }));
 
     fireEvent.keyDown(window, { code: 'Space', key: ' ' });
@@ -138,7 +138,7 @@ describe('VideoEditorPage UI Integration (Desktop, Tablet, Android & Multi-Devic
     expect(screen.getByLabelText(/QR Code Akses LAN/i)).toBeInTheDocument();
   });
 
-  it('provides CapCut Free creative tabs (Media, Audio, Teks/Auto-Caption, Stiker, Efek) and per-clip Speed/Animation controls', async () => {
+  it('provides creative tabs (Media, Audio, Teks/Auto-Caption, Stiker, Efek) and per-clip Speed/Animation controls', async () => {
     render(<VideoEditorPage />);
     await act(async () => {
       await Promise.resolve();
@@ -163,11 +163,9 @@ describe('VideoEditorPage UI Integration (Desktop, Tablet, Android & Multi-Devic
       clipCountAfterCaptions + 1
     );
 
-    // Inspector shows CapCut Speed & Animation controls for the selected clip
+    // Inspector shows Speed & Animation controls for the selected clip
     expect(screen.getByText(/Kecepatan \(Speed\)/i)).toBeInTheDocument();
-    expect(
-      screen.getByText(/Animasi Masuk & Keluar \(CapCut\)/i)
-    ).toBeInTheDocument();
+    expect(screen.getByText(/Animasi Masuk & Keluar/i)).toBeInTheDocument();
   });
 
   it('supports Dual-Mode (Pemula vs Pro), Dedicated Subtitle AI Studio tab, Export Modal, and Help Shortcuts Modal', async () => {
@@ -178,14 +176,14 @@ describe('VideoEditorPage UI Integration (Desktop, Tablet, Android & Multi-Devic
 
     // Starts in Pemula mode without technical clutter
     expect(
-      screen.queryByTitle(/Diagnostik Runtime V-HESA/i)
+      screen.queryByTitle(/Diagnostik Runtime Studio/i)
     ).not.toBeInTheDocument();
 
     // Switch to Pro mode -> exposes Runtime Diagnostics & Pro tools
     fireEvent.click(screen.getByRole('button', { name: /^Pro$/i }));
     expect(useUiStore.getState().experienceMode).toBe('pro');
     expect(
-      screen.getByTitle(/Diagnostik Runtime V-HESA/i)
+      screen.getByTitle(/Diagnostik Runtime Studio/i)
     ).toBeInTheDocument();
 
     // Switch to Subtitle (CC) Studio tab
@@ -243,13 +241,13 @@ describe('VideoEditorPage UI Integration (Desktop, Tablet, Android & Multi-Devic
       screen.getByRole('button', { name: /Unduh APK \/ iOS \/ Web App/i })
     );
     expect(
-      screen.getAllByText(/VeloCut-Studio-Android\.apk/i).length
+      screen.getAllByText(/SWAVE-VIDEO-Android\.apk/i).length
     ).toBeGreaterThanOrEqual(1);
     expect(
-      screen.getAllByText(/VeloCut-Studio-iOS-Unsigned\.ipa/i).length
+      screen.getAllByText(/SWAVE-VIDEO-iOS-Unsigned\.ipa/i).length
     ).toBeGreaterThanOrEqual(1);
     expect(
-      screen.getAllByText(/VeloCut-Studio-OnDevice-Portable\.zip/i).length
+      screen.getAllByText(/SWAVE-VIDEO-OnDevice-Portable\.zip/i).length
     ).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByText(/Safari iOS/i).length).toBeGreaterThanOrEqual(1);
 

@@ -17,7 +17,7 @@ import {
   type RenderJobRecord,
   type RenderMode,
   type ServerCapabilities,
-} from '@velocut/shared';
+} from '@swave/shared';
 import {
   type ClientExportProgress,
   exportProjectClientSide,
@@ -133,7 +133,7 @@ export function ExportModal({
           signal: controller.signal,
         });
         const ext = blob.type.includes('webm') ? 'webm' : 'mp4';
-        const safeBase = (projectName || 'velocut-export').replace(
+        const safeBase = (projectName || 'swave-export').replace(
           /[^\w.-]/g,
           '_'
         );
@@ -202,7 +202,7 @@ export function ExportModal({
     const body =
       ext === 'srt' ? exportSubtitlesToSrt(all) : exportSubtitlesToVtt(all);
     const blob = new Blob([body], { type: 'text/plain;charset=utf-8' });
-    const filename = `${(projectName || 'velocut').replace(/[^\w.-]/g, '_')}.${ext}`;
+    const filename = `${(projectName || 'swave-video').replace(/[^\w.-]/g, '_')}.${ext}`;
     void saveBlobToDevice(blob, filename);
   };
 
@@ -447,7 +447,7 @@ export function ExportModal({
                     ).then((how) => {
                       setSaveNotice(
                         how === 'native-saved'
-                          ? `Tersimpan ke folder Downloads/VeloCut/${downloadInfo.filename}`
+                          ? `Tersimpan ke folder Downloads/SWAVE-VIDEO/${downloadInfo.filename}`
                           : `File ${downloadInfo.filename} mulai diunduh!`
                       );
                     });
@@ -465,7 +465,7 @@ export function ExportModal({
                       void shareBlobWithSystemSheet(
                         downloadInfo.blob,
                         downloadInfo.filename,
-                        projectName || 'VeloCut Studio'
+                        projectName || 'SWAVE VIDEO'
                       ).catch(() => {});
                     }}
                     className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-cyan-400/50 bg-cyan-500/20 px-3 py-2.5 text-xs font-bold text-cyan-200 hover:bg-cyan-500/30"

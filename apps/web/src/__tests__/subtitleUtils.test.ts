@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_CLIP_TRANSFORM, DEFAULT_TEXT_STYLE, type Clip } from '@velocut/shared';
+import { DEFAULT_CLIP_TRANSFORM, DEFAULT_TEXT_STYLE, type Clip } from '@swave/shared';
 import { detectSpeechSegmentsVad, encodeMonoWav16k } from '../engine/audioExtractor';
 import {
   alignTranscriptToSpeechSegments,
@@ -19,7 +19,7 @@ describe('Subtitle Utilities & Audio VAD', () => {
 
 2
 00:00:04,000 --> 00:00:06,200
-Selamat datang di VeloCut`;
+Selamat datang di SWAVE VIDEO`;
 
     const parsedSrt = parseSrt(srt);
     expect(parsedSrt).toHaveLength(2);

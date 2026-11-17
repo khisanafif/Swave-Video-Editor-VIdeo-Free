@@ -23,7 +23,7 @@ import {
   Type,
   X,
 } from 'lucide-react';
-import type { ServerCapabilities } from '@velocut/shared';
+import type { ServerCapabilities } from '@swave/shared';
 import {
   clearLocalProjectSnapshot,
   hydrateProjectMediaAssets,
@@ -266,8 +266,8 @@ export function VideoEditorPage() {
               <Film className="h-4 w-4" />
             </div>
             <div className="flex items-center">
-              <span className="text-sm font-bold tracking-tight text-white">
-                VeloCut
+              <span className="text-sm font-extrabold tracking-tight text-white">
+                SWAVE <span className="text-cyan-400">VIDEO</span>
               </span>
               <span className="ml-1.5 hidden rounded bg-emerald-500/20 px-1.5 py-0.5 font-mono text-[9px] font-bold text-emerald-300 sm:inline">
                 100% GRATIS
@@ -423,7 +423,7 @@ export function VideoEditorPage() {
                 ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300'
                 : 'border-amber-500/30 bg-amber-500/10 text-amber-300'
                 }`}
-              title="Diagnostik Runtime V-HESA (COOP/COEP, WebCodecs, WebGL2, Server)"
+              title="Diagnostik Runtime Studio (COOP/COEP, WebCodecs, WebGL2, Server)"
             >
               {caps.crossOriginIsolated ? (
                 <ShieldCheck className="h-3.5 w-3.5" />
@@ -573,7 +573,7 @@ export function VideoEditorPage() {
             </ul>
             {!caps.isSecureContext && (
               <p className="mt-2.5 rounded bg-amber-500/10 p-2 text-[11px] text-amber-300">
-                Saat diakses dari HP/Tablet lewat IP LAN HTTP (`http://192.168.x.x`), VeloCut otomatis mengaktifkan fallback `MediaRecorder` untuk export lokal serta sinkronisasi penuh ke Server PC.
+                Saat diakses dari HP/Tablet lewat IP LAN HTTP (`http://192.168.x.x`), SWAVE VIDEO otomatis mengaktifkan fallback `MediaRecorder` untuk export lokal serta sinkronisasi penuh ke Server PC.
               </p>
             )}
           </div>

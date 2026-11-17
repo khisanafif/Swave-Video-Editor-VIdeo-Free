@@ -49,7 +49,7 @@ export function HelpShortcutsModal({
           <div className="flex items-center gap-2">
             <HelpCircle className="h-4 w-4 text-cyan-400" />
             <h2 className="text-sm font-bold text-white">
-              Panduan Cepat & Shortcut VeloCut Studio
+              Panduan Cepat & Shortcut SWAVE VIDEO
             </h2>
           </div>
           <button

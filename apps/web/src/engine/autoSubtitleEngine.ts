@@ -1,4 +1,4 @@
-import type { ProjectDocument, SubtitleCue } from '@velocut/shared';
+import type { ProjectDocument, SubtitleCue } from '@swave/shared';
 import {
   detectSpeechSegmentsVad,
   extractProjectAudioPcm16k,

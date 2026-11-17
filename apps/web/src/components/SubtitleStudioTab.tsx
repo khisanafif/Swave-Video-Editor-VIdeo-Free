@@ -13,7 +13,7 @@ import {
   Trash2,
   Wand2,
 } from 'lucide-react';
-import type { Clip } from '@velocut/shared';
+import type { Clip } from '@swave/shared';
 import {
   generateAutoSubtitles,
   isWebSpeechSupported,
@@ -21,7 +21,7 @@ import {
   type AutoSubtitleEngineId,
   type LiveDictationController,
 } from '../engine/autoSubtitleEngine';
-import { TEXT_PRESETS } from '../engine/capcutPresets';
+import { findTextPresetById, TEXT_PRESETS } from '../engine/editorPresets';
 import { saveBlobToDevice } from '../engine/localPersistence';
 import { mediaRuntime } from '../engine/mediaRuntime';
 import {
@@ -51,7 +51,7 @@ const LANGUAGE_OPTIONS = [
   { value: 'ar', label: 'Arab (العربية)' },
 ];
 
-const API_KEY_STORAGE_KEY = 'velocut_stt_api_key';
+const API_KEY_STORAGE_KEY = 'swave_stt_api_key';
 
 function formatCueTime(sec: number): string {
   const safe = Math.max(0, sec);
@@ -77,7 +77,7 @@ export function SubtitleStudioTab({ onClipAdded }: SubtitleStudioTabProps) {
   const [modelSize, setModelSize] = useState<'tiny' | 'base'>('tiny');
   const [language, setLanguage] = useState('id');
   const [maxWords, setMaxWords] = useState(4);
-  const [presetId, setPresetId] = useState('hormozi-karaoke');
+  const [presetId, setPresetId] = useState('karaoke-highlight');
   const [replaceExisting, setReplaceExisting] = useState(true);
   const [onlySelectedClip, setOnlySelectedClip] = useState(false);
   const [apiKey, setApiKey] = useState(() => {
@@ -251,13 +251,12 @@ export function SubtitleStudioTab({ onClipAdded }: SubtitleStudioTabProps) {
         ? exportSubtitlesToSrt(allClips)
         : exportSubtitlesToVtt(allClips);
     const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
-    void saveBlobToDevice(blob, `velocut-subtitles.${format}`);
+    void saveBlobToDevice(blob, `swave-subtitles.${format}`);
   };
 
   const applyBatchPreset = (targetPresetId: string) => {
     setPresetId(targetPresetId);
-    const preset =
-      TEXT_PRESETS.find((p) => p.id === targetPresetId) || TEXT_PRESETS[0];
+    const preset = findTextPresetById(targetPresetId);
     useTimelineStore.getState().applySubtitleStyleToAll(
       preset.style,
       { y: preset.defaultY },
@@ -349,7 +348,7 @@ export function SubtitleStudioTab({ onClipAdded }: SubtitleStudioTabProps) {
               className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-2 py-1.5 text-[11px] text-zinc-100 outline-none focus:border-violet-400"
             >
               <option value={3}>Pendek Viral (3 kata)</option>
-              <option value={5}>Standar CapCut (5 kata)</option>
+              <option value={5}>Standar Sosial Media (5 kata)</option>
               <option value={10}>Kalimat Panjang (10 kata)</option>
             </select>
           </div>

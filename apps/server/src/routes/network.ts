@@ -1,7 +1,7 @@
 import os from 'node:os';
 import type { FastifyInstance } from 'fastify';
-import type { NetworkEndpointInfo, ServerNetworkInfo } from '@velocut/shared';
-import type { VeloCutDatabase } from '../db/database.js';
+import type { NetworkEndpointInfo, ServerNetworkInfo } from '@swave/shared';
+import type { StudioDatabase } from '../db/database.js';
 
 export function discoverLanEndpoints(port: number): NetworkEndpointInfo[] {
   const interfaces = os.networkInterfaces();
@@ -32,7 +32,7 @@ export function discoverLanEndpoints(port: number): NetworkEndpointInfo[] {
 
 export function registerNetworkRoutes(
   app: FastifyInstance,
-  db: VeloCutDatabase,
+  db: StudioDatabase,
   defaultPort: number
 ): void {
   app.get('/api/network', async (request) => {

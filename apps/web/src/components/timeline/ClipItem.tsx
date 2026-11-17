@@ -1,5 +1,5 @@
 import { Film, Music, Type, Image as ImageIcon } from 'lucide-react';
-import type { Clip } from '@velocut/shared';
+import type { Clip } from '@swave/shared';
 import { mediaRuntime } from '../../engine/mediaRuntime';
 import { usePlaybackStore } from '../../stores/playbackStore';
 import { useTimelineStore } from '../../stores/timelineStore';

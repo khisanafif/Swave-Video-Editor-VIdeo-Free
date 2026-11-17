@@ -14,7 +14,7 @@ async function main(): Promise<void> {
   const endpoints = discoverLanEndpoints(PORT);
 
   console.log('\n====================================================================');
-  console.log('  VELOCUT HYBRID-EDGE STUDIO SERVER (V-HESA) — AKTIF');
+  console.log('  SWAVE VIDEO (Self-Hosted & Web-Native Video Editor) — AKTIF');
   console.log('====================================================================');
   console.log(`  Akses di PC ini       : http://localhost:${PORT}`);
   if (endpoints.length > 0) {
@@ -31,6 +31,6 @@ async function main(): Promise<void> {
 }
 
 main().catch((err) => {
-  console.error('[VeloCut Server] Fatal startup error:', err);
+  console.error('[SWAVE Server] Fatal startup error:', err);
   process.exit(1);
 });

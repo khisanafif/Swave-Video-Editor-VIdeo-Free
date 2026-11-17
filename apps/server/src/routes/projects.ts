@@ -1,10 +1,10 @@
 import type { FastifyInstance } from 'fastify';
-import type { ProjectDocument } from '@velocut/shared';
-import type { VeloCutDatabase } from '../db/database.js';
+import type { ProjectDocument } from '@swave/shared';
+import type { StudioDatabase } from '../db/database.js';
 
 export function registerProjectRoutes(
   app: FastifyInstance,
-  db: VeloCutDatabase
+  db: StudioDatabase
 ): void {
   app.get('/api/projects', async () => {
     return db.listProjects();

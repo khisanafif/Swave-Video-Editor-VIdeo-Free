@@ -3,7 +3,7 @@ import type {
   ClipEffect,
   MediaAsset,
   TextStyle,
-} from '@velocut/shared';
+} from '@swave/shared';
 import { probeAndRegisterMediaFile } from './mediaProbe';
 
 export interface FilterPresetItem {
@@ -112,7 +112,7 @@ export const FILTER_PRESETS: FilterPresetItem[] = [
   },
   {
     id: 'vivid',
-    name: 'Vivid TikTok',
+    name: 'Vivid Social',
     badgeColor: 'from-emerald-400 to-sky-500',
     effects: [
       { type: 'brightness', value: 0.04 },
@@ -156,9 +156,9 @@ export interface TextPresetItem {
 
 export const TEXT_PRESETS: TextPresetItem[] = [
   {
-    id: 'capcut-yellow',
-    label: 'Subtitle Kuning (CapCut)',
-    sampleText: 'SUBTITLE OTOMATIS KEREN',
+    id: 'bold-yellow',
+    label: 'Subtitle Kuning Tebal',
+    sampleText: 'SUBTITLE OTOMATIS JELAS',
     previewBg: 'bg-zinc-900 text-yellow-300 border-yellow-500/40',
     defaultY: 320,
     defaultAnimation: 'zoom-in',
@@ -172,11 +172,11 @@ export const TEXT_PRESETS: TextPresetItem[] = [
       shadow: true,
       strokeColor: '#000000',
       strokeWidth: 10,
-      presetId: 'capcut-yellow',
+      presetId: 'bold-yellow',
     },
   },
   {
-    id: 'hormozi-karaoke',
+    id: 'karaoke-highlight',
     label: 'Karaoke Sorot Kata (Viral)',
     sampleText: 'SOROT PER KATA OTOMATIS',
     previewBg: 'bg-zinc-900 text-emerald-300 border-emerald-500/40',
@@ -193,12 +193,12 @@ export const TEXT_PRESETS: TextPresetItem[] = [
       strokeColor: '#09090b',
       strokeWidth: 12,
       highlightColor: '#facc15',
-      presetId: 'hormozi-karaoke',
+      presetId: 'karaoke-highlight',
     },
   },
   {
-    id: 'netflix-clean',
-    label: 'Subtitle Bersih (YouTube/Film)',
+    id: 'clean-subtitle',
+    label: 'Subtitle Bersih (Video / Film)',
     sampleText: 'Subtitle rapi mudah dibaca',
     previewBg: 'bg-zinc-950 text-zinc-100 border-zinc-600',
     defaultY: 340,
@@ -213,13 +213,13 @@ export const TEXT_PRESETS: TextPresetItem[] = [
       shadow: true,
       strokeColor: '#000000',
       strokeWidth: 4,
-      presetId: 'netflix-clean',
+      presetId: 'clean-subtitle',
     },
   },
   {
     id: 'neon-cyber',
     label: 'Neon Cyber Glow',
-    sampleText: 'VELOCUT STUDIO',
+    sampleText: 'SWAVE VIDEO',
     previewBg: 'bg-cyan-950/60 text-cyan-300 border-cyan-500/40',
     defaultY: 0,
     defaultAnimation: 'zoom-in',
@@ -239,7 +239,7 @@ export const TEXT_PRESETS: TextPresetItem[] = [
   {
     id: 'breaking-news',
     label: 'Headline Merah',
-    sampleText: 'BREAKING NEWS!',
+    sampleText: 'HIGHLIGHT PENTING!',
     previewBg: 'bg-rose-950/70 text-white border-rose-500/40',
     defaultY: 280,
     defaultAnimation: 'slide-up',
@@ -279,7 +279,7 @@ export const TEXT_PRESETS: TextPresetItem[] = [
   {
     id: 'comic-pop',
     label: 'Komik Pop Tebal',
-    sampleText: 'MANTAP JIWA! 🔥',
+    sampleText: 'KEREN BANGET! 🔥',
     previewBg: 'bg-orange-950/60 text-orange-300 border-orange-500/40',
     defaultY: 0,
     defaultAnimation: 'spin',
@@ -317,6 +317,17 @@ export const TEXT_PRESETS: TextPresetItem[] = [
     },
   },
 ];
+
+const LEGACY_PRESET_ALIASES: Record<string, string> = {
+  'capcut-yellow': 'bold-yellow',
+  'hormozi-karaoke': 'karaoke-highlight',
+  'netflix-clean': 'clean-subtitle',
+};
+
+export function findTextPresetById(presetId: string): TextPresetItem {
+  const mappedId = LEGACY_PRESET_ALIASES[presetId] || presetId;
+  return TEXT_PRESETS.find((p) => p.id === mappedId) || TEXT_PRESETS[0];
+}
 
 export interface StickerPresetItem {
   id: string;
@@ -429,7 +440,7 @@ function encodeStereoWav(
   return new Blob([buffer], { type: 'audio/wav' });
 }
 
-export async function synthesizeCapCutAudioAsset(
+export async function synthesizeAudioAsset(
   presetId: SfxPresetId
 ): Promise<MediaAsset> {
   const sampleRate = 44100;
@@ -506,7 +517,6 @@ export async function synthesizeCapCutAudioAsset(
       valL = kick + chord;
       valR = kick + chord * 0.92;
     } else {
-      // synthwave
       const arpNotes = [220, 261.63, 329.63, 440, 329.63, 261.63];
       const stepIdx = Math.floor(t * 8) % arpNotes.length;
       const notePos = (t * 8) % 1;
@@ -525,8 +535,7 @@ export async function synthesizeCapCutAudioAsset(
   const wavBlob = encodeStereoWav(left, right, sampleRate);
   return probeAndRegisterMediaFile(
     wavBlob,
-    `velocut_${presetId}.wav`,
+    `swave_${presetId}.wav`,
     'audio/wav'
   );
 }
-

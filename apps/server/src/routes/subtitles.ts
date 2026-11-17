@@ -11,8 +11,8 @@ import type {
   ServerTranscribeResponse,
   SubtitleCue,
   SubtitleWord,
-} from '@velocut/shared';
-import type { VeloCutDatabase } from '../db/database.js';
+} from '@swave/shared';
+import type { StudioDatabase } from '../db/database.js';
 import { resolveSafeStoragePath } from '../utils/pathSecurity.js';
 import {
   probeFfmpegCapabilities,
@@ -296,7 +296,7 @@ async function runLocalOpenAiWhisperCli(
 
 export function registerSubtitleRoutes(
   app: FastifyInstance,
-  db: VeloCutDatabase,
+  db: StudioDatabase,
   storageDir: string
 ): void {
   app.get('/api/subtitles/capabilities', async () => {
@@ -323,7 +323,7 @@ export function registerSubtitleRoutes(
       const ffmpegBin = resolveFfmpegBinary();
 
       const tempDir = await fsp.mkdtemp(
-        path.join(os.tmpdir(), 'velocut-stt-')
+        path.join(os.tmpdir(), 'swave-stt-')
       );
       const wavPath = path.join(tempDir, `${crypto.randomUUID()}.wav`);
 

@@ -153,7 +153,7 @@ export function TimelineContainer() {
                 )
             }
             className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs text-zinc-200 hover:bg-zinc-800 active:bg-zinc-700 disabled:cursor-not-allowed disabled:opacity-35"
-            title="Freeze Frame 1.5s (Gaya CapCut)"
+            title="Freeze Frame 1.5s"
           >
             <Snowflake className="h-3.5 w-3.5 text-cyan-400" />
             <span className="hidden sm:inline">Freeze</span>

@@ -1,5 +1,5 @@
 import { ArrayBufferTarget, Muxer } from 'mp4-muxer';
-import type { MediaAsset, MediaKind } from '@velocut/shared';
+import type { MediaAsset, MediaKind } from '@swave/shared';
 import { mediaRegistry } from './opfsStorage';
 
 export function inferMediaKind(file: { type: string; name: string }): MediaKind {
@@ -279,7 +279,7 @@ export async function generateSyntheticDemoMedia(): Promise<{
   const wavBlob = encodeFloat32Wav(left, right, sampleRate);
   const audioAsset = await probeAndRegisterMediaFile(
     wavBlob,
-    'velocut_ambient_demo.wav',
+    'swave_ambient_demo.wav',
     'audio/wav'
   );
 
@@ -351,10 +351,10 @@ export async function generateSyntheticDemoMedia(): Promise<{
 
         ctx.fillStyle = '#f8fafc';
         ctx.font = '700 54px Inter, system-ui, sans-serif';
-        ctx.fillText('VELOCUT V-HESA DEMO', 86, 136);
+        ctx.fillText('SWAVE VIDEO DEMO', 86, 136);
         ctx.fillStyle = '#38bdf8';
         ctx.font = '600 28px ui-monospace, monospace';
-        ctx.fillText(`60FPS Hybrid-Edge Studio  |  t = ${t.toFixed(2)}s`, 86, 188);
+        ctx.fillText(`Self-Hosted & Web-Native Studio  |  t = ${t.toFixed(2)}s`, 86, 188);
 
         const frame = new VideoFrame(canvas, {
           timestamp: Math.round(t * 1_000_000),
@@ -371,7 +371,7 @@ export async function generateSyntheticDemoMedia(): Promise<{
       const mp4Blob = new Blob([target.buffer], { type: 'video/mp4' });
       const visualAsset = await probeAndRegisterMediaFile(
         mp4Blob,
-        'velocut_studio_demo.mp4',
+        'swave_studio_demo.mp4',
         'video/mp4'
       );
       visualAsset.hasAudio = false;
@@ -393,14 +393,14 @@ export async function generateSyntheticDemoMedia(): Promise<{
     ctx.fillRect(0, 0, 1280, 720);
     ctx.fillStyle = '#38bdf8';
     ctx.font = '700 52px system-ui, sans-serif';
-    ctx.fillText('VELOCUT STUDIO DEMO', 90, 340);
+    ctx.fillText('SWAVE VIDEO DEMO', 90, 340);
   }
   const pngBlob = await new Promise<Blob>((resolve) =>
     canvas.toBlob((b) => resolve(b || new Blob()), 'image/png')
   );
   const visualAsset = await probeAndRegisterMediaFile(
     pngBlob,
-    'velocut_demo_card.png',
+    'swave_demo_card.png',
     'image/png'
   );
   return { visualAsset, audioAsset };

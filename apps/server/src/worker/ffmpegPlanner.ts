@@ -3,7 +3,7 @@ import type {
   Clip,
   ProjectDocument,
   ServerEncoderCapability,
-} from '@velocut/shared';
+} from '@swave/shared';
 
 export interface FfmpegRenderPlan {
   args: string[];

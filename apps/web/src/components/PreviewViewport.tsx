@@ -13,7 +13,7 @@ import {
   Volume2,
   VolumeX,
 } from 'lucide-react';
-import { PRESET_RESOLUTIONS } from '@velocut/shared';
+import { PRESET_RESOLUTIONS } from '@swave/shared';
 import {
   generateSyntheticDemoMedia,
   probeAndRegisterMediaFile,
@@ -111,7 +111,7 @@ export function PreviewViewport() {
       store.registerAsset(audioAsset);
       store.addClipFromAsset(visualAsset.id, 'track-1', 0);
       store.addTextClip(
-        'VeloCut Hybrid-Edge Studio\nSubtitle Otomatis + 60 FPS',
+        'SWAVE VIDEO Studio\nSubtitle Otomatis + 60 FPS',
         0.4,
         'track-2'
       );

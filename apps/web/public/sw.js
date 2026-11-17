@@ -1,4 +1,4 @@
-const CACHE_NAME = 'velocut-app-shell-v2';
+const CACHE_NAME = 'swave-video-shell-v3';
 
 function scopedUrl(relPath) {
   return new URL(relPath, self.registration.scope).toString();
