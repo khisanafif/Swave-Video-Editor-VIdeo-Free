@@ -29,12 +29,12 @@ function configureOnnxWasmRuntime(options: {
 }): void {
   const onnxEnv = env.backends?.onnx as
     | {
-        wasm?: {
-          numThreads?: number;
-          proxy?: boolean;
-          wasmPaths?: string | { mjs?: string; wasm?: string };
-        };
-      }
+      wasm?: {
+        numThreads?: number;
+        proxy?: boolean;
+        wasmPaths?: string | { mjs?: string; wasm?: string };
+      };
+    }
     | undefined;
   if (!onnxEnv?.wasm) return;
 
@@ -102,12 +102,12 @@ function chunksToCues(
     const clean = (output.text || '').trim();
     return clean
       ? [
-          {
-            start: offsetSec,
-            end: Math.min(maxEnd, offsetSec + 3),
-            text: clean,
-          },
-        ]
+        {
+          start: offsetSec,
+          end: Math.min(maxEnd, offsetSec + 3),
+          text: clean,
+        },
+      ]
       : [];
   }
 
@@ -123,7 +123,7 @@ function chunksToCues(
     );
     const computedEnd =
       typeof rawEnd === 'number' &&
-      rawEnd > (typeof rawStart === 'number' ? rawStart : 0)
+        rawEnd > (typeof rawStart === 'number' ? rawStart : 0)
         ? rawEnd + offsetSec
         : start + Math.max(0.8, text.split(/\s+/).length * 0.42);
     const end = Math.max(start + 0.25, Math.min(maxEnd, computedEnd));
